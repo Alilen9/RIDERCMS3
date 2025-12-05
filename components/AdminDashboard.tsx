@@ -177,7 +177,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
           </ResponsiveContainer>
         </div>
         <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-          <h3 className="text-lg font-bold mb-4">Battery Type Usage</h3>
+          <h3 className="text-lg font-bold mb-4">Battery Usage</h3>
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -198,11 +198,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
               <Tooltip contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151' }} />
             </PieChart>
           </ResponsiveContainer>
-          <div className="flex justify-center gap-4 text-xs mt-2">
-            <span className="text-emerald-500">● E-Bike</span>
-            <span className="text-blue-500">● Scooter</span>
-            <span className="text-purple-500">● Car</span>
-          </div>
+
         </div>
       </div>
     </div>
@@ -266,7 +262,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
         </div>
-        <h2 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-cyan-400">VoltVault Cortex AI</h2>
+        <h2 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-cyan-400">RIDERCMS CORTEX AI</h2>
         <p className="text-gray-400 mt-2">Predictive analytics and situational reporting for fleet commanders.</p>
       </div>
 
@@ -355,9 +351,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
                 <div className="p-4 border-b border-gray-700 flex justify-between items-center">
                   <span className="font-bold text-gray-200">Slot {slot.id}</span>
                   <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded ${slot.status === 'EMPTY' ? 'bg-gray-700 text-gray-400' :
-                      slot.status === 'OCCUPIED_CHARGING' ? 'bg-blue-900 text-blue-400' :
-                        slot.status === 'FAULTY' ? 'bg-red-900 text-red-500' :
-                          'bg-emerald-900 text-emerald-400'
+                    slot.status === 'OCCUPIED_CHARGING' ? 'bg-blue-900 text-blue-400' :
+                      slot.status === 'FAULTY' ? 'bg-red-900 text-red-500' :
+                        'bg-emerald-900 text-emerald-400'
                     }`}>{slot.status.replace('_', ' ')}</span>
                 </div>
                 <div className="p-4 space-y-3">
@@ -461,8 +457,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
                 <td className="px-6 py-4 font-bold">{u.name}</td>
                 <td className="px-6 py-4">
                   <span className={`px-2 py-1 rounded text-xs font-bold ${u.role === UserRole.ADMIN ? 'bg-purple-900 text-purple-400' :
-                      u.role === UserRole.OPERATOR ? 'bg-blue-900 text-blue-400' :
-                        'bg-gray-700 text-gray-300'
+                    u.role === UserRole.OPERATOR ? 'bg-blue-900 text-blue-400' :
+                      'bg-gray-700 text-gray-300'
                     }`}>{u.role}</span>
                 </td>
                 <td className="px-6 py-4 font-mono text-gray-400">{u.phoneNumber}</td>
@@ -570,9 +566,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
                 <td className="px-6 py-4 text-gray-400">{tx.date}</td>
                 <td className="px-6 py-4">
                   <span className={`px-2 py-1 rounded text-xs font-bold ${tx.status === 'COMPLETED' ? 'bg-emerald-900 text-emerald-400' :
-                      tx.status === 'FAILED' ? 'bg-red-900 text-red-400' :
-                        tx.status === 'REFUNDED' ? 'bg-purple-900 text-purple-400' :
-                          'bg-yellow-900 text-yellow-400'
+                    tx.status === 'FAILED' ? 'bg-red-900 text-red-400' :
+                      tx.status === 'REFUNDED' ? 'bg-purple-900 text-purple-400' :
+                        'bg-yellow-900 text-yellow-400'
                     }`}>{tx.status}</span>
                 </td>
                 <td className="px-6 py-4">
@@ -656,7 +652,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
           <div key={log.id} className="mb-2 flex gap-4">
             <span className="text-gray-500">[{log.timestamp}]</span>
             <span className={`${log.level === 'INFO' ? 'text-blue-400' :
-                log.level === 'WARN' ? 'text-yellow-400' : 'text-red-500'
+              log.level === 'WARN' ? 'text-yellow-400' : 'text-red-500'
               }`}>[{log.level}]</span>
             <span className="text-gray-400">[{log.actor}]</span>
             <span className="text-gray-300">{log.message}</span>
@@ -672,8 +668,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
       {/* SIDEBAR NAVIGATION */}
       <aside className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col fixed h-full z-20">
         <div className="p-6 border-b border-gray-800 flex items-center gap-3">
-          <div className="w-8 h-8 bg-emerald-600 rounded flex items-center justify-center font-bold text-lg">V</div>
-          <span className="font-bold text-lg tracking-tight">VoltVault Admin</span>
+          <div className="w-8 h-8 bg-emerald-600 rounded flex items-center justify-center font-bold text-lg">R</div>
+          <span className="font-bold text-lg tracking-tight">RIDERCMS ADMIN</span>
         </div>
 
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
@@ -692,8 +688,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
               key={item.id}
               onClick={() => { setActiveSection(item.id as any); setShowStationDetail(false); }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeSection === item.id
-                  ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-600/30'
-                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-600/30'
+                : 'text-gray-400 hover:bg-gray-800 hover:text-white'
                 }`}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
