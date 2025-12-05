@@ -1,0 +1,7 @@
+{
+  "name": "VoltVault",
+  "description": "A smart battery swapping station management system for EV users and admins, featuring AI-driven battery health analysis.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
