@@ -622,7 +622,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
             </div>
             <div>
               <label className="block text-xs uppercase text-gray-500 mb-1">Callback URL</label>
-              <input type="text" defaultValue="https://api.volt-vault.com/v1/mpesa/callback" className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" />
+              <input type="text" defaultValue="https://api.rider.cms.com/v1/mpesa/callback" className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" />
             </div>
           </div>
         </div>
