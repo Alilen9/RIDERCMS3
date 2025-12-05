@@ -28,3 +28,31 @@ export const analyzeBatteryHealth = async (battery: Battery): Promise<string> =>
     return "AI analysis unavailable. Please check physical indicators.";
   }
 };
+
+export const generateSystemInsight = async (systemData: any): Promise<string> => {
+  try {
+    const prompt = `
+      You are an AI System Analyst for 'VoltVault', an EV battery swapping network. 
+      Analyze the provided JSON system snapshot and generate a professional "Daily Situation Report" for the Admin.
+      
+      Format with Markdown. Include:
+      1. 🚨 Critical Alerts (if any)
+      2. 📊 Efficiency Summary (Revenue/Uptime)
+      3. 🔮 Predictive Maintenance (Predict which slots/batteries might fail based on health/status)
+      4. 💡 Strategic Recommendation
+
+      System Data:
+      ${JSON.stringify(systemData)}
+    `;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+    });
+
+    return response.text || "System analysis unavailable.";
+  } catch (error) {
+    console.error("Gemini API Error:", error);
+    return "Could not generate system report.";
+  }
+};
