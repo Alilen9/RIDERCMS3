@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Station, SlotStatus, Battery, Slot, User, BatteryType } from '../types';
 import { analyzeBatteryHealth } from '../services/geminiService';
+import * as boothService from '../services/boothService';
+import QrScanner from './Userdashboard/QrScanner'; // Import the new component
 
 interface UserDashboardProps {
   user: User;
@@ -19,42 +21,59 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
   const [aiAnalysis, setAiAnalysis] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<'idle' | 'push_sent' | 'success'>('idle');
+  const [error, setError] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+  const [checkoutRequestId, setCheckoutRequestId] = useState<string>('');
+  const [withdrawalCost, setWithdrawalCost] = useState<number>(0);
 
-  // Helper: Find which slot implies "My Battery" (For Demo persistence within session)
+  // Load user's current battery status on mount
   useEffect(() => {
-    // In a real app, backend would tell us which active session belongs to user.
-    // For demo, we check if user has a battery in a slot charging.
-    const userSlot = station.slots.find(s => s.battery?.ownerId === user.id && s.status === SlotStatus.OCCUPIED_CHARGING);
-    if (userSlot && userSlot.battery) {
-      setAssignedSlot(userSlot);
-      setActiveBattery(userSlot.battery);
-      setView('status');
-    }
-  }, []); // Run once on mount
+    const loadBatteryStatus = async () => {
+      try {
+        const batteryStatus = await boothService.getMyBatteryStatus();
+        if (batteryStatus) {
+          setActiveBattery({
+            id: batteryStatus.batteryUid,
+            type: BatteryType.E_BIKE,
+            chargeLevel: batteryStatus.chargeLevel,
+            health: 95,
+            temperature: 30,
+            voltage: 48,
+            cycles: 150,
+            ownerId: user.id
+          });
+          setView('status');
+        }
+      } catch (err) {
+        // User doesn't have a battery deposited, stay on home
+      }
+    };
+    loadBatteryStatus();
+  }, [user.id]);
 
   // 1. Start Deposit
   const startDeposit = () => {
     setView('scan_qr');
   };
 
-  // 2. Scan Success (Mock)
-  const handleScanSuccess = () => {
-    // Delay to simulate camera recognition
-    setTimeout(() => {
-      setView('assigning_slot');
-      const emptySlot = station.slots.find(s => s.status === SlotStatus.EMPTY);
-      if (emptySlot) {
-        setAssignedSlot(emptySlot);
-        setView('deposit_guide');
-      } else {
-        alert("Station Full!");
-        setView('home');
-      }
-    }, 1500);
+  // 2. Scan Success - calls initiateDeposit API
+  const handleScanSuccess = async (decodedText: string) => {
+    setLoading(true);
+    try {
+      // The QR code text is the boothId
+      await boothService.initiateDeposit(decodedText);
+      
+      setTimeout(() => {
+        setLoading(false);
+        setView('select_type');
+      }, 1500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to initiate deposit');
+      setLoading(false);
+    }
   };
 
-  // 3. Assign Slot
-
+  // 3. Handle Type Selection - simulates slot assignment
   const handleTypeSelection = (type: BatteryType) => {
     setSelectedType(type);
     setView('assigning_slot');
@@ -66,7 +85,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
         setAssignedSlot(emptySlot);
         setView('deposit_guide');
       } else {
-        alert("Station Full!");
+        setError("Station Full! Please try another booth.");
         setView('home');
       }
     }, 1500);
@@ -79,15 +98,14 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
     const newBattery: Battery = {
       id: `bat-${Date.now()}`,
       type: selectedType,
-      chargeLevel: Math.floor(Math.random() * 20) + 10, // Starts low
-      health: Math.floor(Math.random() * 10) + 90, // Good health
+      chargeLevel: Math.floor(Math.random() * 20) + 10,
+      health: Math.floor(Math.random() * 10) + 90,
       temperature: 35,
       voltage: 48,
       cycles: 150,
       ownerId: user.id
     };
 
-    // Update Station State
     const updatedSlots = station.slots.map(s => {
       if (s.id === assignedSlot.id) {
         return {
@@ -105,38 +123,80 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
     setView('status');
   };
 
-  // 5. Collect & Pay
-  const initiateCollection = () => {
-    setView('billing');
-    setPaymentStatus('idle');
+  // 5. Initiate Collection - calls initiateWithdrawal API
+  const initiateCollection = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await boothService.initiateWithdrawal();
+      setCheckoutRequestId(response.checkoutRequestId);
+      setWithdrawalCost(response.amount);
+      setView('billing');
+      setPaymentStatus('idle');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to initiate withdrawal');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSTKPush = () => {
+  // 6. Handle STK Push - calls getWithdrawalStatus API
+  const handleSTKPush = async () => {
     setPaymentStatus('push_sent');
-    // Simulate Payment Process
-    setTimeout(() => {
-      setPaymentStatus('success');
-      // Simulate Door Opening
-      setTimeout(() => {
-        setView('collect_guide');
-        // Update Station: Remove Battery
-        if (assignedSlot) {
-          const updatedSlots = station.slots.map(s => {
-            if (s.id === assignedSlot.id) {
-              return { ...s, status: SlotStatus.EMPTY, battery: undefined, isDoorOpen: true };
+    setLoading(true);
+
+    try {
+      // Poll for payment status
+      let isPaymentComplete = false;
+      let attempts = 0;
+      const maxAttempts = 30; // Poll for up to 30 seconds
+
+      while (!isPaymentComplete && attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        const statusResponse = await boothService.getWithdrawalStatus(checkoutRequestId);
+        attempts++;
+
+        if (statusResponse.paymentStatus === 'paid') {
+          isPaymentComplete = true;
+          setPaymentStatus('success');
+
+          // Call openForCollection to unlock the slot
+          await boothService.openForCollection(checkoutRequestId);
+
+          setTimeout(() => {
+            setView('collect_guide');
+            // Update Station: Remove Battery
+            if (assignedSlot) {
+              const updatedSlots = station.slots.map(s => {
+                if (s.id === assignedSlot.id) {
+                  return { ...s, status: SlotStatus.EMPTY, battery: undefined, isDoorOpen: true };
+                }
+                return s;
+              });
+              onUpdateStation({ ...station, slots: updatedSlots });
             }
-            return s;
-          });
-          onUpdateStation({ ...station, slots: updatedSlots });
+          }, 2000);
         }
-      }, 2000);
-    }, 3000);
+      }
+
+      if (!isPaymentComplete) {
+        setError('Payment timeout. Please try again.');
+        setPaymentStatus('idle');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Payment failed');
+      setPaymentStatus('idle');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const finishSession = () => {
     setAssignedSlot(null);
     setActiveBattery(null);
     setAiAnalysis('');
+    setCheckoutRequestId('');
     setView('home');
   };
 
@@ -159,21 +219,14 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
           if (nextLevel >= 100) return { ...prev, chargeLevel: 100 };
           return { ...prev, chargeLevel: nextLevel };
         });
-      }, 500); // Fast charge for demo
+      }, 500);
       return () => clearInterval(interval);
     }
   }, [view, activeBattery]);
 
   // Calculations
   const calculateCost = () => {
-    if (!activeBattery) return "0.00";
-    const charged = 100 - activeBattery.chargeLevel; // Simple logic
-    // Base cost + cost per % charged (simulated inversed for demo display)
-    // In reality, cost is based on energy provided. 
-    // Let's assume we are charging TO 100 from current.
-    // Cost is static for the demo once charging starts to avoid confusion, or dynamic?
-    // Let's make it dynamic based on "Target 100%".
-    return (5.00).toFixed(2); // Flat fee for demo simplicity or we can calculate
+    return withdrawalCost > 0 ? withdrawalCost.toFixed(2) : (5.00).toFixed(2);
   };
 
   return (
@@ -187,7 +240,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
         <div className="flex items-center gap-4">
           <div className="hidden sm:block text-right">
             <p className="text-[10px] text-gray-400 uppercase tracking-widest">Balance</p>
-            <p className="text-sm font-bold text-emerald-400">${user.balance.toFixed(2)}</p>
+            <p className="text-sm font-bold text-emerald-400">${user.balance}</p>
           </div>
           <button onClick={onLogout} className="p-2 bg-gray-700 rounded-full hover:bg-gray-600 transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
@@ -202,8 +255,13 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
         {/* VIEW: HOME */}
         {view === 'home' && (
           <div className="flex flex-col items-center justify-center h-[70vh] space-y-8 animate-fade-in">
+            {error && (
+              <div className="p-4 bg-red-900/50 border border-red-500 text-red-200 rounded-lg w-full max-w-sm">
+                {error}
+              </div>
+            )}
             <div className="text-center space-y-2">
-              <h2 className="text-3xl font-bold">Welcome, {user.name.split(' ')[0]}</h2>
+              <h2 className="text-3xl font-bold">Welcome, {user.name}</h2>
               <p className="text-gray-400">Ready to swap?</p>
             </div>
 
@@ -226,22 +284,54 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
 
         {/* VIEW: SCAN QR */}
         {view === 'scan_qr' && (
-          <div className="fixed inset-0 bg-#0B1E4B z-50 flex flex-col items-center justify-center animate-fade-in">
+          <div className="fixed inset-0 bg-[#0B1E4B] z-50 flex flex-col items-center justify-center animate-fade-in">
             <div className="relative w-full max-w-sm aspect-[3/4] bg-gray-900 rounded-2xl overflow-hidden border border-gray-700 shadow-2xl">
-              <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
-                <p className="text-emerald-500 font-mono animate-pulse">SEARCHING QR CODE...</p>
-              </div>
+              {/* The QrScanner component will render the camera feed here */}
+              <QrScanner 
+                onScanSuccess={handleScanSuccess}
+                onScanFailure={(error) => {
+                  setError(error);
+                  setView('home');
+                }}
+              />
               {/* Camera Overlay */}
-              <div className="absolute inset-0 border-[40px] border-black/60 pointer-events-none"></div>
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 border-2 border-emerald-500 rounded-3xl shadow-[0_0_20px_rgba(16,185,129,0.3)]">
                 <div className="absolute top-0 w-full h-1 bg-emerald-400 shadow-[0_0_10px_#34d399] animate-[scan_2s_ease-in-out_infinite]"></div>
               </div>
-              {/* Fake Trigger for Demo */}
-              <button onClick={handleScanSuccess} className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-white text-black px-6 py-2 rounded-full font-bold opacity-50 hover:opacity-100">
-                Tap to Simulate Scan
-              </button>
             </div>
-            <button onClick={() => setView('home')} className="mt-6 text-gray-400 hover:text-white">Cancel</button>
+            <button onClick={() => { setView('home'); setError(''); }} className="mt-6 text-gray-400 hover:text-white">Cancel</button>
+          </div>
+        )}
+
+        {/* VIEW: SELECT BATTERY TYPE */}
+        {view === 'select_type' && (
+          <div className="flex flex-col items-center justify-center h-[70vh] space-y-8 animate-fade-in pt-6">
+            <div className="text-center space-y-2">
+              <h2 className="text-3xl font-bold">Select Battery Type</h2>
+              <p className="text-gray-400">Choose the type of battery you want to deposit</p>
+            </div>
+
+            <div className="space-y-4 w-full max-w-sm">
+              {[BatteryType.E_BIKE, BatteryType.SCOOTER].map(type => (
+                <button
+                  key={type}
+                  onClick={() => handleTypeSelection(type)}
+                  className="w-full bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-emerald-500 rounded-xl p-6 text-left transition-all"
+                >
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="font-bold text-lg text-white">{type}</p>
+                      <p className="text-sm text-gray-400">Standard battery type</p>
+                    </div>
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-emerald-500">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                    </svg>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <button onClick={() => setView('home')} className="text-gray-400 hover:text-white text-sm">Go Back</button>
           </div>
         )}
 
@@ -283,6 +373,11 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
         {/* VIEW: CHARGING STATUS */}
         {view === 'status' && activeBattery && (
           <div className="animate-fade-in space-y-6 pt-4">
+            {error && (
+              <div className="p-4 bg-red-900/50 border border-red-500 text-red-200 rounded-lg">
+                {error}
+              </div>
+            )}
             {/* Charging Card */}
             <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700 relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-blue-500"></div>
@@ -342,7 +437,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
                 <button
                   onClick={runAiAnalysis}
                   disabled={isAnalyzing}
-                  className="text-xs bg-indigo-500/20 hover:bg-indigo-500/40 text-indigo-300 px-3 py-2 rounded-lg border border-indigo-500/30 transition-colors w-full"
+                  className="text-xs bg-indigo-500/20 hover:bg-indigo-500/40 text-indigo-300 px-3 py-2 rounded-lg border border-indigo-500/30 transition-colors w-full disabled:opacity-50"
                 >
                   {isAnalyzing ? "Running Diagnostics..." : "Analyze Battery Health"}
                 </button>
@@ -352,10 +447,10 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
             {/* Collect Button */}
             <button
               onClick={initiateCollection}
-              disabled={activeBattery.chargeLevel < 20}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-700 disabled:text-gray-500 text-white font-bold py-4 rounded-xl shadow-lg transition-colors mt-4"
+              disabled={activeBattery.chargeLevel < 20 || loading}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl shadow-lg transition-colors mt-4"
             >
-              {activeBattery.chargeLevel < 20 ? 'Charge > 20% to Collect' : 'Collect Battery & Pay'}
+              {loading ? 'Processing...' : activeBattery.chargeLevel < 20 ? 'Charge > 20% to Collect' : 'Collect Battery & Pay'}
             </button>
           </div>
         )}
@@ -363,6 +458,11 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
         {/* VIEW: BILLING & PAYMENT */}
         {view === 'billing' && (
           <div className="animate-fade-in pt-10">
+            {error && (
+              <div className="p-4 bg-red-900/50 border border-red-500 text-red-200 rounded-lg mb-6">
+                {error}
+              </div>
+            )}
             <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700 mb-6">
               <h2 className="text-xl font-bold mb-4 border-b border-gray-700 pb-2">Session Summary</h2>
               <div className="flex justify-between mb-2">
@@ -375,19 +475,20 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
               </div>
               <div className="flex justify-between mt-4 pt-4 border-t border-gray-700 text-lg font-bold">
                 <span>Total Due</span>
-                <span className="text-emerald-400">${calculateCost()}</span>
+                <span className="text-emerald-400">KES {calculateCost()}</span>
               </div>
             </div>
 
             {paymentStatus === 'idle' && (
               <button
                 onClick={handleSTKPush}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl shadow-lg flex items-center justify-center gap-2"
+                disabled={loading}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl shadow-lg flex items-center justify-center gap-2"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                 </svg>
-                Pay via M-Pesa (STK)
+                {loading ? 'Processing...' : 'Pay via M-Pesa (STK)'}
               </button>
             )}
 
@@ -395,7 +496,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
               <div className="text-center p-8 bg-gray-800/50 rounded-xl border border-gray-700">
                 <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                 <h3 className="text-lg font-bold mb-2">STK Push Sent</h3>
-                <p className="text-sm text-gray-400">Please check your phone {user.phoneNumber} and enter your PIN to complete the transaction.</p>
+                <p className="text-sm text-gray-400">Please check your phone and enter your M-Pesa PIN to complete the transaction.</p>
               </div>
             )}
 

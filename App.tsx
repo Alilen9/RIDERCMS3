@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import Auth from './components/Auth';
+import Auth from './components/auth/Auth';
 import UserDashboard from './components/UserDashboard';
 import AdminDashboard from './components/AdminDashboard';
 import { User, UserRole, Station, SlotStatus, BatteryType } from './types';

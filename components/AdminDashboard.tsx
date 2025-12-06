@@ -1,8 +1,10 @@
 
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { Station, SlotStatus, BatteryType, Transaction, SystemLog, User, UserRole, Battery } from '../types';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { generateSystemInsight } from '../services/geminiService';
+import * as adminService from '../services/adminService';
 
 interface AdminDashboardProps {
   station: Station; // Represents the "Live" station for the demo
@@ -11,21 +13,6 @@ interface AdminDashboardProps {
 }
 
 // --- MOCK DATA FOR SYSTEM-WIDE FEATURES ---
-const MOCK_USERS: User[] = [
-  {
-    id: 'u1', name: 'John Doe', phoneNumber: '+254711223344', role: UserRole.USER, balance: 15.00, status: 'ACTIVE',
-    password: undefined
-  },
-  {
-    id: 'u2', name: 'Jane Smith', phoneNumber: '+254722334455', role: UserRole.OPERATOR, balance: 0, status: 'ACTIVE',
-    password: undefined
-  },
-  {
-    id: 'u3', name: 'Admin Master', phoneNumber: '0000', role: UserRole.ADMIN, balance: 0, status: 'ACTIVE',
-    password: undefined
-  },
-];
-
 const MOCK_TRANSACTIONS: Transaction[] = [
   { id: 'tx-101', userId: 'u1', userName: 'John Doe', amount: 5.00, date: '2023-10-25 14:30', status: 'COMPLETED', type: 'SWAP' },
   { id: 'tx-102', userId: 'u1', userName: 'John Doe', amount: 10.00, date: '2023-10-24 09:15', status: 'COMPLETED', type: 'DEPOSIT' },
@@ -55,19 +42,46 @@ const NETWORK_STATIONS: Partial<Station>[] = [
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStation, onLogout }) => {
   const [activeSection, setActiveSection] = useState<'dashboard' | 'map' | 'intelligence' | 'stations' | 'users' | 'batteries' | 'finance' | 'settings' | 'logs'>('dashboard');
-  const [users, setUsers] = useState<User[]>(MOCK_USERS);
+  const [users, setUsers] = useState<User[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>(MOCK_TRANSACTIONS);
   const [batteries, setBatteries] = useState<Battery[]>(MOCK_BATTERIES);
+  const [boothStatus, setBoothStatus] = useState<adminService.AdminBoothStatus[]>([]);
 
   // Intelligence State
   const [aiReport, setAiReport] = useState<string>('');
   const [generatingReport, setGeneratingReport] = useState(false);
 
-  // Specific View States
-  const [showStationDetail, setShowStationDetail] = useState(false); // If true, shows telemetry view
+  // UI State
+  const [showStationDetail, setShowStationDetail] = useState(false);
   const [slotEditMode, setSlotEditMode] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string>('');
 
-  // --- Handlers ---
+  // Load admin data on mount
+  useEffect(() => {
+    const loadAdminData = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        // Fetch users
+        const usersResponse = await adminService.getUsers();
+        setUsers(usersResponse.users);
+
+        // Fetch booth status
+        const boothStatusResponse = await adminService.getBoothStatus();
+        setBoothStatus(boothStatusResponse);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load admin data');
+        // Fall back to empty data
+        setUsers([]);
+        setBoothStatus([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadAdminData();
+  }, []);  // --- Handlers ---
   const handleSlotToggle = (slotId: number) => {
     // Hardware toggle (Door/Relay)
     const updatedSlots = station.slots.map(slot => {
@@ -110,6 +124,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
   const deleteUser = (userId: string) => {
     if (confirm('Are you sure you want to remove this user?')) {
       setUsers(prev => prev.filter(u => u.id !== userId));
+    }
+  };
+
+  const handleSetUserRole = async (userId: string, newRole: UserRole) => {
+    try {
+      await adminService.setRole(userId, newRole);
+      // Update local state
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update role');
+    }
+  };
+
+  const handleSetUserStatus = async (userId: string, status: adminService.UserAccountStatus) => {
+    try {
+      await adminService.setUserStatus(userId, status);
+      // Update local state
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, status } : u));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update status');
     }
   };
 
@@ -710,6 +744,24 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
 
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 ml-64 p-8 overflow-y-auto h-screen">
+        {/* Error Banner */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-900/50 border border-red-500 text-red-200 rounded-lg flex justify-between items-center">
+            <span>{error}</span>
+            <button onClick={() => setError('')} className="text-red-300 hover:text-red-100">×</button>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading && (
+          <div className="flex flex-col items-center justify-center h-[60vh]">
+            <div className="w-16 h-16 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin mb-4"></div>
+            <p className="text-gray-400">Loading admin data...</p>
+          </div>
+        )}
+
+        {!loading && (
+          <>
         <header className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-3xl font-bold tracking-tight capitalize">{activeSection.replace('_', ' ')}</h1>
@@ -732,6 +784,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
         {activeSection === 'finance' && renderFinance()}
         {activeSection === 'settings' && renderSettings()}
         {activeSection === 'logs' && renderLogs()}
+        </>
+        )}
       </main>
 
       <style>{`
