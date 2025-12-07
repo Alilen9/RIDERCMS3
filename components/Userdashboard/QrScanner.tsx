@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Html5Qrcode, Html5QrcodeScannerState } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 
 interface QrScannerProps {
   onScanSuccess: (decodedText: string) => void;
@@ -13,8 +13,11 @@ const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess, onScanFailure }) =
   useEffect(() => {
     // Ensure this runs only on the client
     if (typeof window !== 'undefined') {
-      scannerRef.current = new Html5Qrcode(scannerContainerId);
-      const qrScanner = scannerRef.current;
+      // Initialize the scanner only once.
+      if (!scannerRef.current) {
+        scannerRef.current = new Html5Qrcode(scannerContainerId, /* verbose= */ false);
+      }
+      const qrScanner = scannerRef.current!;
 
       const startScanner = async () => {
         try {
@@ -40,14 +43,20 @@ const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess, onScanFailure }) =
 
       // Cleanup function to stop the scanner when the component unmounts
       return () => {
-        if (qrScanner && qrScanner.getState() === Html5QrcodeScannerState.SCANNING) {
-          qrScanner.stop().catch(err => {
-            console.error("Failed to stop QR scanner:", err);
-          });
+        // Check if the scanner is running before trying to stop it.
+        // This prevents errors if the scanner never started successfully.
+        if (qrScanner && qrScanner.isScanning) {
+          qrScanner.stop()
+            .then(() => {
+              console.log("QR Scanner stopped successfully.");
+            })
+            .catch(err => {
+              console.error("Failed to stop QR scanner:", err);
+            });
         }
       };
     }
-  }, [onScanSuccess, onScanFailure]);
+  }, [onScanSuccess, onScanFailure, scannerContainerId]);
 
   return <div id={scannerContainerId} className="w-full h-full"></div>;
 };

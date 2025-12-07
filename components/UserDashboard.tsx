@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Station, SlotStatus, Battery, Slot, User, BatteryType } from '../types';
 import { analyzeBatteryHealth } from '../services/geminiService';
 import * as boothService from '../services/boothService';
@@ -45,7 +45,14 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
           setView('status');
         }
       } catch (err) {
-        // User doesn't have a battery deposited, stay on home
+        // A 404 error is expected if the user has no battery.
+        // We can safely ignore it and stay on the home screen.
+        if (err.response?.status === 404) {
+          // This is the "No battery currently deposited" case. Do nothing.
+        } else {
+          // Log other unexpected errors for debugging, but don't show the user.
+          console.error('Failed to load battery status:', err);
+        }
       }
     };
     loadBatteryStatus();
@@ -53,11 +60,12 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
 
   // 1. Start Deposit
   const startDeposit = () => {
+    setError(''); // Clear previous errors
     setView('scan_qr');
   };
 
   // 2. Scan Success - calls initiateDeposit API
-  const handleScanSuccess = async (decodedText: string) => {
+  const handleScanSuccess = useCallback(async (decodedText: string) => {
     setLoading(true);
     try {
       // The QR code text is the boothId
@@ -71,7 +79,15 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
       setError(err instanceof Error ? err.message : 'Failed to initiate deposit');
       setLoading(false);
     }
-  };
+  }, []); // No dependencies, this function is stable.
+
+  const handleScanFailure = useCallback((error: string) => {
+    setError(error);
+    setView('home');
+    // We don't need to stop the scanner here, the component's
+    // cleanup effect will handle it automatically upon unmounting.
+  }, []); // No dependencies, this function is stable.
+
 
   // 3. Handle Type Selection - simulates slot assignment
   const handleTypeSelection = (type: BatteryType) => {
@@ -289,10 +305,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
               {/* The QrScanner component will render the camera feed here */}
               <QrScanner 
                 onScanSuccess={handleScanSuccess}
-                onScanFailure={(error) => {
-                  setError(error);
-                  setView('home');
-                }}
+                onScanFailure={handleScanFailure}
               />
               {/* Camera Overlay */}
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 border-2 border-emerald-500 rounded-3xl shadow-[0_0_20px_rgba(16,185,129,0.3)]">

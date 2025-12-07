@@ -1,50 +1,37 @@
-import axios, { AxiosError } from 'axios';
+import axios from 'axios';
+import { auth } from '../firebase';
 
 /**
  * A single, configured axios instance for all API calls.
- * It includes a base URL and sets `withCredentials` to true to ensure
- * that session cookies are sent with every request.
  */
 const apiClient = axios.create({ 
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api', 
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api', 
   headers: {
     'Content-Type': 'application/json',
   },
-  // This is crucial for sending the httpOnly session cookie to the backend
-  withCredentials: true,
 });
 
 /**
- * Axios response interceptor for global error handling.
+ * Axios request interceptor.
+ * This function runs before every request and automatically attaches the
+ * Firebase auth token if the user is logged in.
  */
-apiClient.interceptors.response.use(
-  // If the response is successful (status 2xx), just return it.
-  (response) => response,
-
-  // If the response has an error, handle it here.
-  (error: AxiosError) => {
-    // You can add custom logic for different error statuses.
-    if (error.response) {
-      const { status, data } = error.response;
-      console.error(`API Error: Status ${status}`, data);
-
-      switch (status) {
-        case 401:
-          // Unauthorized: The user's session is likely invalid or expired.
-          // Redirecting to the login page is a common way to handle this.
-          // We use `window.location.href` to force a full page reload, which clears any component state.
-          alert('Your session has expired. Please log in again.');
-          window.location.href = '/'; // Assuming your login page is at the root
-          break;
-        case 403:
-          // Forbidden: The user is authenticated but not authorized to perform this action.
-          alert('You do not have permission to perform this action.');
-          break;
-      }
+apiClient.interceptors.request.use(
+  async (config) => {
+    const user = auth.currentUser;
+    if (user) {
+      const token = await user.getIdToken();
+      config.headers.Authorization = `Bearer ${token}`;
     }
-    // Re-throw the error to allow individual .catch() blocks in components to handle it too.
-    return Promise.reject(error);
-  }
+    return config;
+  },
+  (error) => Promise.reject(error)
 );
+
+/**
+ * NOTE: The previous response interceptor that handled 401/403 errors
+ * has been removed. The `AuthContext` now handles logout logic when fetching
+ * a user profile fails, which is a more robust pattern for token-based auth.
+ */
 
 export default apiClient;

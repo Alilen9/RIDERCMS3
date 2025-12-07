@@ -38,14 +38,18 @@ type LoginFormInputs = z.infer<typeof loginSchema>;
 type RegisterFormInputs = z.infer<typeof registerSchema>;
 type FormInputs = LoginFormInputs & RegisterFormInputs;
 
+// A factory function to get the correct, typed Zod resolver.
+// This avoids the need for `as any`.
+const getResolver = (mode: 'login' | 'register') => {
+  return zodResolver(mode === 'login' ? loginSchema : registerSchema);
+};
+
 const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [step, setStep] = useState<'form' | 'otp'>('form');
   const [otp, setOtp] = useState('');
   // We still need to hold the phone number for the OTP step UI
   const [verifiedPhoneNumber, setVerifiedPhoneNumber] = useState('');
-  // We'll use a single loading state for all async operations
-  const [loading, setLoading] = useState(false);
   // State to hold the Firebase confirmation result for OTP
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
 
@@ -58,12 +62,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     formState: { errors, isSubmitting },
     reset,
   } = useForm<FormInputs>({
-    // Dynamically set the resolver based on the current mode
-    resolver: zodResolver(
-      mode === 'login' ? (loginSchema as any) : (registerSchema as any)
-    ),
-    // Re-validate on mode change
-    context: { mode },
+    resolver: getResolver(mode),
   });
 
   // --- Initialize Firebase's reCAPTCHA for Phone Auth ---
@@ -90,7 +89,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   };
 
   const handleLogin: SubmitHandler<LoginFormInputs> = useCallback(async (data) => {
-    setLoading(true);
     try {
       // 1. Get reCAPTCHA token
       const recaptchaToken = await recaptchaRef.current?.executeAsync();
@@ -102,10 +100,11 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password);
       const idToken = await userCredential.user.getIdToken();
 
-      // 3. Call our backend to create a session cookie and get the user profile.
-      const userProfile = await authService.sessionLogin(idToken, recaptchaToken);
+      // 3. With the user signed into Firebase, fetch their profile from our backend.
+      // The API client will automatically attach the token.
+      const userProfile = await authService.getUserProfile();
 
-      // 4. Update app state to log the user in
+      // 4. Update app state to log the user in.
       onLogin(userProfile);
     } catch (error: any) {
       // Check for the specific 404 error from our backend
@@ -122,14 +121,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         toast.error('An unexpected error occurred during login.');
         console.error('Login error:', error);
       }
-    } finally {
-      setLoading(false);
     }
   }, [onLogin]);
 
   const handleRequestOtp: SubmitHandler<RegisterFormInputs> = useCallback(async (data) => {
-    setLoading(true);
-
     // This is a multi-step async process
     try {
       // Step 1: Get reCAPTCHA token
@@ -176,14 +171,11 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         console.error('OTP Request Error:', err); // Log the full error for debugging
       }
       toast.error(errorMessage);
-    } finally {
-      setLoading(false);
     }
   }, []);
 
   const handleVerifyOtp = useCallback(async () => {
-    if (!otp || !confirmationResult) return;
-    setLoading(true);
+    if (!otp || !confirmationResult) return; // isSubmitting will be false, so we need a guard
 
     try {
       // Step 1: Confirm the OTP with Firebase using the stored confirmation object.
@@ -193,11 +185,9 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       // Step 2: Inform our backend that the phone is verified.
       await authService.verifyPhone(idToken);
 
-      // Step 3: Log the user in by creating a session.
-      // We pass a special string 'phone_verified' because this login path is already
-      // secured by the Firebase phone OTP flow, which has its own reCAPTCHA.
-      // Our backend will be updated to accept this.
-      const userProfile = await authService.sessionLogin(idToken, 'phone_verified');
+      // Step 3: With the user signed into Firebase, fetch their profile.
+      const userProfile = await authService.getUserProfile();
+
       onLogin(userProfile);
     } catch (err: any) {
       if (err.code === 'auth/invalid-verification-code') {
@@ -209,12 +199,13 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       } else {
         toast.error('An unexpected error occurred during registration.');
         console.error('OTP verification error:', err);
-      }
-      
-    } finally {
-      setLoading(false);
+      } 
     }
   }, [otp, confirmationResult, onLogin]);
+
+  // Combine loading states for the UI
+  const isLoading = isSubmitting;
+  const [isOtpVerifying, setIsOtpVerifying] = useState(false);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0B1E4B] px-4 font-sans">
@@ -282,11 +273,11 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             />
             <button
               type="submit"
-              disabled={isSubmitting || loading}
+              disabled={isLoading}
               className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 rounded-lg transition-colors shadow-lg shadow-emerald-900/20"
             >
-              {isSubmitting || loading ? 'Authenticating...' : 'Login'}
-              
+              {isLoading ? 'Authenticating...' : 'Login'}
+
             </button>
           </form>
         )}
@@ -325,10 +316,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             />
             <button
               type="submit"
-              disabled={isSubmitting || loading}
+              disabled={isLoading}
               className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 rounded-lg transition-colors shadow-lg shadow-emerald-900/20"
             >
-              {isSubmitting || loading ? 'Processing...' : 'Verify with OTP'}
+              {isLoading ? 'Processing...' : 'Verify with OTP'}
             </button>
           </form>
         )}
@@ -353,13 +344,18 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               />
             </div>
             <button
-              onClick={handleVerifyOtp}
-              disabled={loading || otp.length !== 6}
+              onClick={async () => {
+                setIsOtpVerifying(true);
+                await handleVerifyOtp();
+                setIsOtpVerifying(false);
+              }}
+              disabled={isOtpVerifying || otp.length !== 6}
               className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 rounded-lg transition-colors"
             >
-              {loading ? 'Verifying...' : 'Complete Registration'}
+              {isOtpVerifying ? 'Verifying...' : 'Complete Registration'}
             </button>
             <button
+              disabled={isOtpVerifying}
               onClick={() => setStep('form')}
               className="text-gray-600 text-sm hover:text-black underline"
             >

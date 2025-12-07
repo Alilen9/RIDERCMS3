@@ -1,5 +1,7 @@
 import apiClient from '../client/apiClient';
 import { User } from '../types';
+import { auth } from '../firebase';
+import { signOut } from 'firebase/auth';
 
 /**
  * Type for the data required to register a new user.
@@ -13,15 +15,6 @@ interface RegistrationData {
   recaptchaToken: string;
 }
 
-/**
- * Type for the successful login API response payload.
- * Based on POST /api/auth/sessionLogin in Endpoints.md
- */
-interface LoginResponse {
-  status: string;
-  message: string;
-  user: User; // Assuming the API returns a user object matching the User type
-}
 
 /**
  * Registers a new user.
@@ -31,20 +24,6 @@ interface LoginResponse {
 export const register = async (data: RegistrationData): Promise<void> => {
   try {
     await apiClient.post('/auth/register', data);
-  } catch (error) {
-    throw error; // Re-throw to be handled by the calling component
-  }
-};
-
-/**
- * Logs a user in by creating a session cookie via the backend.
- * @param idToken - The Firebase ID token obtained from the client-side auth.
- * @returns A promise that resolves with the user's profile data.
- */
-export const sessionLogin = async (idToken: string, recaptchaToken: string): Promise<User> => {
-  try {
-    const response = await apiClient.post<LoginResponse>('/auth/sessionLogin', { idToken, recaptchaToken });
-    return response.data.user;
   } catch (error) {
     throw error; // Re-throw to be handled by the calling component
   }
@@ -61,4 +40,24 @@ export const verifyPhone = async (idToken: string): Promise<void> => {
   } catch (error) {
     throw error; // Re-throw to be handled by the calling component
   }
+};
+
+/**
+ * Fetches the current user's profile from the backend.
+ * The API client interceptor is responsible for attaching the auth token.
+ * @returns A promise that resolves with the user's profile data if logged in.
+ */
+export const getUserProfile = async (): Promise<User> => {
+  try {
+    // This endpoint path can be whatever you want, e.g., '/users/me'
+    const response = await apiClient.get<User>('/auth/profile');
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const logout = async (): Promise<void> => {
+  // Simply sign the user out of the Firebase client SDK.
+  await signOut(auth);
 };

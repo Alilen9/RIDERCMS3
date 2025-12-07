@@ -1,9 +1,14 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react'; // Keep for local station state
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Auth from './components/auth/Auth';
-import UserDashboard from './components/UserDashboard';
+import ProtectedRoute from './components/auth/ProtectedRoute';
+import { User, UserRole, Station, SlotStatus, BatteryType } from './types'; // Keep for station data
+
+// --- Your Page/Dashboard Components ---
 import AdminDashboard from './components/AdminDashboard';
-import { User, UserRole, Station, SlotStatus, BatteryType } from './types';
+import UserDashboard from './components/UserDashboard';
+import { useAuth, AuthProvider } from './components/auth/AuthContext';
 
 // Mock Initial Station Data with Hardware Telemetry
 const INITIAL_STATION: Station = {
@@ -67,44 +72,96 @@ const INITIAL_STATION: Station = {
   ]
 };
 
-const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
+// This component will handle the logic for the /auth route
+const AuthHandler = () => {
+  const { user, login, isLoading } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Don't do anything while the session is being checked
+    if (isLoading) {
+      return;
+    }
+
+    // If a user session exists, redirect them immediately from this page.
+    if (user) {
+      console.log("User redirected based on role:", user.role);
+      switch (user.role) {
+        case UserRole.ADMIN:
+          navigate('/admin/dashboard', { replace: true });
+          break;
+        case UserRole.OPERATOR:
+          navigate('/operator/scan', { replace: true });
+          break;
+        case UserRole.USER:
+        default:
+          navigate('/dashboard', { replace: true });
+          break;
+      }
+    }
+    // If no user, this effect does nothing, and the Auth form is shown.
+  }, [user, isLoading, navigate]);
+
+
+  // Otherwise, show the login/register form.
+  // The onLogin prop is now wired to the context's login function.
+  return <Auth onLogin={login} />;
+};
+
+// This component will manage the state that is NOT related to auth, like station data
+const AppContent: React.FC = () => {
   const [station, setStation] = useState<Station>(INITIAL_STATION);
-
-  const handleLogin = (loggedInUser: User) => {
-    setUser(loggedInUser);
-  };
-
-  const handleLogout = () => {
-    setUser(null);
-  };
+  const { user, logout } = useAuth(); // Get user and logout from context
 
   const updateStation = (updatedStation: Station) => {
     setStation(updatedStation);
   };
 
-  if (!user) {
-    return <Auth onLogin={handleLogin} />;
-  }
-
   return (
-    <>
-      {user.role === UserRole.ADMIN ? (
-        <AdminDashboard 
-          station={station} 
-          onUpdateStation={updateStation}
-          onLogout={handleLogout} 
-        />
-      ) : (
-        <UserDashboard 
-          user={user} 
-          station={station} 
-          onUpdateStation={updateStation}
-          onLogout={handleLogout}
-        />
-      )}
-    </>
+    <Routes>
+      <Route path="/auth" element={<AuthHandler />} />
+
+      {/* Admin Route */}
+      <Route
+        path="/admin/dashboard"
+        element={
+          <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
+            <AdminDashboard
+              station={station}
+              onUpdateStation={updateStation}
+              onLogout={logout}
+            />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* User Route */}
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute allowedRoles={[UserRole.USER, UserRole.OPERATOR]}>
+            <UserDashboard
+              user={user!} // We know user is not null here because of ProtectedRoute
+              station={station}
+              onUpdateStation={updateStation}
+              onLogout={logout}
+            />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Redirect root path to auth if not logged in */}
+      <Route path="/" element={<Navigate to="/auth" replace />} />
+    </Routes>
   );
 };
+
+const App: React.FC = () => (
+  <Router>
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  </Router>
+);
 
 export default App;

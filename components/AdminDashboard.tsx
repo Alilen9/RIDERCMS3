@@ -1,23 +1,21 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { Station, SlotStatus, BatteryType, Transaction, SystemLog, User, UserRole, Battery } from '../types';
+import { Station, SlotStatus, BatteryType, Transaction, SystemLog, Battery } from '../types';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { generateSystemInsight } from '../services/geminiService';
 import * as adminService from '../services/adminService';
+import UserManagement from './admin/UserManagement';
+import BoothStatus from './admin/BoothStatus'; 
+import FinanceManagement from './admin/FinanceManagement';
+import SystemConfig from './admin/SystemConfiguration';
+
 
 interface AdminDashboardProps {
   station: Station; // Represents the "Live" station for the demo
   onUpdateStation: (station: Station) => void;
   onLogout: () => void;
 }
-
-// --- MOCK DATA FOR SYSTEM-WIDE FEATURES ---
-const MOCK_TRANSACTIONS: Transaction[] = [
-  { id: 'tx-101', userId: 'u1', userName: 'John Doe', amount: 5.00, date: '2023-10-25 14:30', status: 'COMPLETED', type: 'SWAP' },
-  { id: 'tx-102', userId: 'u1', userName: 'John Doe', amount: 10.00, date: '2023-10-24 09:15', status: 'COMPLETED', type: 'DEPOSIT' },
-  { id: 'tx-103', userId: 'u4', userName: 'Alex Roy', amount: 5.00, date: '2023-10-24 08:00', status: 'FAILED', type: 'SWAP' },
-];
 
 const MOCK_LOGS: SystemLog[] = [
   { id: 'l1', timestamp: '14:32:01', level: 'INFO', message: 'Door opened at Station ST-001 Slot 3', actor: 'System' },
@@ -42,10 +40,7 @@ const NETWORK_STATIONS: Partial<Station>[] = [
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStation, onLogout }) => {
   const [activeSection, setActiveSection] = useState<'dashboard' | 'map' | 'intelligence' | 'stations' | 'users' | 'batteries' | 'finance' | 'settings' | 'logs'>('dashboard');
-  const [users, setUsers] = useState<User[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>(MOCK_TRANSACTIONS);
   const [batteries, setBatteries] = useState<Battery[]>(MOCK_BATTERIES);
-  const [boothStatus, setBoothStatus] = useState<adminService.AdminBoothStatus[]>([]);
 
   // Intelligence State
   const [aiReport, setAiReport] = useState<string>('');
@@ -57,31 +52,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
 
-  // Load admin data on mount
-  useEffect(() => {
-    const loadAdminData = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        // Fetch users
-        const usersResponse = await adminService.getUsers();
-        setUsers(usersResponse.users);
-
-        // Fetch booth status
-        const boothStatusResponse = await adminService.getBoothStatus();
-        setBoothStatus(boothStatusResponse);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load admin data');
-        // Fall back to empty data
-        setUsers([]);
-        setBoothStatus([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadAdminData();
-  }, []);  // --- Handlers ---
+  // --- Handlers ---
   const handleSlotToggle = (slotId: number) => {
     // Hardware toggle (Door/Relay)
     const updatedSlots = station.slots.map(slot => {
@@ -116,37 +87,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
     onUpdateStation({ ...station, slots: updatedSlots });
   };
 
-  const handleRefund = (txId: string) => {
-    setTransactions(prev => prev.map(tx => tx.id === txId ? { ...tx, status: 'REFUNDED' } : tx));
-    alert(`Refund processed for ${txId}`);
-  };
-
-  const deleteUser = (userId: string) => {
-    if (confirm('Are you sure you want to remove this user?')) {
-      setUsers(prev => prev.filter(u => u.id !== userId));
-    }
-  };
-
-  const handleSetUserRole = async (userId: string, newRole: UserRole) => {
-    try {
-      await adminService.setRole(userId, newRole);
-      // Update local state
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update role');
-    }
-  };
-
-  const handleSetUserStatus = async (userId: string, status: adminService.UserAccountStatus) => {
-    try {
-      await adminService.setUserStatus(userId, status);
-      // Update local state
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, status } : u));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update status');
-    }
-  };
-
   const generateReport = async () => {
     setGeneratingReport(true);
     const systemSnapshot = {
@@ -169,7 +109,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
           <p className="text-gray-400 text-xs uppercase">Total Revenue (Monthly)</p>
-          <p className="text-3xl font-bold mt-2">$12,450</p>
+          <p className="text-3xl font-bold mt-2">KES 12,450</p>
           <span className="text-emerald-500 text-xs">↑ 8.2%</span>
         </div>
         <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
@@ -423,94 +363,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
     }
     // --- LIST VIEW ---
     return (
-      <div className="animate-fade-in">
+      <div className="animate-fade-in space-y-6">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold">Stations & Booths</h2>
           <button className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold text-sm">+ Add Station</button>
         </div>
-        <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
-          <table className="w-full text-left">
-            <thead className="bg-gray-900 text-gray-400 text-xs uppercase">
-              <tr>
-                <th className="px-6 py-4">Station Name</th>
-                <th className="px-6 py-4">Location</th>
-                <th className="px-6 py-4">Slots</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-700 text-sm">
-              {/* Demo Row */}
-              <tr className="hover:bg-gray-700/50 transition-colors">
-                <td className="px-6 py-4 font-bold">{station.name}</td>
-                <td className="px-6 py-4 text-gray-400">{station.location}</td>
-                <td className="px-6 py-4">{station.slots.length} / {station.slots.length}</td>
-                <td className="px-6 py-4"><span className="bg-emerald-500/10 text-emerald-500 px-2 py-1 rounded text-xs font-bold">ONLINE</span></td>
-                <td className="px-6 py-4">
-                  <button onClick={() => setShowStationDetail(true)} className="text-emerald-400 hover:text-emerald-300 font-bold">Manage</button>
-                </td>
-              </tr>
-              {/* Mock Inactive Row */}
-              <tr className="hover:bg-gray-700/50 transition-colors opacity-60">
-                <td className="px-6 py-4 font-bold">Westlands Hub (Pending)</td>
-                <td className="px-6 py-4 text-gray-400">Westlands Rd</td>
-                <td className="px-6 py-4">0 / 8</td>
-                <td className="px-6 py-4"><span className="bg-gray-500/10 text-gray-400 px-2 py-1 rounded text-xs font-bold">OFFLINE</span></td>
-                <td className="px-6 py-4">
-                  <button className="text-gray-400 hover:text-white">Configure</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        
+        {/* Render the new live booth status component */}
+        <BoothStatus />
       </div>
     );
   };
-
-  const renderUsers = () => (
-    <div className="animate-fade-in">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">User & Operator Management</h2>
-        <button className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold text-sm">Invite Operator</button>
-      </div>
-      <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
-        <table className="w-full text-left">
-          <thead className="bg-gray-900 text-gray-400 text-xs uppercase">
-            <tr>
-              <th className="px-6 py-4">Name</th>
-              <th className="px-6 py-4">Role</th>
-              <th className="px-6 py-4">Phone</th>
-              <th className="px-6 py-4">Balance</th>
-              <th className="px-6 py-4">Status</th>
-              <th className="px-6 py-4">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-700 text-sm">
-            {users.map(u => (
-              <tr key={u.id} className="hover:bg-gray-700/50">
-                <td className="px-6 py-4 font-bold">{u.name}</td>
-                <td className="px-6 py-4">
-                  <span className={`px-2 py-1 rounded text-xs font-bold ${u.role === UserRole.ADMIN ? 'bg-purple-900 text-purple-400' :
-                    u.role === UserRole.OPERATOR ? 'bg-blue-900 text-blue-400' :
-                      'bg-gray-700 text-gray-300'
-                    }`}>{u.role}</span>
-                </td>
-                <td className="px-6 py-4 font-mono text-gray-400">{u.phoneNumber}</td>
-                <td className="px-6 py-4 text-emerald-400">${u.balance.toFixed(2)}</td>
-                <td className="px-6 py-4">
-                  <span className="bg-emerald-900 text-emerald-400 px-2 py-1 rounded text-xs">ACTIVE</span>
-                </td>
-                <td className="px-6 py-4 flex gap-3">
-                  <button className="text-blue-400 hover:underline">Edit</button>
-                  <button onClick={() => deleteUser(u.id)} className="text-red-400 hover:underline">Remove</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
 
   const renderBatteries = () => (
     <div className="animate-fade-in">
@@ -574,109 +437,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
     </div>
   );
 
-  const renderFinance = () => (
-    <div className="animate-fade-in">
-      <h2 className="text-2xl font-bold mb-6">Transactions & Finance</h2>
-      <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
-        <table className="w-full text-left">
-          <thead className="bg-gray-900 text-gray-400 text-xs uppercase">
-            <tr>
-              <th className="px-6 py-4">Tx ID</th>
-              <th className="px-6 py-4">User</th>
-              <th className="px-6 py-4">Type</th>
-              <th className="px-6 py-4">Amount</th>
-              <th className="px-6 py-4">Date</th>
-              <th className="px-6 py-4">Status</th>
-              <th className="px-6 py-4">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-700 text-sm">
-            {transactions.map(tx => (
-              <tr key={tx.id} className="hover:bg-gray-700/50">
-                <td className="px-6 py-4 font-mono text-xs">{tx.id}</td>
-                <td className="px-6 py-4">{tx.userName}</td>
-                <td className="px-6 py-4 uppercase text-xs font-bold">{tx.type}</td>
-                <td className="px-6 py-4 font-mono">${tx.amount.toFixed(2)}</td>
-                <td className="px-6 py-4 text-gray-400">{tx.date}</td>
-                <td className="px-6 py-4">
-                  <span className={`px-2 py-1 rounded text-xs font-bold ${tx.status === 'COMPLETED' ? 'bg-emerald-900 text-emerald-400' :
-                    tx.status === 'FAILED' ? 'bg-red-900 text-red-400' :
-                      tx.status === 'REFUNDED' ? 'bg-purple-900 text-purple-400' :
-                        'bg-yellow-900 text-yellow-400'
-                    }`}>{tx.status}</span>
-                </td>
-                <td className="px-6 py-4">
-                  {tx.status === 'COMPLETED' && (
-                    <button onClick={() => handleRefund(tx.id)} className="text-yellow-500 hover:underline text-xs">Refund</button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
 
-  const renderSettings = () => (
-    <div className="animate-fade-in max-w-4xl">
-      <h2 className="text-2xl font-bold mb-6">System Configuration</h2>
-
-      <div className="space-y-6">
-        {/* Pricing Config */}
-        <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-          <h3 className="text-lg font-bold mb-4 text-emerald-400">Pricing Rules</h3>
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <label className="block text-xs uppercase text-gray-500 mb-1">Base Swap Fee ($)</label>
-              <input type="number" defaultValue={5.00} className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" />
-            </div>
-            <div>
-              <label className="block text-xs uppercase text-gray-500 mb-1">Cost per kWh ($)</label>
-              <input type="number" defaultValue={0.50} className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" />
-            </div>
-            <div>
-              <label className="block text-xs uppercase text-gray-500 mb-1">Overtime Penalty ($/min)</label>
-              <input type="number" defaultValue={0.10} className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" />
-            </div>
-          </div>
-        </div>
-
-        {/* Payment Config */}
-        <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-          <h3 className="text-lg font-bold mb-4 text-blue-400">Payment Gateway (M-Pesa)</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs uppercase text-gray-500 mb-1">Consumer Key</label>
-              <input type="password" value="************************" readOnly className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-gray-500" />
-            </div>
-            <div>
-              <label className="block text-xs uppercase text-gray-500 mb-1">Consumer Secret</label>
-              <input type="password" value="************************" readOnly className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-gray-500" />
-            </div>
-            <div>
-              <label className="block text-xs uppercase text-gray-500 mb-1">Callback URL</label>
-              <input type="text" defaultValue="https://api.rider.cms.com/v1/mpesa/callback" className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" />
-            </div>
-          </div>
-        </div>
-
-        {/* Access Control */}
-        <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-          <h3 className="text-lg font-bold mb-4 text-purple-400">Access Control</h3>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-bold">Allow Open Registration</p>
-              <p className="text-sm text-gray-500">If disabled, only admins can create accounts.</p>
-            </div>
-            <div className="w-12 h-6 bg-emerald-600 rounded-full relative cursor-pointer">
-              <div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 
   const renderLogs = () => (
     <div className="animate-fade-in">
@@ -752,16 +513,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
           </div>
         )}
 
-        {/* Loading State */}
-        {loading && (
-          <div className="flex flex-col items-center justify-center h-[60vh]">
-            <div className="w-16 h-16 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin mb-4"></div>
-            <p className="text-gray-400">Loading admin data...</p>
-          </div>
-        )}
-
-        {!loading && (
-          <>
         <header className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-3xl font-bold tracking-tight capitalize">{activeSection.replace('_', ' ')}</h1>
@@ -779,13 +530,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
         {activeSection === 'map' && renderMap()}
         {activeSection === 'intelligence' && renderIntelligence()}
         {activeSection === 'stations' && renderStations()}
-        {activeSection === 'users' && renderUsers()}
+        {activeSection === 'users' && <UserManagement />}
         {activeSection === 'batteries' && renderBatteries()}
-        {activeSection === 'finance' && renderFinance()}
-        {activeSection === 'settings' && renderSettings()}
+        {activeSection === 'finance' && <FinanceManagement />}
+        {activeSection === 'settings' && <SystemConfig />}
         {activeSection === 'logs' && renderLogs()}
-        </>
-        )}
       </main>
 
       <style>{`

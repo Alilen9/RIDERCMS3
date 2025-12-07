@@ -1,8 +1,7 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, inMemoryPersistence, setPersistence } from 'firebase/auth';
 
 // Your web app's Firebase configuration
-// IMPORTANT: Replace with your actual config from the Firebase console
 const firebaseConfig = {
   apiKey: "AIzaSyBw1OvbGUrwcJMUM7DI__maceCZMjMYf9I",
   authDomain: "ridercms-ced94.firebaseapp.com",
@@ -17,9 +16,15 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Export the auth instance to be used in other parts of the app
-export const auth = getAuth(app);
+// Get Auth instance
+const auth = getAuth(app);
 
-// This is used for phone authentication
-export const RECAPTCHA_CONTAINER_ID = '6LdPVSMsAAAAAJxGBy0C4NfY05CjfhNQ6tp4h-el';
+// By default, Firebase uses 'local' persistence (IndexedDB), which is what we want.
+// This will keep the user signed in across browser sessions.
+// No special `setPersistence` call is needed.
 
+// This ID is used by the Auth component to mount the invisible reCAPTCHA
+export const RECAPTCHA_CONTAINER_ID = 'recaptcha-container';
+
+// Export the configured auth instance
+export { auth };
