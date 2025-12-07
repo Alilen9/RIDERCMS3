@@ -6,14 +6,9 @@ import { User } from '../../types';
 import FormInput from './FormInput';
 import * as authService from '../../services/authService';
 import { Toaster, toast } from 'react-hot-toast';
-import {
-  signInWithEmailAndPassword,
-  RecaptchaVerifier,
-  signInWithPhoneNumber,
-  ConfirmationResult,
-} from 'firebase/auth';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import ReCAPTCHA from 'react-google-recaptcha';
-import { auth, RECAPTCHA_CONTAINER_ID } from '../../firebase';
+import { auth } from '../../firebase';
 
 interface AuthProps {
   onLogin: (user: User) => void;
@@ -46,13 +41,7 @@ const getResolver = (mode: 'login' | 'register') => {
 
 const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [step, setStep] = useState<'form' | 'otp'>('form');
-  const [otp, setOtp] = useState('');
-  // We still need to hold the phone number for the OTP step UI
-  const [verifiedPhoneNumber, setVerifiedPhoneNumber] = useState('');
-  // State to hold the Firebase confirmation result for OTP
-  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
-
+  
   const recaptchaRef = useRef<ReCAPTCHA>(null);
 
   // react-hook-form setup
@@ -65,26 +54,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     resolver: getResolver(mode),
   });
 
-  // --- Initialize Firebase's reCAPTCHA for Phone Auth ---
-  // This is separate from the reCAPTCHA v3 used for form submission.
-  // It's required by Firebase to prevent abuse of the SMS service.
-  useEffect(() => {
-    if (!window.recaptchaVerifier) {
-      // The verifier is attached to the window object to prevent it from
-      // being re-created on every render.
-      window.recaptchaVerifier = new RecaptchaVerifier(auth, RECAPTCHA_CONTAINER_ID, {
-        'size': 'invisible',
-        'callback': () => {
-          // This callback is executed when the reCAPTCHA is successfully solved.
-        }
-      });
-    }
-  }, []); // The empty dependency array ensures this runs only once.
-
   const switchMode = (newMode: 'login' | 'register') => {
     setMode(newMode);
-    setStep('form');
-    setOtp('');
     reset(); // Clear form fields and errors on mode switch
   };
 
@@ -124,7 +95,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     }
   }, [onLogin]);
 
-  const handleRequestOtp: SubmitHandler<RegisterFormInputs> = useCallback(async (data) => {
+  const handleRegister: SubmitHandler<RegisterFormInputs> = useCallback(async (data) => {
     // This is a multi-step async process
     try {
       // Step 1: Get reCAPTCHA token
@@ -133,36 +104,24 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         throw new Error('Could not verify reCAPTCHA. Please try again.');
       }
 
-      // Step 2: Register the user in our backend, passing the reCAPTCHA token.
+      // Step 2: Register the user in our backend.
       await authService.register({ ...data, recaptchaToken });
 
-      // Step 3: After successful backend registration, ask the Firebase Client SDK to send an OTP.
-      const appVerifier = window.recaptchaVerifier;
-      const confirmation = await signInWithPhoneNumber(auth, data.phoneNumber, appVerifier);
+      toast.success('Registration successful! Logging you in...');
 
-      // Step 3: Store the confirmation object to use when verifying the OTP.
-      setConfirmationResult(confirmation);
+      // Step 3: Sign in with the credentials just used for registration
+      await signInWithEmailAndPassword(auth, data.email, data.password);
 
-      toast.success('Verification code sent!');
-      setVerifiedPhoneNumber(data.phoneNumber);
-      setStep('otp');
+      // Step 4: Fetch the user profile from our backend
+      const userProfile = await authService.getUserProfile();
+
+      // Step 5: Log the user in
+      onLogin(userProfile);
+
     } catch (err: any) {
       let errorMessage = 'Registration failed. Please try again.';
-      // Create a map for known Firebase error codes to user-friendly messages
-      const firebaseErrorMap: { [key: string]: string } = {
-        'auth/invalid-phone-number': 'The phone number is not valid. Please use E.164 format (e.g., +15551234567).',
-        'auth/too-many-requests': 'Too many requests have been sent. Please try again later.',
-        'auth/invalid-app-credential': 'Phone authentication is not configured correctly. This is a server-side issue.',
-      };
-
-      // Dynamically find the error message
       if (err.response?.status === 409 && err.response?.data?.error) {
         errorMessage = err.response.data.error; // "The email address is already in use..."
-      } else if (err.code && firebaseErrorMap[err.code]) {
-        errorMessage = firebaseErrorMap[err.code];
-        if (err.code === 'auth/invalid-app-credential') {
-          console.error('Phone Auth Configuration Issue: Check Firebase Console > Authentication > Settings > Authorized domains. See FIREBASE_RECAPTCHA_SETUP.md for a guide.');
-        }
       } else if (err.response?.data?.message) {
         errorMessage = err.response.data.message;
       } else if (err.message.includes('reCAPTCHA')) {
@@ -172,41 +131,11 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       }
       toast.error(errorMessage);
     }
-  }, []);
-
-  const handleVerifyOtp = useCallback(async () => {
-    if (!otp || !confirmationResult) return; // isSubmitting will be false, so we need a guard
-
-    try {
-      // Step 1: Confirm the OTP with Firebase using the stored confirmation object.
-      const userCredential = await confirmationResult.confirm(otp);
-      const idToken = await userCredential.user.getIdToken();
-
-      // Step 2: Inform our backend that the phone is verified.
-      await authService.verifyPhone(idToken);
-
-      // Step 3: With the user signed into Firebase, fetch their profile.
-      const userProfile = await authService.getUserProfile();
-
-      onLogin(userProfile);
-    } catch (err: any) {
-      if (err.code === 'auth/invalid-verification-code') {
-        toast.error('Invalid verification code. Please try again.');
-      }else if (err.code === 'auth/code-expired') {
-        toast.error('The verification code has expired. Please request a new one.');
-      } else if (err.response?.data?.message) {
-        toast.error(err.response.data.message);
-      } else {
-        toast.error('An unexpected error occurred during registration.');
-        console.error('OTP verification error:', err);
-      } 
-    }
-  }, [otp, confirmationResult, onLogin]);
+  }, [onLogin]);
 
   // Combine loading states for the UI
   const isLoading = isSubmitting;
-  const [isOtpVerifying, setIsOtpVerifying] = useState(false);
-
+  
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0B1E4B] px-4 font-sans">
       <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-200">
@@ -224,7 +153,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           // You can also use the onload callback if needed
           // onLoad={() => console.log('reCAPTCHA v3 loaded.')}
         />
-        <div id={RECAPTCHA_CONTAINER_ID}></div>
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-emerald-500 mb-4">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -283,8 +211,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         )}
 
         {/* Register Form */}
-        {mode === 'register' && step === 'form' && (
-          <form onSubmit={handleSubmit(handleRequestOtp as SubmitHandler<FormInputs>)} className="space-y-4 animate-fade-in">
+        {mode === 'register' && (
+          <form onSubmit={handleSubmit(handleRegister as SubmitHandler<FormInputs>)} className="space-y-4 animate-fade-in">
             <FormInput
               label="Full Name"
               type="text"
@@ -319,49 +247,9 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               disabled={isLoading}
               className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 rounded-lg transition-colors shadow-lg shadow-emerald-900/20"
             >
-              {isLoading ? 'Processing...' : 'Verify with OTP'}
+              {isLoading ? 'Registering...' : 'Register'}
             </button>
           </form>
-        )}
-
-        {/* OTP Form */}
-        {mode === 'register' && step === 'otp' && (
-          <div className="space-y-6 animate-fade-in text-center">
-            <div className="bg-gray-100 p-4 rounded-lg border border-gray-300">
-              <p className="text-black text-sm">OTP Sent to {verifiedPhoneNumber}</p>
-            </div>
-            <div>
-              <label htmlFor="otp-input" className="block text-xs font-medium text-black mb-2 uppercase tracking-wider">Enter Verification Code</label>
-              <input
-                id="otp-input"
-                type="text"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                className="w-full bg-white text-black border border-gray-400 rounded-lg px-4 py-4 text-center text-3xl tracking-[0.5em] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                placeholder="0000"
-                maxLength={6}
-                autoComplete="one-time-code"
-              />
-            </div>
-            <button
-              onClick={async () => {
-                setIsOtpVerifying(true);
-                await handleVerifyOtp();
-                setIsOtpVerifying(false);
-              }}
-              disabled={isOtpVerifying || otp.length !== 6}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 rounded-lg transition-colors"
-            >
-              {isOtpVerifying ? 'Verifying...' : 'Complete Registration'}
-            </button>
-            <button
-              disabled={isOtpVerifying}
-              onClick={() => setStep('form')}
-              className="text-gray-600 text-sm hover:text-black underline"
-            >
-              Go Back
-            </button>
-          </div>
         )}
 
       </div>
