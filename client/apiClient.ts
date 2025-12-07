@@ -5,7 +5,7 @@ import { auth } from '../firebase';
  * A single, configured axios instance for all API calls.
  */
 const apiClient = axios.create({ 
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api', 
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://ridercmsv1-194585815067.europe-west1.run.app/api', 
   headers: {
     'Content-Type': 'application/json',
   },
