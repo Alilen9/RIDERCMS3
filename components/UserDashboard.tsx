@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Station, SlotStatus, Battery, Slot, User, BatteryType } from '../types';
 import { analyzeBatteryHealth } from '../services/geminiService';
 import * as boothService from '../services/boothService';
-import QrScanner from './Userdashboard/QrScanner'; // Import the new component
+import QrScanner from './user/QrScanner'; // Import the new component
 
 interface UserDashboardProps {
   user: User;
@@ -34,6 +34,24 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
   const [loading, setLoading] = useState(false);
   const [checkoutRequestId, setCheckoutRequestId] = useState<string>('');
   const [withdrawalCost, setWithdrawalCost] = useState<number>(0);
+  const [doorState, setDoorState] = useState<'OPEN' | 'CLOSING' | 'CLOSED' | 'LOCKED'>('OPEN');
+
+  // --- Map Logic: Calculate Nearest ---
+  const userLocation = { lat: 50, lng: 50 };
+  const sortedStations = useMemo(() => {
+    return MOCK_STATIONS_DATA.map(st => {
+      // Calculate Euclidean distance in the % grid
+      const dx = st.lng - userLocation.lng;
+      const dy = st.lat - userLocation.lat;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      return {
+        ...st,
+        rawDist: dist,
+        distanceLabel: `${(dist * 0.15).toFixed(1)} km` // Mock conversion factor
+      };
+    }).sort((a, b) => a.rawDist - b.rawDist);
+  }, []);
+  const nearestStation = sortedStations[0];
 
   // Load user's current battery status on mount
   useEffect(() => {
@@ -80,15 +98,35 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
       // The QR code text is the boothId
       await boothService.initiateDeposit(decodedText);
       
+      // Simulate Backend Assignment Time
       setTimeout(() => {
-        setLoading(false);
-        setView('select_type');
+        const emptySlot = station.slots.find(s => s.status === SlotStatus.EMPTY);
+        if (emptySlot) {
+          setAssignedSlot(emptySlot);
+          setDoorState('OPEN'); // Physical door opens
+          setView('deposit_guide');
+        } else {
+          alert("Station Full!");
+          setView('home');
+        }
       }, 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to initiate deposit');
       setLoading(false);
     }
   }, []); // No dependencies, this function is stable.
+
+  // 4. Handle Physical Door Close (User Interaction)
+  const handleDoorClose = () => {
+    setDoorState('CLOSING');
+    setTimeout(() => {
+      setDoorState('CLOSED');
+      // Automatically move to lock/confirm after a brief pause
+      setTimeout(() => {
+        setDoorState('LOCKED');
+      }, 1000);
+    }, 1000);
+  };
 
   const handleScanFailure = useCallback((error: string) => {
     setError(error);
@@ -484,38 +522,6 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
               </div>
             </div>
             <button onClick={() => { setView('home'); setError(''); }} className="mt-6 text-gray-400 hover:text-white">Cancel</button>
-          </div>
-        )}
-
-        {/* VIEW: SELECT BATTERY TYPE */}
-        {view === 'select_type' && (
-          <div className="flex flex-col items-center justify-center h-[70vh] space-y-8 animate-fade-in pt-6">
-            <div className="text-center space-y-2">
-              <h2 className="text-3xl font-bold">Select Battery Type</h2>
-              <p className="text-gray-400">Choose the type of battery you want to deposit</p>
-            </div>
-
-            <div className="space-y-4 w-full max-w-sm">
-              {[BatteryType.E_BIKE, BatteryType.SCOOTER].map(type => (
-                <button
-                  key={type}
-                  onClick={() => handleTypeSelection(type)}
-                  className="w-full bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-emerald-500 rounded-xl p-6 text-left transition-all"
-                >
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="font-bold text-lg text-white">{type}</p>
-                      <p className="text-sm text-gray-400">Standard battery type</p>
-                    </div>
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-emerald-500">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                    </svg>
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            <button onClick={() => setView('home')} className="text-gray-400 hover:text-white text-sm">Go Back</button>
           </div>
         )}
 
