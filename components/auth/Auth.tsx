@@ -16,15 +16,18 @@ interface AuthProps {
 
 // Define validation schemas with Zod
 const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  // The identifier can be an email or a phone number.
+  identifier: z.string().min(1, 'Email or phone number is required'),
+  // We don't need to validate if it's an email or phone here,
+  // as we'll do that in the submission handler.
   password: z.string().min(1, 'Password is required'),
 });
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   email: z.string().email('Invalid email address'),
-  // Validate phone number against E.164 format
-  phoneNumber: z.string().regex(/^\+[1-9]\d{1,14}$/, 'The phone number is not valid. Please use E.164 format (e.g., +15551234567).'),
+  // Validate phone number for Kenyan format (+254 followed by 9 digits)
+  phoneNumber: z.string().regex(/^\+254\d{9}$/, 'Please enter a valid Kenyan phone number (e.g., +254712345678).'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
 });
 
@@ -50,9 +53,17 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     handleSubmit,
     formState: { errors, isSubmitting },
     reset,
+    setValue,
   } = useForm<FormInputs>({
     resolver: getResolver(mode),
   });
+
+  // Effect to auto-fill the country code when switching to register mode
+  useEffect(() => {
+    if (mode === 'register') {
+      setValue('phoneNumber', '+254');
+    }
+  }, [mode, setValue]);
 
   const switchMode = (newMode: 'login' | 'register') => {
     setMode(newMode);
@@ -67,12 +78,35 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         throw new Error('Could not verify reCAPTCHA. Please try again.');
       }
 
+      let identifier = data.identifier;
+      // Check if the identifier looks like a local Kenyan number (e.g., 07... or 01...)
+      // and format it to the E.164 standard.
+      if (/^0[17]\d{8}$/.test(identifier)) {
+        // Replace the leading 0 with +254
+        identifier = `+254${identifier.substring(1)}`;
+      }
+
       // 2. Authenticate with Firebase client-side first
-      const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password);
+      // Determine if the identifier is an email or phone number
+      const isEmail = z.string().email().safeParse(identifier).success;
+      let emailToLogin: string;
+
+      if (isEmail) {
+        emailToLogin = identifier;
+      } else {
+        // It's not an email, so we assume it's a phone number.
+        // We need to get the user's email from our backend.
+        const user = await authService.getUserByPhone(identifier);
+        if (!user || !user.email) {
+          throw new Error('No user found with that phone number.');
+        }
+        emailToLogin = user.email;
+      }
+
+      const userCredential = await signInWithEmailAndPassword(auth, emailToLogin, data.password);
       const idToken = await userCredential.user.getIdToken();
 
       // 3. With the user signed into Firebase, fetch their profile from our backend.
-      // The API client will automatically attach the token.
       const userProfile = await authService.getUserProfile();
 
       // 4. Update app state to log the user in.
@@ -86,6 +120,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         // Handle standard Firebase auth errors
         toast.error('Invalid email or password.');
       } else if (error.message.includes('reCAPTCHA')) {
+        toast.error(error.message);
+      } else if (error.message.includes('phone number')) {
         toast.error(error.message);
       } else {
         // Handle other unexpected errors
@@ -185,11 +221,11 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         {mode === 'login' && (
           <form onSubmit={handleSubmit(handleLogin as SubmitHandler<FormInputs>)} className="space-y-4 animate-fade-in">
             <FormInput
-              label="Email"
-              type="email"
-              placeholder="user@example.com"
-              registration={register('email')}
-              error={errors.email?.message}
+              label="Email or Phone Number"
+              type="text"
+              placeholder="user@example.com or +254712345678"
+              registration={register('identifier')}
+              error={errors.identifier?.message}
             />
             <FormInput
               label="Password"
@@ -230,7 +266,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             <FormInput
               label="Phone Number"
               type="tel"
-              placeholder="+254 700 000 000"
+              placeholder="+254712345678"
               registration={register('phoneNumber')}
               error={errors.phoneNumber?.message}
             />

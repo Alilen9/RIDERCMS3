@@ -61,3 +61,14 @@ export const logout = async (): Promise<void> => {
   // Simply sign the user out of the Firebase client SDK.
   await signOut(auth);
 };
+
+/**
+ * Given a phone number, retrieves the corresponding user's email from the backend.
+ * This is used to allow users to log in with their phone number.
+ * @param phoneNumber The user's phone number in E.164 format.
+ * @returns A promise that resolves with an object containing the user's email.
+ */
+export const getUserByPhone = async (phoneNumber: string): Promise<{ email: string }> => {
+  const response = await apiClient.post('/auth/user-by-phone', { phoneNumber });
+  return response.data;
+};
