@@ -1,14 +1,19 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { Station, SlotStatus, BatteryType, Transaction, SystemLog, Battery } from '../types';
+import toast from 'react-hot-toast';
+import { Station, SlotStatus, BatteryType, Transaction, SystemLog, Battery, Booth } from '../types';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { generateSystemInsight } from '../services/geminiService';
-import * as adminService from '../services/adminService';
+import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus } from '../services/adminService';
 import UserManagement from './admin/UserManagement';
-import BoothStatus from './admin/BoothStatus'; 
+import ConfirmationModal from './admin/ConfirmationModal';
+import AddBoothsForm from './admin/booths/forms/AddBoothsForm';
+import EditBoothsForm from './admin/booths/forms/EditBoothsForm';
+import BoothManagement from './admin/booths/BoothManagement';
 import FinanceManagement from './admin/FinanceManagement';
 import SystemConfig from './admin/SystemConfiguration';
+
 
 
 interface AdminDashboardProps {
@@ -39,19 +44,22 @@ const NETWORK_STATIONS: Partial<Station>[] = [
 ];
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStation, onLogout }) => {
-  const [activeSection, setActiveSection] = useState<'dashboard' | 'map' | 'intelligence' | 'stations' | 'users' | 'batteries' | 'finance' | 'settings' | 'logs'>('dashboard');
+  const [activeSection, setActiveSection] = useState<'dashboard' | 'map' | 'intelligence' | 'stations' | 'addBooth' | 'editBooth' | 'users' | 'batteries' | 'finance' | 'settings' | 'logs'>('dashboard');
   const [batteries, setBatteries] = useState<Battery[]>(MOCK_BATTERIES);
-
+  const [booths, setBooths] = useState<Booth[]>([]);
+  const [boothToEdit, setBoothToEdit] = useState<Booth | null>(null);
+  const [boothToDelete, setBoothToDelete] = useState<Booth | null>(null);
+  const [boothForDetails, setBoothForDetails] = useState<Booth | null>(null);
+  const [boothStatuses, setBoothStatuses] = useState<AdminBoothStatus[]>([]);
   // Intelligence State
   const [aiReport, setAiReport] = useState<string>('');
   const [generatingReport, setGeneratingReport] = useState(false);
-
   // UI State
   const [showStationDetail, setShowStationDetail] = useState(false);
   const [slotEditMode, setSlotEditMode] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
 
+ 
   // --- Handlers ---
   const handleSlotToggle = (slotId: number) => {
     // Hardware toggle (Door/Relay)
@@ -100,6 +108,53 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
     setAiReport(report);
     setGeneratingReport(false);
   };
+
+  const handleBoothAdded = (newBooth: Partial<Booth>) => {
+    // This will now be handled by the BoothManagement component refetching
+    setActiveSection('stations');
+  };
+
+  const handleEditClick = (booth: Booth) => {
+    setBoothToEdit(booth);
+    setActiveSection('editBooth');
+  };
+
+  const handleBoothUpdated = (updatedBooth: Booth) => {
+    setBooths(prevBooths => 
+      prevBooths.map(b => b.booth_uid === updatedBooth.booth_uid ? updatedBooth : b)
+    );
+    setActiveSection('stations');
+    setBoothToEdit(null);
+  };
+
+  const handleDeleteClick = (booth: Booth) => {
+    setBoothToDelete(booth);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!boothToDelete) return;
+
+    const loadingToast = toast.loading('Deleting booth...');
+    try {
+      await deleteBooth(boothToDelete.booth_uid);
+      toast.dismiss(loadingToast);
+      toast.success('Booth deleted successfully!');
+      setBooths(prev => prev.filter(b => b.booth_uid !== boothToDelete.booth_uid));
+      setBoothToDelete(null); // Close modal
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      const errorMessage = (error as any)?.response?.data?.error || (error as Error).message;
+      toast.error(errorMessage);
+      console.error("Error deleting booth:", error);
+    }
+  };
+
+  const handleNavigation = (section: 'addBooth' | 'editBooth', data?: any) => {
+    if (section === 'editBooth') setBoothToEdit(data);
+    setActiveSection(section);
+  };
+
+
 
   // --- Render Functions for Sections ---
 
@@ -277,102 +332,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
   );
 
   const renderStations = () => {
-    if (showStationDetail) {
-      // --- TELEMETRY / DETAIL VIEW (Formerly Operations) ---
-      return (
-        <div className="animate-fade-in space-y-6">
-          <div className="flex items-center gap-4 mb-6">
-            <button onClick={() => setShowStationDetail(false)} className="bg-gray-800 hover:bg-gray-700 p-2 rounded-lg">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-            </button>
-            <div>
-              <h2 className="text-2xl font-bold flex items-center gap-3">
-                {station.name}
-                <span className="text-gray-500 text-lg font-normal">({station.id})</span>
-                <span className="text-xs bg-gray-700 text-gray-300 px-2 py-0.5 rounded border border-gray-600">FW: v1.2.4</span>
-              </h2>
-              <p className="text-xs text-gray-400 mt-1">Last Heartbeat: 2s ago</p>
-            </div>
-            <div className="ml-auto flex gap-2">
-              <button onClick={() => setSlotEditMode(!slotEditMode)} className={`px-4 py-2 rounded-lg font-bold text-sm ${slotEditMode ? 'bg-yellow-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>
-                {slotEditMode ? 'Done Editing' : 'Manage Slots'}
-              </button>
-              <button className="bg-blue-900/50 hover:bg-blue-900 text-blue-300 border border-blue-800 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                OTA Update
-              </button>
-            </div>
-          </div>
-
-          {/* Slot Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
-            {station.slots.map(slot => (
-              <div key={slot.id} className={`relative bg-gray-800 border ${slot.status === SlotStatus.FAULTY ? 'border-red-500' : 'border-gray-700'} rounded-xl overflow-hidden`}>
-
-                {slotEditMode && (
-                  <div className="absolute inset-0 z-10 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center space-y-2 animate-fade-in">
-                    <span className="text-white font-bold">Slot {slot.id} Config</span>
-                    <button
-                      onClick={() => toggleSlotFaulty(slot.id)}
-                      className={`px-3 py-1 rounded text-xs font-bold ${slot.status === SlotStatus.FAULTY ? 'bg-green-600' : 'bg-red-600'}`}
-                    >
-                      {slot.status === SlotStatus.FAULTY ? 'Mark Active' : 'Mark Faulty'}
-                    </button>
-                    <button className="bg-gray-700 px-3 py-1 rounded text-xs font-bold hover:bg-gray-600">Remove Slot</button>
-                  </div>
-                )}
-
-                <div className="p-4 border-b border-gray-700 flex justify-between items-center">
-                  <span className="font-bold text-gray-200">Slot {slot.id}</span>
-                  <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded ${slot.status === 'EMPTY' ? 'bg-gray-700 text-gray-400' :
-                    slot.status === 'OCCUPIED_CHARGING' ? 'bg-blue-900 text-blue-400' :
-                      slot.status === 'FAULTY' ? 'bg-red-900 text-red-500' :
-                        'bg-emerald-900 text-emerald-400'
-                    }`}>{slot.status.replace('_', ' ')}</span>
-                </div>
-                <div className="p-4 space-y-3">
-                  {/* Telemetry */}
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Door</span>
-                    <span className={slot.doorClosed ? 'text-emerald-400' : 'text-red-400'}>{slot.doorClosed ? 'Closed' : 'Open'}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Relay</span>
-                    <span className={slot.relayOn ? 'text-blue-400' : 'text-gray-600'}>{slot.relayOn ? 'ON' : 'OFF'}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Battery</span>
-                    <span className="text-white">{slot.battery ? `${slot.battery.chargeLevel}%` : '--'}</span>
-                  </div>
-
-                  {/* Quick Actions */}
-                  <div className="grid grid-cols-2 gap-2 mt-4">
-                    <button onClick={() => handleSlotToggle(slot.id)} className="bg-gray-700 hover:bg-gray-600 py-2 rounded text-xs font-bold text-gray-300">
-                      {slot.doorClosed ? 'Open Door' : 'Close Door'}
-                    </button>
-                    <button className="bg-gray-700 hover:bg-gray-600 py-2 rounded text-xs font-bold text-gray-300">
-                      Reset
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-    // --- LIST VIEW ---
-    return (
-      <div className="animate-fade-in space-y-6">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold">Stations & Booths</h2>
-          <button className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold text-sm">+ Add Station</button>
-        </div>
-        
-        {/* Render the new live booth status component */}
-        <BoothStatus />
-      </div>
-    );
+    return <BoothManagement onNavigate={handleNavigation} />
   };
 
   const renderBatteries = () => (
@@ -437,8 +397,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
     </div>
   );
 
-
-
   const renderLogs = () => (
     <div className="animate-fade-in">
       <h2 className="text-2xl font-bold mb-6">Audit & System Logs</h2>
@@ -464,7 +422,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
       <aside className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col fixed h-full z-20">
         <div className="p-6 border-b border-gray-800 flex items-center gap-3">
           <div className="w-8 h-8 bg-emerald-600 rounded flex items-center justify-center font-bold text-lg">R</div>
-          <span className="font-bold text-lg tracking-tight">RIDERCMS ADMIN</span>
+          <span className="font-bold text-lg tracking-tight">RIDER ADMIN</span>
         </div>
 
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
@@ -481,7 +439,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
           ].map(item => (
             <button
               key={item.id}
-              onClick={() => { setActiveSection(item.id as any); setShowStationDetail(false); }}
+              onClick={() => { setActiveSection(item.id as any); }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeSection === item.id
                 ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-600/30'
                 : 'text-gray-400 hover:bg-gray-800 hover:text-white'
@@ -530,12 +488,23 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
         {activeSection === 'map' && renderMap()}
         {activeSection === 'intelligence' && renderIntelligence()}
         {activeSection === 'stations' && renderStations()}
+        {activeSection === 'addBooth' && <AddBoothsForm onBoothAdded={handleBoothAdded} onCancel={() => { setActiveSection('stations'); }} />}
+        {activeSection === 'editBooth' && boothToEdit && <EditBoothsForm boothToEdit={boothToEdit} onBoothUpdated={handleBoothUpdated} onCancel={() => setActiveSection('stations')} />}
         {activeSection === 'users' && <UserManagement />}
         {activeSection === 'batteries' && renderBatteries()}
         {activeSection === 'finance' && <FinanceManagement />}
         {activeSection === 'settings' && <SystemConfig />}
         {activeSection === 'logs' && renderLogs()}
       </main>
+
+      <ConfirmationModal
+        isOpen={!!boothToDelete}
+        title="Delete Booth"
+        message={`Are you sure you want to permanently delete the booth "${boothToDelete?.name}"? This action cannot be undone.`}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setBoothToDelete(null)}
+        isDestructive={true}
+      />
 
       <style>{`
         @keyframes fadeIn {

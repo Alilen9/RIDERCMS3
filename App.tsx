@@ -1,5 +1,6 @@
 
 import React, { useEffect, useState } from 'react'; // Keep for local station state
+import { Toaster } from 'react-hot-toast';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Auth from './components/auth/Auth';
 import ProtectedRoute from './components/auth/ProtectedRoute';
@@ -159,6 +160,13 @@ const AppContent: React.FC = () => {
 const App: React.FC = () => (
   <Router>
     <AuthProvider>
+      <Toaster position="top-right" toastOptions={{
+        style: {
+          background: '#1F2937', // bg-gray-800
+          color: '#F9FAFB', // text-gray-50
+          border: '1px solid #374151', // border-gray-700
+        },
+      }} />
       <AppContent />
     </AuthProvider>
   </Router>

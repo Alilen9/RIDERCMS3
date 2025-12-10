@@ -1,5 +1,6 @@
+
 import apiClient from '../client/apiClient';
-import { UserRole } from '../types';
+import { Booth, UserRole } from '../types';
 
 /**
  * The shape of a user object as returned by the GET /api/admin/users endpoint.
@@ -31,6 +32,7 @@ export interface AdminBoothStatus {
   boothUid: string;
   location: string;
   status: string;
+  lastHeartbeatAt: string;
   slots: {
     slotIdentifier: string;
     status: string;
@@ -75,6 +77,70 @@ export interface AppSettings {
     allow_open_registration: boolean;
   };
 }
+
+/**
+ * The data required to create a new booth.
+ */
+export interface CreateBoothData {
+  name: string;
+  locationAddress: string;
+}
+
+/**
+ * The response from creating a new booth.
+ */
+export interface CreateBoothResponse {
+  message: string;
+  boothUid: string;
+}
+
+/**
+ * Creates a new booth in the system.
+ * @param boothData The data for the new booth.
+ * @returns A promise that resolves with the creation response.
+ */
+export const createBooth = async (boothData: CreateBoothData): Promise<CreateBoothResponse> => {
+  const response = await apiClient.post<CreateBoothResponse>('/admin/booths', boothData);
+  return response.data;
+};
+
+/**
+ * The response from fetching a list of booths.
+ */
+export interface ListBoothsResponse {
+  booths: Booth[];
+  total: number;
+}
+
+/**
+ * Fetches a list of all booths from the admin endpoint.
+ * @returns A promise that resolves with the list of booths.
+ */
+export const getBooths = async (): Promise<ListBoothsResponse> => {
+  const response = await apiClient.get<ListBoothsResponse>('/admin/booths');
+  return response.data;
+};
+
+/**
+ * Updates an existing booth's details.
+ * @param boothUid The UID of the booth to update.
+ * @param boothData The data to update.
+ * @returns A promise that resolves when the update is complete.
+ */
+export const updateBooth = async (boothUid: string, boothData: Partial<CreateBoothData>): Promise<Booth> => {
+  const response = await apiClient.patch<{ message: string, booth: Booth }>(`/admin/booths/${boothUid}`, boothData);
+  return response.data.booth;
+};
+
+/**
+ * Deletes a booth from the system.
+ * @param boothUid The UID of the booth to delete.
+ * @returns A promise that resolves when the deletion is complete.
+ */
+export const deleteBooth = async (boothUid: string): Promise<void> => {
+  await apiClient.delete(`/admin/booths/${boothUid}`);
+};
+
 /**
  * Fetches a paginated list of all users from the admin endpoint.
  * @param pageToken - The token for fetching the next page of results.

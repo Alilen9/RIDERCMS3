@@ -80,3 +80,15 @@ export interface SystemLog {
   message: string;
   actor: string; // User or System
 }
+
+export interface Booth {
+  booth_uid: string;
+  name: string;
+  location_address: string;
+  status: 'online' | 'maintenance' | 'offline';
+  created_at: string;
+  updated_at: string;
+  // Optional fields that might come from other endpoints or be added on the client
+  latitude?: number;
+  longitude?: number;
+}
