@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { getSessions, AdminSession } from '../../services/adminService';
+import { getSessions, AdminSession, SessionFilters } from '../../services/adminService';
 import { format } from 'date-fns';
 
 const SESSIONS_PER_PAGE = 15;
@@ -10,13 +10,34 @@ const SessionManagement: React.FC = () => {
   const [totalSessions, setTotalSessions] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
+  const [filters, setFilters] = useState<SessionFilters>({
+    searchTerm: '',
+    status: '',
+    sessionType: '',
+  });
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(filters.searchTerm);
+
+  // Debounce search term
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchTerm(filters.searchTerm);
+    }, 500); // 500ms delay
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [filters.searchTerm]);
 
   useEffect(() => {
     const fetchSessionsData = async () => {
       setIsLoading(true);
       try {
         const offset = (currentPage - 1) * SESSIONS_PER_PAGE;
-        const { sessions: fetchedSessions, total } = await getSessions(SESSIONS_PER_PAGE, offset);
+        const activeFilters = {
+          ...filters,
+          searchTerm: debouncedSearchTerm,
+        };
+        const { sessions: fetchedSessions, total } = await getSessions(SESSIONS_PER_PAGE, offset, activeFilters);
         setSessions(fetchedSessions);
         setTotalSessions(total);
       } catch (error) {
@@ -28,7 +49,13 @@ const SessionManagement: React.FC = () => {
     };
 
     fetchSessionsData();
-  }, [currentPage]);
+  }, [currentPage, debouncedSearchTerm, filters.status, filters.sessionType]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    if (currentPage !== 1) setCurrentPage(1);
+  }, [debouncedSearchTerm, filters.status, filters.sessionType]);
+
 
   const totalPages = Math.ceil(totalSessions / SESSIONS_PER_PAGE);
 
@@ -51,6 +78,40 @@ const SessionManagement: React.FC = () => {
 
   return (
     <div className="animate-fade-in">
+      {/* Filter Controls */}
+      <div className="mb-6 p-4 bg-gray-800/50 rounded-xl border border-gray-700 flex flex-col md:flex-row gap-4">
+        <input
+          type="text"
+          placeholder="Search by user email..."
+          value={filters.searchTerm}
+          onChange={(e) => setFilters(f => ({ ...f, searchTerm: e.target.value }))}
+          className="flex-grow bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+        />
+        <div className="grid grid-cols-2 md:flex gap-4">
+          <select
+            value={filters.sessionType}
+            onChange={(e) => setFilters(f => ({ ...f, sessionType: e.target.value }))}
+            className="bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+          >
+            <option value="">All Types</option>
+            <option value="deposit">Deposit</option>
+            <option value="withdrawal">Withdrawal</option>
+          </select>
+          <select
+            value={filters.status}
+            onChange={(e) => setFilters(f => ({ ...f, status: e.target.value }))}
+            className="bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+          >
+            <option value="">All Statuses</option>
+            <option value="pending">Pending</option>
+            <option value="in_progress">In Progress</option>
+            <option value="completed">Completed</option>
+            <option value="failed">Failed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+      </div>
+
       <div className="bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left min-w-[1000px]">
@@ -67,10 +128,22 @@ const SessionManagement: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-gray-800 text-sm">
               {isLoading ? (
-                <tr>
-                  <td colSpan={7} className="text-center py-12 text-gray-500">Loading sessions...</td>
-                </tr>
-              ) : sessions.map(session => (
+                [...Array(SESSIONS_PER_PAGE)].map((_, index) => (
+                  <tr key={index} className="animate-pulse">
+                    <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-3/4"></div></td>
+                    <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-1/2"></div></td>
+                    <td className="px-4 py-3"><div className="h-6 bg-gray-700 rounded-full w-24"></div></td>
+                    <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-1/3"></div></td>
+                    <td className="px-4 py-3">
+                      <div className="h-3 bg-gray-700 rounded w-1/2 mb-1.5"></div>
+                      <div className="h-3 bg-gray-700 rounded w-1/4"></div>
+                    </td>
+                    <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-3/4"></div></td>
+                    <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-1/2"></div></td>
+                  </tr>
+                ))
+              ) : sessions.length > 0 ? (
+                sessions.map(session => (
                 <tr key={session.id} className="hover:bg-gray-800/60">
                   <td className="px-4 py-3 text-gray-300">{session.userEmail || 'N/A'}</td>
                   <td className="px-4 py-3 capitalize">{session.sessionType}</td>
@@ -87,7 +160,12 @@ const SessionManagement: React.FC = () => {
                   <td className="px-4 py-3 font-mono text-xs text-gray-400">{session.batteryUid ? `${session.batteryUid.substring(0, 12)}...` : 'N/A'}</td>
                   <td className="px-4 py-3 text-gray-400">{formatDate(session.createdAt)}</td>
                 </tr>
-              ))}
+              ))
+              ) : (
+                <tr>
+                  <td colSpan={7} className="text-center py-12 text-gray-500">No sessions match the current filters.</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

@@ -7,6 +7,7 @@ import ChargingStatusView from './user/ChargingStatusView';
 import SessionSummary from './user/SessionSummary';
 import toast from 'react-hot-toast';
 import NetworkMap from './admin/NetworkMap';
+import ConfirmationModal from './admin/ConfirmationModal';
 
 interface UserDashboardProps {
   user: User;
@@ -32,6 +33,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
   const [manualBoothId, setManualBoothId] = useState('');
   const [booths, setBooths] = useState<boothService.PublicBooth[]>([]);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
 
   const handleMapBoothClick = (booth: { booth_uid: string }) => {
     setManualBoothId(booth.booth_uid);
@@ -98,7 +100,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
 
       // 2. If no pending withdrawal, check for any other active battery session.
       const batteryStatus = await boothService.getMyBatteryStatus();
-    
+      console.log('Loaded battery status on mount:', batteryStatus);
       if (batteryStatus) {        
         setActiveBattery({
           id: batteryStatus.batteryUid,
@@ -148,7 +150,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
     const pollForDeposit = setInterval(async () => {
       try {
         const batteryStatus = await boothService.getMyBatteryStatus();
-        if (batteryStatus) {
+        if (batteryStatus && batteryStatus.sessionStatus !== 'pending') {
           // Success! The backend has confirmed the deposit.
           clearInterval(pollForDeposit);
           setActiveBattery({ // Correctly set the 'id' property
@@ -216,6 +218,25 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
     }
     setLoading(false); // Ensure loading is always stopped
   }, []); // No dependencies, this function is stable.
+
+  const handleCancelDeposit = () => {
+    setIsCancelModalOpen(true);
+  };
+
+  const confirmCancelDeposit = async () => {
+    setIsCancelModalOpen(false);
+    const loadingToast = toast.loading("Cancelling session...");
+    try {
+      await boothService.cancelActiveSession();
+      toast.dismiss(loadingToast);
+      toast.success("Session cancelled.");
+      finishSession(); // Resets state and returns to home
+    } catch (err) {
+      toast.dismiss(loadingToast);
+      const errorMessage = (err as any)?.response?.data?.message || (err instanceof Error ? err.message : "Failed to cancel session.");
+      toast.error(errorMessage);
+    }
+  };
 
   // 4. Handle Physical Door Close (User Interaction)
   const handleScanFailure = useCallback((error: string) => {
@@ -470,6 +491,13 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
               <h4 className="font-semibold text-blue-300">Waiting for Confirmation...</h4>
               <p className="text-xs text-gray-400 mt-1">This may take a few seconds after the door is closed.</p>
             </div>
+
+            <button
+              onClick={handleCancelDeposit}
+              className="mt-6 w-full bg-red-900/50 hover:bg-red-900/80 text-red-300 font-semibold py-3 rounded-xl border border-red-800 transition-colors"
+            >
+              Cancel Session
+            </button>
           </div>
         )}
 
@@ -550,6 +578,16 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
         )}
 
       </div>
+
+      <ConfirmationModal
+        isOpen={isCancelModalOpen}
+        title="Cancel Session"
+        message="Are you sure you want to cancel this deposit? The allocated slot will be released."
+        onConfirm={confirmCancelDeposit}
+        onCancel={() => setIsCancelModalOpen(false)}
+        confirmButtonText="Yes, Cancel"
+        isDestructive={true}
+      />
 
       <style>{`
         @keyframes scan {

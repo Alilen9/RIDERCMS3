@@ -61,20 +61,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     fetchSummary();
   }, []);
  
-  // --- Handlers ---
-  const handleSlotToggle = (slotId: number) => {
-    // This handler is no longer relevant as station state is not managed here
-  };
 
   const handleBoothAdded = (newBooth: Partial<Booth>) => {
     // This will now be handled by the BoothManagement component refetching
     setActiveSection('stations');
   };
 
-  const handleEditClick = (booth: Booth) => {
-    setBoothToEdit(booth);
-    setActiveSection('editBooth');
-  };
 
   const handleBoothUpdated = (updatedBooth: Booth) => {
     setBooths(prevBooths => 
@@ -84,9 +76,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     setBoothToEdit(null);
   };
 
-  const handleDeleteClick = (booth: Booth) => {
-    setBoothToDelete(booth);
-  };
 
   const handleConfirmDelete = async () => {
     if (!boothToDelete) return;

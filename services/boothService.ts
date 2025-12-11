@@ -202,3 +202,17 @@ export const getHistory = async (): Promise<UserTransaction[]> => {
     throw error;
   }
 };
+
+/**
+ * Sends a request to cancel the user's currently active session (e.g., a pending deposit).
+ * The backend should identify the user via their auth token and cancel any non-terminal session.
+ */
+export const cancelActiveSession = async (): Promise<void> => {
+  try {
+    // This endpoint matches the backend implementation: POST /api/booths/cancel-session
+    await apiClient.post('/booths/cancel-session');
+  } catch (error) {
+    console.error('Failed to cancel active session:', error);
+    throw error;
+  }
+};

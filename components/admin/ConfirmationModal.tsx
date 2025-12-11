@@ -26,8 +26,8 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
     : 'bg-indigo-600 hover:bg-indigo-700';
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-      <div className="bg-gray-800 rounded-2xl border border-gray-700 shadow-xl p-8 max-w-md w-full">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center z-50 animate-fade-in pt-20">
+      <div className="bg-gray-800 rounded-2xl border border-gray-700 shadow-xl p-8 max-w-md w-full animate-fade-in">
         <h2 className="text-2xl font-bold text-white mb-4">{title}</h2>
         <p className="text-gray-400 mb-8">{message}</p>
         <div className="flex justify-end gap-4">

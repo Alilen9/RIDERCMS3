@@ -380,18 +380,26 @@ export interface ListSessionsResponse {
   total: number;
 }
 
+export interface SessionFilters {
+  searchTerm?: string;
+  status?: string;
+  sessionType?: string;
+}
+
 /**
  * Fetches a paginated list of all sessions from the admin endpoint.
  * @param limit The number of sessions to fetch.
  * @param offset The number of sessions to skip.
+ * @param filters Optional search and filter criteria.
  */
 export const getSessions = async (
   limit: number,
-  offset: number
+  offset: number,
+  filters?: SessionFilters
 ): Promise<ListSessionsResponse> => {
   try {
     const response = await apiClient.get<ListSessionsResponse>('/admin/sessions', {
-      params: { limit, offset },
+      params: { limit, offset, ...filters },
     });
     return response.data;
   } catch (error) {
