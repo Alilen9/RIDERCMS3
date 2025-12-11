@@ -16,6 +16,7 @@ import SimulationTools from './admin/SimulationTools';
 import DashboardOverview from './admin/DashboardOverview';
 import NetworkMap from './admin/NetworkMap';
 import AIIntelligence from './admin/AIIntelligence';
+import SessionManagement from './admin/SessionManagement';
 
 
 
@@ -37,18 +38,15 @@ const MOCK_BATTERIES: Battery[] = [
 ];
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
-  const [activeSection, setActiveSection] = useState<'dashboard' | 'map' | 'intelligence' | 'stations' | 'addBooth' | 'editBooth' | 'users' | 'batteries' | 'finance' | 'settings' | 'logs' | 'simulation'>('dashboard');
+  const [activeSection, setActiveSection] = useState<'dashboard' | 'map' | 'intelligence' | 'stations' | 'addBooth' | 'editBooth' | 'users' | 'batteries' | 'sessions' | 'finance' | 'settings' | 'logs' | 'simulation'>('dashboard');
   const [batteries, setBatteries] = useState<Battery[]>(MOCK_BATTERIES);
   const [booths, setBooths] = useState<Booth[]>([]);
   const [boothToEdit, setBoothToEdit] = useState<Booth | null>(null);
   const [boothToDelete, setBoothToDelete] = useState<Booth | null>(null);
-  const [boothForDetails, setBoothForDetails] = useState<Booth | null>(null);
   const [summaryData, setSummaryData] = useState<DashboardSummary | null>(null);
-  const [boothStatuses, setBoothStatuses] = useState<AdminBoothStatus[]>([]);
   const [initialBoothForDetail, setInitialBoothForDetail] = useState<Booth | null>(null);
   // UI State
-  const [showStationDetail, setShowStationDetail] = useState(false);
-  const [slotEditMode, setSlotEditMode] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [error, setError] = useState<string>('');
 
   useEffect(() => {
@@ -208,8 +206,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white font-sans flex">
+      {/* Sidebar Overlay for mobile */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 z-20 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        ></div>
+      )}
       {/* SIDEBAR NAVIGATION */}
-      <aside className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col fixed h-full z-20">
+      <aside className={`w-64 bg-gray-900 border-r border-gray-800 flex-col fixed h-full z-30 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} flex`}>
         <div className="p-6 border-b border-gray-800 flex items-center gap-3">
           <div className="w-8 h-8 bg-emerald-600 rounded flex items-center justify-center font-bold text-lg">R</div>
           <span className="font-bold text-lg tracking-tight">RIDER ADMIN</span>
@@ -223,6 +228,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             { id: 'stations', label: 'Stations & Booths', icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10' },
             { id: 'users', label: 'Users & Operators', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' },
             { id: 'batteries', label: 'Battery Inventory', icon: 'M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z' },
+            { id: 'sessions', label: 'Sessions', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
             { id: 'finance', label: 'Transactions', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
             { id: 'settings', label: 'System Config', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z' },
             { id: 'logs', label: 'Audit Logs', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
@@ -230,7 +236,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           ].map(item => (
             <button
               key={item.id}
-              onClick={() => { setActiveSection(item.id as any); }}
+              onClick={() => { 
+                setActiveSection(item.id as any);
+                setIsSidebarOpen(false); // Close sidebar on navigation
+              }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeSection === item.id
                 ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-600/30'
                 : 'text-gray-400 hover:bg-gray-800 hover:text-white'
@@ -253,7 +262,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
       </aside>
 
       {/* MAIN CONTENT AREA */}
-      <main className="flex-1 ml-64 p-8 overflow-y-auto h-screen">
+      <main className="flex-1 md:ml-64 p-4 sm:p-8 overflow-y-auto h-screen">
         {/* Error Banner */}
         {error && (
           <div className="mb-6 p-4 bg-red-900/50 border border-red-500 text-red-200 rounded-lg flex justify-between items-center">
@@ -262,11 +271,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           </div>
         )}
 
-        <header className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight capitalize">{activeSection.replace('_', ' ')}</h1>
-            <p className="text-gray-400 text-sm">System Manager / {new Date().toLocaleDateString()}</p>
+        <header className="flex justify-between items-center mb-6 sm:mb-8">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 rounded-md hover:bg-gray-800">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+            </button>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight capitalize">{activeSection.replace('_', ' ')}</h1>
+              <p className="text-gray-400 text-xs sm:text-sm hidden sm:block">System Manager / {new Date().toLocaleDateString()}</p>
+            </div>
           </div>
+
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-sm bg-gray-900 border border-gray-800 px-3 py-1.5 rounded-full">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -283,6 +298,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         {activeSection === 'editBooth' && boothToEdit && <EditBoothsForm boothToEdit={boothToEdit} onBoothUpdated={handleBoothUpdated} onCancel={() => setActiveSection('stations')} />}
         {activeSection === 'users' && <UserManagement />}
         {activeSection === 'batteries' && renderBatteries()}
+        {activeSection === 'sessions' && <SessionManagement />}
         {activeSection === 'finance' && <FinanceManagement />}
         {activeSection === 'settings' && <SystemConfig />}
         {activeSection === 'logs' && renderLogs()}

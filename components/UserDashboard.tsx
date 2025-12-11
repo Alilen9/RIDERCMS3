@@ -6,6 +6,7 @@ import QrScanner from './user/QrScanner'; // Import the new component
 import ChargingStatusView from './user/ChargingStatusView';
 import SessionSummary from './user/SessionSummary';
 import toast from 'react-hot-toast';
+import NetworkMap from './admin/NetworkMap';
 
 interface UserDashboardProps {
   user: User;
@@ -31,6 +32,11 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
   const [manualBoothId, setManualBoothId] = useState('');
   const [booths, setBooths] = useState<boothService.PublicBooth[]>([]);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+
+  const handleMapBoothClick = (booth: { booth_uid: string }) => {
+    setManualBoothId(booth.booth_uid);
+    setView('home');
+  };
 
   // --- Map Logic: Calculate Nearest ---
   const sortedStations = useMemo(() => {
@@ -391,143 +397,11 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
 
         {/* VIEW: MAP */}
         {view === 'map_view' && (
-          <div className="animate-fade-in h-[85vh] flex flex-col relative">
-            {/* Floating Header */}
-            <div className="absolute top-4 left-4 right-4 z-20 flex justify-between items-center pointer-events-none">
-              <button onClick={() => setView('home')} className="bg-gray-900/90 backdrop-blur text-white p-3 rounded-full shadow-lg pointer-events-auto border border-gray-700 active:scale-95 transition-transform">
+          <div className="animate-fade-in h-[calc(100vh-140px)] flex flex-col relative">
+             <button onClick={() => setView('home')} className="absolute top-4 left-4 z-20 bg-gray-900/90 backdrop-blur text-white p-3 rounded-full shadow-lg pointer-events-auto border border-gray-700 active:scale-95 transition-transform">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-              </button>
-              <div className="bg-gray-900/90 backdrop-blur px-4 py-2 rounded-full border border-gray-700 shadow-lg">
-                <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  Live Network
-                </span>
-              </div>
-            </div>
-
-            {/* Map Container */}
-            <div className="flex-1 bg-[#0f1115] relative overflow-hidden rounded-2xl border border-gray-800 shadow-2xl">
-
-              {/* Map Pattern (Roads) */}
-              <div className="absolute inset-0 opacity-30 pointer-events-none">
-                {/* Vertical Roads */}
-                <div className="absolute left-[20%] top-0 bottom-0 w-8 bg-gray-800 border-x border-gray-700"></div>
-                <div className="absolute left-[60%] top-0 bottom-0 w-6 bg-gray-800 border-x border-gray-700"></div>
-                <div className="absolute left-[85%] top-0 bottom-0 w-4 bg-gray-800/50"></div>
-
-                {/* Horizontal Roads */}
-                <div className="absolute top-[30%] left-0 right-0 h-8 bg-gray-800 border-y border-gray-700"></div>
-                <div className="absolute top-[70%] left-0 right-0 h-6 bg-gray-800 border-y border-gray-700"></div>
-
-                {/* Diagonal */}
-                <div className="absolute top-[-10%] left-[-10%] w-[150%] h-12 bg-gray-800 border-y border-gray-700 rotate-[25deg] transform-origin-top-left"></div>
-              </div>
-
-              {/* Parks / Areas */}
-              <div className="absolute top-[10%] right-[10%] w-32 h-32 bg-emerald-900/10 rounded-full blur-xl pointer-events-none"></div>
-              <div className="absolute bottom-[20%] left-[10%] w-48 h-48 bg-blue-900/10 rounded-full blur-xl pointer-events-none"></div>
-
-              {/* Route Line to Nearest */}
-              {nearestStation && (
-                <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
-                  <defs>
-                    <linearGradient id="routeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                      <stop offset="0%" stopColor="#10b981" stopOpacity="0" />
-                      <stop offset="100%" stopColor="#10b981" stopOpacity="0.8" />
-                    </linearGradient>
-                  </defs>
-                  <line
-                    x1={`${userLocation.lng}%`}
-                    y1={`${userLocation.lat}%`}
-                    x2={`${nearestStation.lng}%`}
-                    y2={`${nearestStation.lat}%`}
-                    stroke="url(#routeGradient)"
-                    strokeWidth="3"
-                    strokeDasharray="6 4"
-                    className="animate-pulse"
-                  />
-                  <circle cx={`${nearestStation.lng}%`} cy={`${nearestStation.lat}%`} r="3" fill="#10b981" className="animate-ping" />
-                </svg>
-              )}
-
-              {/* Radar Scan Effect from User */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] border border-emerald-500/10 rounded-full animate-[spin_8s_linear_infinite] opacity-50 pointer-events-none">
-                <div className="w-full h-1/2 bg-gradient-to-l from-transparent to-emerald-500/5 blur-sm origin-bottom transform rotate-90"></div>
-              </div>
-
-              {/* User Location */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10 pointer-events-none">
-                <div className="relative">
-                  <div className="w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-b-[16px] border-b-blue-500 filter drop-shadow-[0_0_10px_rgba(59,130,246,0.8)]"></div>
-                  <div className="absolute -inset-4 bg-blue-500/20 rounded-full animate-ping"></div>
-                </div>
-              </div>
-
-              {/* Stations */}
-              {sortedStations.map((st, i) => (
-                <div
-                  key={st.id}
-                  className="absolute flex flex-col items-center group cursor-pointer z-10 transition-all duration-300 hover:scale-110 hover:z-20"
-                  style={{ top: `${st.lat}%`, left: `${st.lng}%` }}
-                  onClick={() => alert(`Navigating to ${st.name}...`)}
-                >
-                  {/* Pin */}
-                  <div className={`relative w-10 h-10 ${st.available > 0 ? 'bg-emerald-600 shadow-[0_0_15px_#059669]' : 'bg-red-600 shadow-[0_0_15px_#dc2626]'} rounded-xl rounded-bl-none transform rotate-45 border-2 border-white/20 flex items-center justify-center transition-colors`}>
-                    <div className="transform -rotate-45 text-white">
-                      {st.available > 0 ? (
-                        <span className="font-bold font-mono">{st.available}</span>
-                      ) : (
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Nearest Badge */}
-                  {i === 0 && (
-                    <div className="absolute -top-6 bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg border border-emerald-400 animate-bounce">
-                      NEAREST
-                    </div>
-                  )}
-
-                  {/* Label Bubble */}
-                  <div className="mt-2 bg-gray-900/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-gray-700 shadow-xl flex flex-col items-center whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity absolute top-10 pointer-events-none">
-                    <span className="font-bold text-xs text-white">{st.name}</span>
-                    <span className="text-[10px] text-gray-400">{st.distanceLabel}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Bottom Sheet List (Sorted by Distance) */}
-            <div className="absolute bottom-0 left-0 right-0 bg-gray-900/95 backdrop-blur-xl rounded-t-3xl p-6 border-t border-gray-700 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-20 max-h-[40vh] overflow-y-auto">
-              <div className="w-12 h-1 bg-gray-700 rounded-full mx-auto mb-6"></div>
-              <h3 className="text-lg font-bold text-white mb-4">Nearby Locations</h3>
-              <div className="space-y-3">
-                {sortedStations.map((st, i) => (
-                  <div key={st.id} className={`group p-4 rounded-xl border transition-all flex justify-between items-center cursor-pointer ${i === 0 ? 'bg-emerald-900/20 border-emerald-500/50 hover:bg-emerald-900/30' : 'bg-gray-800/50 border-gray-700/50 hover:bg-gray-800'}`}>
-                    <div className="flex items-center gap-4">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${st.available > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-sm text-gray-200 flex items-center gap-2">
-                          {st.name}
-                          {i === 0 && <span className="bg-emerald-500 text-white text-[9px] px-1.5 py-0.5 rounded font-bold">NEAREST</span>}
-                        </h4>
-                        <p className="text-xs text-gray-400 flex items-center gap-1">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" /></svg>
-                          {st.distanceLabel}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <span className={`block text-lg font-bold font-mono ${st.available > 0 ? 'text-emerald-400' : 'text-red-400'}`}>{st.available}</span>
-                      <span className="text-[10px] text-gray-500 uppercase">Slots</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+             </button>
+            <NetworkMap onBoothClick={handleMapBoothClick} />
           </div>
         )}
 

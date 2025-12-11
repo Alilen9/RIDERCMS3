@@ -359,3 +359,43 @@ export const getDashboardSummary = async (): Promise<DashboardSummary> => {
     throw error;
   }
 };
+
+/**
+ * The shape of a session object as returned by GET /api/admin/sessions.
+ */
+export interface AdminSession {
+  id: number;
+  sessionType: 'deposit' | 'withdrawal';
+  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
+  amount: number | null;
+  createdAt: string;
+  userEmail: string | null;
+  boothUid: string | null;
+  slotIdentifier: string | null;
+  batteryUid: string | null;
+}
+
+export interface ListSessionsResponse {
+  sessions: AdminSession[];
+  total: number;
+}
+
+/**
+ * Fetches a paginated list of all sessions from the admin endpoint.
+ * @param limit The number of sessions to fetch.
+ * @param offset The number of sessions to skip.
+ */
+export const getSessions = async (
+  limit: number,
+  offset: number
+): Promise<ListSessionsResponse> => {
+  try {
+    const response = await apiClient.get<ListSessionsResponse>('/admin/sessions', {
+      params: { limit, offset },
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Failed to fetch sessions:', error);
+    throw error;
+  }
+};
