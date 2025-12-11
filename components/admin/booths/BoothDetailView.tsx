@@ -10,6 +10,8 @@ interface BoothDetailViewProps {
   formatTimeAgo: (timestamp: string | undefined | null) => string;
   getSlotStatusDisplay: (status: string | null | undefined) => { classes: string; text: string };
   onRefreshStatus: () => void;
+  onResetSlots: () => void;
+  onResetSlot: (slotIdentifier: string) => void;
   pendingCommands: Record<string, string | null>;
 }
 
@@ -21,6 +23,8 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
   formatTimeAgo,
   getSlotStatusDisplay,
   onRefreshStatus,
+  onResetSlots,
+  onResetSlot,
   pendingCommands,
 }) => {
   return (
@@ -29,17 +33,26 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
         <button onClick={onBack} className="bg-gray-800 hover:bg-gray-700 p-2 rounded-lg">
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
         </button>
-        <div>
-          <h2 className="text-2xl font-bold flex items-center gap-3">
-            {booth.name}
-            <span className="text-gray-500 text-lg font-normal">({booth.booth_uid.substring(0, 8)}...)</span>
-          </h2>
-          <div className="flex items-center gap-2">
-            <p className="text-xs text-gray-400 mt-1">Last Heartbeat: {formatTimeAgo(boothStatus?.lastHeartbeatAt)}</p>
-            <button onClick={onRefreshStatus} className="text-cyan-400 hover:text-cyan-300 p-1 rounded-full">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M20 4h-5v5M4 20h5v-5" /></svg>
-            </button>
+        <div className="flex-grow flex justify-between items-center">
+          <div>
+            <h2 className="text-2xl font-bold flex items-center gap-3">
+              {booth.name}
+              <span className="text-gray-500 text-lg font-normal">({booth.booth_uid.substring(0, 8)}...)</span>
+            </h2>
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-gray-400 mt-1">Last Heartbeat: {formatTimeAgo(boothStatus?.lastHeartbeatAt)}</p>
+              <button onClick={onRefreshStatus} className="text-cyan-400 hover:text-cyan-300 p-1 rounded-full" title="Refresh Status">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M20 4h-5v5M4 20h5v-5" /></svg>
+              </button>
+            </div>
           </div>
+          <button
+            onClick={onResetSlots}
+            className="bg-red-800 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+            Reset All Slots
+          </button>
         </div>
       </div>
 
@@ -107,6 +120,12 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                                 Start Charging
                               </button>
                             )}
+                            <button
+                              onClick={() => onResetSlot(slot.slotIdentifier)}
+                              className="col-span-2 mt-2 bg-yellow-900/50 hover:bg-yellow-900/80 text-yellow-300 py-2 rounded text-xs font-bold border border-yellow-700/50"
+                            >
+                              Reset Slot
+                            </button>
                           </div>
                         </div>
                       </div>

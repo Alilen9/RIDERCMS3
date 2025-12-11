@@ -3,9 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { SlotStatus, BatteryType, Transaction, SystemLog, Battery, Booth, Station } from '../types';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { generateSystemInsight } from '../services/geminiService';
-import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus } from '../services/adminService';
+import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, getDashboardSummary, DashboardSummary } from '../services/adminService';
 import UserManagement from './admin/UserManagement';
 import ConfirmationModal from './admin/ConfirmationModal';
 import AddBoothsForm from './admin/booths/forms/AddBoothsForm';
@@ -14,6 +13,9 @@ import BoothManagement from './admin/booths/BoothManagement';
 import FinanceManagement from './admin/FinanceManagement';
 import SystemConfig from './admin/SystemConfiguration';
 import SimulationTools from './admin/SimulationTools';
+import DashboardOverview from './admin/DashboardOverview';
+import NetworkMap from './admin/NetworkMap';
+import AIIntelligence from './admin/AIIntelligence';
 
 
 
@@ -34,14 +36,6 @@ const MOCK_BATTERIES: Battery[] = [
   { id: 'b103', type: BatteryType.E_BIKE, chargeLevel: 0, health: 45, cycles: 800, voltage: 0, temperature: 20, status: 'RETIRED' },
 ];
 
-// Additional Mock Stations for Map View
-const NETWORK_STATIONS: Partial<Station>[] = [
-  { id: 'ST-001', name: 'Central Hub', location: 'Downtown', coordinates: { lat: 50, lng: 50 } },
-  { id: 'ST-002', name: 'Westlands Express', location: 'Westlands', coordinates: { lat: 30, lng: 70 } },
-  { id: 'ST-003', name: 'Kilimani Point', location: 'Kilimani', coordinates: { lat: 70, lng: 30 } },
-  { id: 'ST-004', name: 'Airport Node', location: 'JKIA', coordinates: { lat: 80, lng: 80 } },
-];
-
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const [activeSection, setActiveSection] = useState<'dashboard' | 'map' | 'intelligence' | 'stations' | 'addBooth' | 'editBooth' | 'users' | 'batteries' | 'finance' | 'settings' | 'logs' | 'simulation'>('dashboard');
   const [batteries, setBatteries] = useState<Battery[]>(MOCK_BATTERIES);
@@ -49,33 +43,29 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const [boothToEdit, setBoothToEdit] = useState<Booth | null>(null);
   const [boothToDelete, setBoothToDelete] = useState<Booth | null>(null);
   const [boothForDetails, setBoothForDetails] = useState<Booth | null>(null);
+  const [summaryData, setSummaryData] = useState<DashboardSummary | null>(null);
   const [boothStatuses, setBoothStatuses] = useState<AdminBoothStatus[]>([]);
-  // Intelligence State
-  const [aiReport, setAiReport] = useState<string>('');
-  const [generatingReport, setGeneratingReport] = useState(false);
+  const [initialBoothForDetail, setInitialBoothForDetail] = useState<Booth | null>(null);
   // UI State
   const [showStationDetail, setShowStationDetail] = useState(false);
   const [slotEditMode, setSlotEditMode] = useState(false);
   const [error, setError] = useState<string>('');
 
+  useEffect(() => {
+    const fetchSummary = async () => {
+      try {
+        const data = await getDashboardSummary();
+        setSummaryData(data);
+      } catch (err) {
+        toast.error("Failed to load dashboard summary.");
+      }
+    };
+    fetchSummary();
+  }, []);
  
   // --- Handlers ---
   const handleSlotToggle = (slotId: number) => {
     // This handler is no longer relevant as station state is not managed here
-  };
-
-  const generateReport = async () => {
-    setGeneratingReport(true);
-    const systemSnapshot = {
-      stations: NETWORK_STATIONS,
-      activeAlerts: 3,
-      revenue: 12450, // This will need to be fetched from a service
-      batteries: batteries.map(b => ({ id: b.id, health: b.health, cycles: b.cycles, status: b.status })),
-      recentLogs: MOCK_LOGS.slice(0, 5)
-    };
-    const report = await generateSystemInsight(systemSnapshot);
-    setAiReport(report);
-    setGeneratingReport(false);
   };
 
   const handleBoothAdded = (newBooth: Partial<Booth>) => {
@@ -123,185 +113,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     setActiveSection(section);
   };
 
+  const handleMapBoothClick = (booth: Booth) => {
+    setInitialBoothForDetail(booth);
+    setActiveSection('stations'); // Switch to the stations section
+  };
 
 
   // --- Render Functions for Sections ---
 
-  const renderDashboard = () => (
-    <div className="space-y-6 animate-fade-in">
-      <h2 className="text-2xl font-bold">System Overview</h2>
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-          <p className="text-gray-400 text-xs uppercase">Total Revenue (Monthly)</p>
-          <p className="text-3xl font-bold mt-2">KES 12,450</p>
-          <span className="text-emerald-500 text-xs">↑ 8.2%</span>
-        </div>
-        <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-          <p className="text-gray-400 text-xs uppercase">Active Stations</p>
-          <p className="text-3xl font-bold mt-2">4</p>
-          <span className="text-blue-500 text-xs">100% Uptime</span>
-        </div>
-        <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-          <p className="text-gray-400 text-xs uppercase">Total Swaps</p>
-          <p className="text-3xl font-bold mt-2">842</p>
-          <span className="text-emerald-500 text-xs">↑ 124 this week</span>
-        </div>
-        <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-          <p className="text-gray-400 text-xs uppercase">Active Alerts</p>
-          <p className="text-3xl font-bold mt-2 text-yellow-500">3</p>
-          <span className="text-gray-500 text-xs">Maintenance Req.</span>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-80">
-        <div className="lg:col-span-2 bg-gray-800 p-6 rounded-xl border border-gray-700">
-          <h3 className="text-lg font-bold mb-4">Swap Volume Trend</h3>
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={[
-              { name: 'Mon', val: 40 }, { name: 'Tue', val: 30 }, { name: 'Wed', val: 65 },
-              { name: 'Thu', val: 50 }, { name: 'Fri', val: 80 }, { name: 'Sat', val: 95 }, { name: 'Sun', val: 60 }
-            ]}>
-              <defs>
-                <linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="name" stroke="#9ca3af" />
-              <YAxis stroke="#9ca3af" />
-              <Tooltip contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151' }} />
-              <Area type="monotone" dataKey="val" stroke="#10b981" fillOpacity={1} fill="url(#colorVal)" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-          <h3 className="text-lg font-bold mb-4">Battery Usage</h3>
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={[
-                  { name: 'E-Bike', value: 400 },
-                  { name: 'Scooter', value: 300 },
-                  { name: 'Car Module', value: 142 },
-                ]}
-                innerRadius={60}
-                outerRadius={80}
-                paddingAngle={5}
-                dataKey="value"
-              >
-                <Cell fill="#10b981" />
-                <Cell fill="#3b82f6" />
-                <Cell fill="#8b5cf6" />
-              </Pie>
-              <Tooltip contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151' }} />
-            </PieChart>
-          </ResponsiveContainer>
-
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderMap = () => (
-    <div className="animate-fade-in h-[calc(100vh-140px)] flex flex-col">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">Network Map</h2>
-        <div className="flex gap-4 text-sm">
-          <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> Online</div>
-          <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-yellow-500"></span> Maintenance</div>
-          <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-red-500"></span> Offline</div>
-        </div>
-      </div>
-      <div className="flex-1 bg-gray-900 rounded-xl border border-gray-700 relative overflow-hidden group">
-        {/* Mock Grid Map Background */}
-        <div className="absolute inset-0 opacity-20"
-          style={{
-            backgroundImage: 'linear-gradient(#374151 1px, transparent 1px), linear-gradient(90deg, #374151 1px, transparent 1px)',
-            backgroundSize: '40px 40px'
-          }}>
-        </div>
-
-        {/* Mock City Outline (Pure CSS Shapes) */}
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 border-4 border-gray-800 rounded-full opacity-30 pointer-events-none"></div>
-        <div className="absolute bottom-1/3 right-1/4 w-full h-2 bg-gray-800 rotate-12 opacity-40 pointer-events-none"></div>
-
-        {/* Station Markers */}
-        {NETWORK_STATIONS.map((st, i) => (
-          <div
-            key={st.id}
-            className="absolute cursor-pointer transform -translate-x-1/2 -translate-y-1/2 hover:scale-110 transition-transform z-10"
-            style={{ top: `${st.coordinates?.lat}%`, left: `${st.coordinates?.lng}%` }}
-          >
-            <div className="relative group/pin">
-              <div className={`w-4 h-4 rounded-full ${i === 0 ? 'bg-emerald-500 shadow-[0_0_15px_#10b981]' : 'bg-blue-500'}`}></div>
-              <div className={`absolute -inset-2 rounded-full opacity-20 animate-ping ${i === 0 ? 'bg-emerald-500' : 'bg-blue-500'}`}></div>
-
-              {/* Tooltip */}
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-40 bg-gray-800 p-3 rounded-lg border border-gray-700 shadow-xl opacity-0 group-hover/pin:opacity-100 transition-opacity pointer-events-none">
-                <p className="font-bold text-sm text-white">{st.name}</p>
-                <p className="text-xs text-gray-400">{st.location}</p>
-                <div className="mt-2 flex justify-between text-xs">
-                  <span className="text-emerald-400">98% Bat</span>
-                  <span className="text-blue-400">4 Slots</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-
-  const renderIntelligence = () => (
-    <div className="animate-fade-in max-w-4xl mx-auto">
-      <div className="text-center mb-8">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-indigo-900/50 mb-4 border border-indigo-500/30">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-          </svg>
-        </div>
-        <h2 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-cyan-400">RIDERCMS CORTEX AI</h2>
-        <p className="text-gray-400 mt-2">Predictive analytics and situational reporting for fleet commanders.</p>
-      </div>
-
-      <div className="bg-gray-800 rounded-2xl border border-gray-700 overflow-hidden shadow-2xl">
-        <div className="p-6 border-b border-gray-700 flex justify-between items-center bg-gray-800/50">
-          <h3 className="font-bold text-lg text-white">Daily Situation Report</h3>
-          <button
-            onClick={generateReport}
-            disabled={generatingReport}
-            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all"
-          >
-            {generatingReport ? (
-              <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> Analyzing...</>
-            ) : (
-              <>Generate New Report</>
-            )}
-          </button>
-        </div>
-        <div className="p-8 min-h-[300px] bg-gray-900/50 text-gray-300 leading-relaxed font-mono text-sm">
-          {aiReport ? (
-            <div className="prose prose-invert max-w-none">
-              {aiReport.split('\n').map((line, i) => (
-                <p key={i} className="mb-2">{line}</p>
-              ))}
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-gray-600 py-12">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mb-4 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <p>No report generated today.</p>
-              <p className="text-xs mt-2">Click generate to analyze current system telemetry.</p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-
   const renderStations = () => {
-    return <BoothManagement onNavigate={handleNavigation} />
+    return <BoothManagement onNavigate={handleNavigation} initialDetailBooth={initialBoothForDetail} onDetailViewClose={() => setInitialBoothForDetail(null)} />
   };
 
   const renderBatteries = () => (
@@ -454,9 +275,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           </div>
         </header>
 
-        {activeSection === 'dashboard' && renderDashboard()}
-        {activeSection === 'map' && renderMap()}
-        {activeSection === 'intelligence' && renderIntelligence()}
+        {activeSection === 'dashboard' && <DashboardOverview summaryData={summaryData} />}
+        {activeSection === 'map' && <NetworkMap onBoothClick={handleMapBoothClick} />}
+        {activeSection === 'intelligence' && <AIIntelligence />}
         {activeSection === 'stations' && renderStations()}
         {activeSection === 'addBooth' && <AddBoothsForm onBoothAdded={handleBoothAdded} onCancel={() => { setActiveSection('stations'); }} />}
         {activeSection === 'editBooth' && boothToEdit && <EditBoothsForm boothToEdit={boothToEdit} onBoothUpdated={handleBoothUpdated} onCancel={() => setActiveSection('stations')} />}

@@ -2,13 +2,15 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { QRCodeCanvas } from 'qrcode.react';
 import { Booth } from '@/types';
-import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, sendSlotCommand, SlotCommand } from '../../../services/adminService';
+import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, sendSlotCommand, SlotCommand, resetBoothSlots } from '../../../services/adminService';
 import ConfirmationModal from '../ConfirmationModal';
 import BoothListView from './BoothListView';
 import BoothDetailView from './BoothDetailView';
 
 interface BoothManagementProps {
   onNavigate: (section: 'addBooth' | 'editBooth', data?: any) => void;
+  initialDetailBooth?: Booth | null;
+  onDetailViewClose?: () => void;
 }
 
 // Helper function to format time ago
@@ -48,7 +50,7 @@ const getSlotStatusDisplay = (status: string | null | undefined) => {
   return { classes, text };
 };
 
-const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate }) => {
+const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDetailBooth, onDetailViewClose }) => {
   const [booths, setBooths] = useState<Booth[]>([]);
   const [boothToDelete, setBoothToDelete] = useState<Booth | null>(null);
   const [boothStatuses, setBoothStatuses] = useState<AdminBoothStatus[]>([]);
@@ -61,11 +63,20 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [pendingCommands, setPendingCommands] = useState<Record<string, string | null>>({});
+  const [boothToReset, setBoothToReset] = useState<Booth | null>(null);
+  const [slotToReset, setSlotToReset] = useState<{ booth: Booth, slotIdentifier: string } | null>(null);
 
   useEffect(() => {
     fetchBooths();
     fetchBoothStatuses();
   }, []);
+
+  useEffect(() => {
+    if (initialDetailBooth) {
+      handleViewDetailsClick(initialDetailBooth);
+      onDetailViewClose?.(); // Clear the prop in the parent
+    }
+  }, [initialDetailBooth]);
 
   const fetchBooths = async () => {
     setLoading(true);
@@ -123,6 +134,45 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate }) => {
       const errorMessage = (error as any)?.response?.data?.error || (error as Error).message;
       toast.error(errorMessage);
       console.error("Error deleting booth:", error);
+    }
+  };
+
+  const handleResetSlots = async () => {
+    if (!boothToReset) return;
+
+    const loadingToast = toast.loading(`Resetting all slots for ${boothToReset.name}...`);
+    try {
+      await resetBoothSlots(boothToReset.booth_uid);
+      toast.dismiss(loadingToast);
+      toast.success('All slots have been reset successfully!');
+      // Refresh the status to show the changes
+      fetchBoothStatuses();
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      const errorMessage = (error as any)?.response?.data?.error || (error as Error).message;
+      toast.error(`Failed to reset slots: ${errorMessage}`);
+    } finally {
+      setBoothToReset(null); // Close the modal
+    }
+  };
+
+  const handleResetSlot = async () => {
+    if (!slotToReset) return;
+    const { booth, slotIdentifier } = slotToReset;
+
+    const loadingToast = toast.loading(`Resetting slot ${slotIdentifier}...`);
+    try {
+      await resetBoothSlots(booth.booth_uid, slotIdentifier);
+      toast.dismiss(loadingToast);
+      toast.success(`Slot ${slotIdentifier} has been reset successfully!`);
+      // Refresh the status to show the changes
+      fetchBoothStatuses();
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      const errorMessage = (error as any)?.response?.data?.error || (error as Error).message;
+      toast.error(`Failed to reset slot: ${errorMessage}`);
+    } finally {
+      setSlotToReset(null); // Close the modal
     }
   };
 
@@ -250,11 +300,17 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate }) => {
         <BoothDetailView
           booth={boothForDetails}
           boothStatus={boothStatuses.find(bs => bs.boothUid === boothForDetails.booth_uid)}
-          onBack={() => { setShowStationDetail(false); setBoothForDetails(null); }}
+          onBack={() => { 
+            setShowStationDetail(false); 
+            setBoothForDetails(null);
+            onDetailViewClose?.();
+          }}
           onSendCommand={handleSendCommand}
           formatTimeAgo={formatTimeAgo}
           getSlotStatusDisplay={getSlotStatusDisplay}
           onRefreshStatus={fetchBoothStatuses}
+          onResetSlots={() => setBoothToReset(boothForDetails)}
+          onResetSlot={(slotIdentifier) => setSlotToReset({ booth: boothForDetails, slotIdentifier })}
           pendingCommands={pendingCommands}
         />
       ) : (
@@ -272,6 +328,24 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate }) => {
         message={`Are you sure you want to permanently delete the booth "${boothToDelete?.name}"? This action cannot be undone.`}
         onConfirm={handleConfirmDelete}
         onCancel={() => setBoothToDelete(null)}
+        isDestructive={true}
+      />
+
+      <ConfirmationModal
+        isOpen={!!boothToReset}
+        title="Reset All Slots"
+        message={`Are you sure you want to reset all slots for "${boothToReset?.name}"? This will set all slots to 'available', clear any battery links, and can resolve synchronization issues. This action is irreversible.`}
+        onConfirm={handleResetSlots}
+        onCancel={() => setBoothToReset(null)}
+        isDestructive={true}
+      />
+
+      <ConfirmationModal
+        isOpen={!!slotToReset}
+        title="Reset Slot"
+        message={`Are you sure you want to reset slot "${slotToReset?.slotIdentifier}" in booth "${slotToReset?.booth.name}"? This will set the slot to 'available' and clear any linked battery data.`}
+        onConfirm={handleResetSlot}
+        onCancel={() => setSlotToReset(null)}
         isDestructive={true}
       />
 

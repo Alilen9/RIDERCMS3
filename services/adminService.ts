@@ -322,3 +322,40 @@ export const simulateConfirmPayment = async (data: {
 }): Promise<void> => {
   await apiClient.post('/admin/simulate/confirm-payment', data);
 };
+
+/**
+ * Resets all slots in a given booth to their default 'available' state.
+ * @param boothUid The UID of the booth to reset.
+ * @param slotIdentifier Optional. The specific slot to reset. If omitted, all slots are reset.
+ * @returns A promise that resolves when the reset is complete.
+ */
+export const resetBoothSlots = async (boothUid: string, slotIdentifier?: string): Promise<void> => {
+  await apiClient.post(`/admin/booths/${boothUid}/reset-slots`, slotIdentifier ? { slotIdentifier } : {});
+};
+
+/**
+ * The shape of the dashboard summary data.
+ */
+export interface DashboardSummary {
+  totalRevenue: number;
+  activeStations: number;
+  totalSwaps: number;
+  activeSessions: number;
+  totalUsers: number;
+  swapVolumeTrend: { name: string; val: number }[];
+  batteryUsage: { name: string; value: number }[];
+}
+
+/**
+ * Fetches the aggregated summary data for the admin dashboard.
+ * @returns A promise that resolves with the dashboard summary data.
+ */
+export const getDashboardSummary = async (): Promise<DashboardSummary> => {
+  try {
+    const response = await apiClient.get<DashboardSummary>('/admin/dashboard-summary');
+    return response.data;
+  } catch (error) {
+    console.error('Failed to fetch dashboard summary:', error);
+    throw error;
+  }
+};
