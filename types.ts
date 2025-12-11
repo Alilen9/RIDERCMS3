@@ -1,4 +1,5 @@
 
+
 export enum UserRole {
   USER = 'user',
   ADMIN = 'admin',
@@ -42,14 +43,11 @@ export interface Battery {
 }
 
 export interface Slot {
-  id: number;
-  status: SlotStatus;
-  battery?: Battery;
-  // Hardware Telemetry from ESP32
-  isDoorOpen: boolean; // Computed from doorClosed sensor
-  doorClosed: boolean;
-  doorLocked: boolean;
-  relayOn: boolean;
+  identifier: string;
+  status: string;
+  doorStatus: string;
+  batteryUid: string | null;
+  chargeLevel: number | null;
 }
 
 export interface Station {
@@ -88,6 +86,8 @@ export interface Booth {
   status: 'online' | 'maintenance' | 'offline';
   created_at: string;
   updated_at: string;
+  slotCount: number;
+  slots: Slot[];
   // Optional fields that might come from other endpoints or be added on the client
   latitude?: number;
   longitude?: number;

@@ -1,77 +1,15 @@
 
-import React, { useEffect, useState } from 'react'; // Keep for local station state
+import React, { useEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Auth from './components/auth/Auth';
 import ProtectedRoute from './components/auth/ProtectedRoute';
-import { User, UserRole, Station, SlotStatus, BatteryType } from './types'; // Keep for station data
+import { UserRole } from './types';
 
 // --- Your Page/Dashboard Components ---
 import AdminDashboard from './components/AdminDashboard';
 import UserDashboard from './components/UserDashboard';
 import { useAuth, AuthProvider } from './components/auth/AuthContext';
-
-// Mock Initial Station Data with Hardware Telemetry
-const INITIAL_STATION: Station = {
-  id: 'ST-001',
-  name: 'Central Hub',
-  location: 'Downtown Market',
-  coordinates: { lat: -1.2921, lng: 36.8219 }, // Example Coordinates
-  slots: [
-    { 
-      id: 1, 
-      status: SlotStatus.EMPTY, 
-      isDoorOpen: false,
-      doorClosed: true,
-      doorLocked: true,
-      relayOn: false
-    },
-    { 
-      id: 2, 
-      status: SlotStatus.OCCUPIED_FULL, 
-      battery: { 
-        id: 'b2', 
-        type: BatteryType.SCOOTER, 
-        chargeLevel: 100, 
-        health: 95, 
-        temperature: 25, 
-        voltage: 54.2, 
-        cycles: 50,
-        status: 'ACTIVE'
-      }, 
-      isDoorOpen: false,
-      doorClosed: true,
-      doorLocked: true,
-      relayOn: false // Fully charged, relay off
-    },
-    { 
-      id: 3, 
-      status: SlotStatus.OCCUPIED_CHARGING, 
-      battery: { 
-        id: 'b3', 
-        type: BatteryType.E_BIKE, 
-        chargeLevel: 45, 
-        health: 80, 
-        temperature: 40, 
-        voltage: 49.5, 
-        cycles: 300,
-        status: 'ACTIVE'
-      }, 
-      isDoorOpen: false,
-      doorClosed: true,
-      doorLocked: true,
-      relayOn: true // Charging, relay on
-    },
-    { 
-      id: 4, 
-      status: SlotStatus.MAINTENANCE, 
-      isDoorOpen: false,
-      doorClosed: true,
-      doorLocked: false,
-      relayOn: false
-    },
-  ]
-};
 
 // This component will handle the logic for the /auth route
 const AuthHandler = () => {
@@ -109,14 +47,8 @@ const AuthHandler = () => {
   return <Auth onLogin={login} />;
 };
 
-// This component will manage the state that is NOT related to auth, like station data
 const AppContent: React.FC = () => {
-  const [station, setStation] = useState<Station>(INITIAL_STATION);
   const { user, logout } = useAuth(); // Get user and logout from context
-
-  const updateStation = (updatedStation: Station) => {
-    setStation(updatedStation);
-  };
 
   return (
     <Routes>
@@ -127,11 +59,7 @@ const AppContent: React.FC = () => {
         path="/admin/dashboard"
         element={
           <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
-            <AdminDashboard
-              station={station}
-              onUpdateStation={updateStation}
-              onLogout={logout}
-            />
+            <AdminDashboard onLogout={logout} />
           </ProtectedRoute>
         }
       />
@@ -142,9 +70,7 @@ const AppContent: React.FC = () => {
         element={
           <ProtectedRoute allowedRoles={[UserRole.USER, UserRole.OPERATOR]}>
             <UserDashboard
-              user={user!} // We know user is not null here because of ProtectedRoute
-              station={station}
-              onUpdateStation={updateStation}
+              user={user!} 
               onLogout={logout}
             />
           </ProtectedRoute>

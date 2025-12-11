@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import toast from 'react-hot-toast';
+import { QRCodeCanvas } from 'qrcode.react';
 import { Booth } from '@/types';
-import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus } from '../../../services/adminService';
+import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, sendSlotCommand, SlotCommand } from '../../../services/adminService';
 import ConfirmationModal from '../ConfirmationModal';
-import BoothListSkeleton from '../skeletons/BoothListSkeleton';
-import BoothGridSkeleton from '../skeletons/BoothGridSkeleton';
+import BoothListView from './BoothListView';
+import BoothDetailView from './BoothDetailView';
 
 interface BoothManagementProps {
   onNavigate: (section: 'addBooth' | 'editBooth', data?: any) => void;
@@ -54,8 +55,12 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate }) => {
   const [boothForDetails, setBoothForDetails] = useState<Booth | null>(null);
   const [showStationDetail, setShowStationDetail] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [boothForQrCode, setBoothForQrCode] = useState<Booth | null>(null);
   const [boothViewMode, setBoothViewMode] = useState<'list' | 'grid'>('list');
   const [error, setError] = useState<string>('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [pendingCommands, setPendingCommands] = useState<Record<string, string | null>>({});
 
   useEffect(() => {
     fetchBooths();
@@ -76,15 +81,23 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate }) => {
     }
   };
 
-  const fetchBoothStatuses = async () => {
+  const fetchBoothStatuses = useCallback(async () => {
     try {
       const statuses = await getBoothStatus();
       setBoothStatuses(statuses);
-      console.log('Fetched booth statuses:', statuses);
     } catch (err) {
       console.error('Failed to fetch booth statuses:', err);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // Set up a periodic refresh for booth statuses every 30 seconds
+    const statusRefreshInterval = setInterval(() => {
+      fetchBoothStatuses();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(statusRefreshInterval);
+  }, [fetchBoothStatuses]);
 
   const handleViewDetailsClick = (booth: Booth) => {
     setBoothForDetails(booth);
@@ -113,183 +126,145 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate }) => {
     }
   };
 
-  const renderListView = () => {
-    if (loading) {
-      return boothViewMode === 'list' ? <BoothListSkeleton /> : <BoothGridSkeleton />;
-    }
+  const handleSendCommand = async (slotIdentifier: string, command: SlotCommand) => {
+    if (!boothForDetails) return;
+    const commandName = Object.keys(command)[0];
+    setPendingCommands(prev => ({ ...prev, [slotIdentifier]: commandName }));
 
-    if (error) {
-      return <div className="text-center py-12 text-red-400">{error}</div>;
-    }
+    const getCommandMessage = (cmd: SlotCommand, type: 'loading' | 'success' | 'error') => {
+      const commandName = Object.keys(cmd)[0];
+      const messages = {
+        forceLock: { loading: 'Locking slot...', success: 'Slot locked successfully!', error: 'Failed to lock slot' },
+        forceUnlock: { loading: 'Unlocking slot...', success: 'Slot unlocked successfully!', error: 'Failed to unlock slot' },
+        startCharging: { loading: 'Starting charging...', success: 'Charging started!', error: 'Failed to start charging' },
+        stopCharging: { loading: 'Stopping charging...', success: 'Charging stopped!', error: 'Failed to stop charging' },
+      };
 
-    if (boothViewMode === 'list') {
-      return (
-        <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
-          <table className="w-full text-left">
-            <thead className="bg-gray-900 text-gray-400 text-xs uppercase">
-              <tr>
-                <th className="px-6 py-4">Name</th>
-                <th className="px-6 py-4">UID</th>
-                <th className="px-6 py-4">Location</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-700 text-sm">
-              {booths.map(b => (
-                <tr key={b.booth_uid} className="hover:bg-gray-700/50">
-                  <td className="px-6 py-4 font-semibold">{b.name}</td>
-                  <td className="px-6 py-4 font-mono text-gray-400">{b.booth_uid}</td>
-                  <td className="px-6 py-4">{b.location_address}</td>
-                  <td className="px-6 py-4"><span className={`px-2 py-1 rounded text-xs font-bold capitalize ${b.status === 'online' ? 'bg-emerald-900 text-emerald-400' : 'bg-yellow-900 text-yellow-400'}`}>{b.status}</span></td>
-                  <td className="px-6 py-4 space-x-4">
-                    <button onClick={() => handleViewDetailsClick(b)} className="text-gray-400 hover:text-white font-bold">
-                      Details
-                    </button>
-                    <button onClick={() => onNavigate('editBooth', b)} className="text-indigo-400 hover:text-indigo-300 font-bold">
-                      Edit
-                    </button>
-                    <button onClick={() => handleDeleteClick(b)} className="text-red-500 hover:text-red-400 font-bold">
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      );
-    }
+      const defaultMessages = {
+        loading: 'Sending command...',
+        success: 'Command sent successfully!',
+        error: 'Failed to send command',
+      };
 
-    return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {booths.map(b => (
-          <div key={b.booth_uid} className="bg-gray-800 rounded-xl border border-gray-700 flex flex-col">
-            <div className="p-4 border-b border-gray-700">
-              <div className="flex justify-between items-start">
-                <h3 className="font-bold text-white pr-2">{b.name}</h3>
-                <span className={`flex-shrink-0 px-2 py-1 rounded text-xs font-bold capitalize ${b.status === 'online' ? 'bg-emerald-900 text-emerald-400' : 'bg-yellow-900 text-yellow-400'}`}>{b.status}</span>
-              </div>
-              <p className="text-xs text-gray-400 mt-1">{b.location_address}</p>
-            </div>
-            <div className="p-4 space-y-2 text-xs text-gray-400">
-              <div className="flex justify-between">
-                <span>UID:</span>
-                <span className="font-mono">{b.booth_uid.substring(0, 8)}...</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Created:</span>
-                <span>{new Date(b.created_at).toLocaleDateString()}</span>
-              </div>
-            </div>
-            <div className="mt-auto p-4 border-t border-gray-700 flex justify-end gap-4 text-sm">
-              <button onClick={() => handleViewDetailsClick(b)} className="text-gray-400 hover:text-white font-bold">Details</button>
-              <button onClick={() => onNavigate('editBooth', b)} className="text-indigo-400 hover:text-indigo-300 font-bold">Edit</button>
-              <button onClick={() => handleDeleteClick(b)} className="text-red-500 hover:text-red-400 font-bold">Delete</button>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
+      return (messages[commandName as keyof typeof messages] || defaultMessages)[type];
+    };
+
+    const loadingMessage = getCommandMessage(command, 'loading');
+    const loadingToast = toast.loading(loadingMessage);
+
+    try {
+      await sendSlotCommand(boothForDetails.booth_uid, slotIdentifier, command);
+      toast.dismiss(loadingToast);
+      toast.success(getCommandMessage(command, 'success'));
+      // Add a small delay to allow hardware to report back, then refresh status.
+      setTimeout(() => {
+        toast.loading('Refreshing status...');
+        fetchBoothStatuses().then(() => toast.dismiss());
+      }, 1500);
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      const errorMessage = (error as any)?.response?.data?.error || (error as Error).message;
+      const errorPrefix = getCommandMessage(command, 'error');
+      toast.error(`${errorPrefix}: ${errorMessage}`);
+    } finally {
+      // Clear pending state for this slot after a short delay, regardless of outcome
+      setTimeout(() => {
+        setPendingCommands(prev => ({ ...prev, [slotIdentifier]: null }));
+      }, 2500); // A bit longer than the refresh delay
+    }
   };
 
-  const renderDetailView = () => {
-    const selectedBoothDetails = boothStatuses.find(bs => bs.boothUid === boothForDetails?.booth_uid);
-    // --- TELEMETRY / DETAIL VIEW ---
-    return (
-      <div className="animate-fade-in space-y-6">
-        <div className="flex items-center gap-4 mb-6">
-          <button onClick={() => { setShowStationDetail(false); setBoothForDetails(null); }} className="bg-gray-800 hover:bg-gray-700 p-2 rounded-lg">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-          </button>
-          <div>
-            <h2 className="text-2xl font-bold flex items-center gap-3">
-              {boothForDetails?.name}
-              <span className="text-gray-500 text-lg font-normal">({boothForDetails?.booth_uid.substring(0, 8)}...)</span>
-            </h2>
-            <p className="text-xs text-gray-400 mt-1">Last Heartbeat: {formatTimeAgo(selectedBoothDetails?.lastHeartbeatAt)}</p>
-          </div>
-        </div>
+  const handleDownloadQrCode = () => {
+    if (!boothForQrCode) return;
+    const canvas = document.getElementById('booth-qr-code') as HTMLCanvasElement;
+    if (canvas) {
+      const pngUrl = canvas
+        .toDataURL('image/png')
+        .replace('image/png', 'image/octet-stream');
+      let downloadLink = document.createElement('a');
+      downloadLink.href = pngUrl;
+      downloadLink.download = `${boothForQrCode.name.replace(/\s+/g, '_')}_${boothForQrCode.booth_uid}.png`;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+    }
+  };
 
-        {/* Slot Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
-          {selectedBoothDetails ? (
-            selectedBoothDetails.slots.map(slot => (
-              <div key={slot.slotIdentifier} className={`relative bg-gray-800 border ${slot.status === 'faulty' ? 'border-red-500' : 'border-gray-700'} rounded-xl overflow-hidden`}>
-                {(() => {
-                  const { classes, text } = getSlotStatusDisplay(slot.status);
-                  return (
-                    <>
-                      <div className="p-4 border-b border-gray-700 flex justify-between items-center">
-                        <span className="font-bold text-gray-200">{slot.slotIdentifier}</span>
-                        <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded ${classes}`}>{text}</span>
-                      </div>
-                      <div className="p-4 space-y-3">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-500">Door</span>
-                          <span className={'text-emerald-400'}>Closed</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-500">Relay</span>
-                          <span className={slot.status === 'charging' ? 'text-blue-400' : 'text-gray-600'}>{slot.status === 'charging' ? 'ON' : 'OFF'}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-500">Battery</span>
-                          <span className="text-white">{slot.battery ? `${slot.battery.chargeLevel}%` : 'N/A'}</span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 mt-4">
-                          <button className="bg-gray-700 hover:bg-gray-600 py-2 rounded text-xs font-bold text-gray-300">
-                            Open Door
-                          </button>
-                          <button className="bg-gray-700 hover:bg-gray-600 py-2 rounded text-xs font-bold text-gray-300">
-                            Reset
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  );
-                })()}
-              </div>
-            ))
-          ) : selectedBoothDetails && selectedBoothDetails.slots.length === 0 ? (
-            <div className="col-span-full text-center py-12 text-gray-500">
-              <p>This booth has no slots configured.</p>
-            </div>
-          ) : (
-            <div className="col-span-full text-center py-12 text-gray-500">
-              <div className="w-6 h-6 border-2 border-gray-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p>Loading slot details...</p>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
+  const filteredBooths = useMemo(() => {
+    return booths
+      .filter(booth => {
+        if (statusFilter === 'all') return true;
+        return booth.status === statusFilter;
+      })
+      .filter(booth => {
+        if (!searchTerm) return true;
+        const lowercasedTerm = searchTerm.toLowerCase();
+        return (
+          booth.name.toLowerCase().includes(lowercasedTerm) ||
+          booth.booth_uid.toLowerCase().includes(lowercasedTerm) ||
+          booth.location_address.toLowerCase().includes(lowercasedTerm)
+        );
+      });
+  }, [booths, searchTerm, statusFilter]);
 
   return (
     <div className="animate-fade-in">
       {!showStationDetail && (
-        <div className="flex justify-between items-center mb-6 gap-4">
-          <div>
-            <h2 className="text-2xl font-bold">Stations & Booths</h2>
-            <p className="text-sm text-gray-400">Manage all deployment locations.</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center bg-gray-800 border border-gray-700 rounded-lg p-1">
-              <button onClick={() => setBoothViewMode('list')} className={`px-3 py-1 rounded-md text-sm font-semibold transition-colors ${boothViewMode === 'list' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}`}>List</button>
-              <button onClick={() => setBoothViewMode('grid')} className={`px-3 py-1 rounded-md text-sm font-semibold transition-colors ${boothViewMode === 'grid' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}`}>Grid</button>
+        <>
+          <div className="flex justify-between items-center mb-6 gap-4">
+            <div>
+              <h2 className="text-2xl font-bold">Stations & Booths</h2>
+              <p className="text-sm text-gray-400">Manage all deployment locations.</p>
             </div>
-            <button
-              onClick={() => onNavigate('addBooth')}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold text-sm"
-            >
-              + Add Booth
-            </button>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center bg-gray-800 border border-gray-700 rounded-lg p-1">
+                <button onClick={() => setBoothViewMode('list')} className={`px-3 py-1 rounded-md text-sm font-semibold transition-colors ${boothViewMode === 'list' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}`}>List</button>
+                <button onClick={() => setBoothViewMode('grid')} className={`px-3 py-1 rounded-md text-sm font-semibold transition-colors ${boothViewMode === 'grid' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}`}>Grid</button>
+              </div>
+              <button
+                onClick={() => onNavigate('addBooth')}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold text-sm"
+              >
+                + Add Booth
+              </button>
+            </div>
           </div>
-        </div>
+          <div className="mb-6 flex gap-4">
+            <input
+              type="text"
+              placeholder="Search by name, UID, or location..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="flex-grow bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            />
+            <div className="flex items-center bg-gray-800 border border-gray-700 rounded-lg p-1">
+              <button onClick={() => setStatusFilter('all')} className={`px-3 py-1 rounded-md text-sm font-semibold transition-colors ${statusFilter === 'all' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}`}>All</button>
+              <button onClick={() => setStatusFilter('online')} className={`px-3 py-1 rounded-md text-sm font-semibold transition-colors ${statusFilter === 'online' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}`}>Online</button>
+              <button onClick={() => setStatusFilter('offline')} className={`px-3 py-1 rounded-md text-sm font-semibold transition-colors ${statusFilter === 'offline' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}`}>Offline</button>
+            </div>
+          </div>
+        </>
       )}
 
-      {showStationDetail ? renderDetailView() : renderListView()}
+      {showStationDetail && boothForDetails ? (
+        <BoothDetailView
+          booth={boothForDetails}
+          boothStatus={boothStatuses.find(bs => bs.boothUid === boothForDetails.booth_uid)}
+          onBack={() => { setShowStationDetail(false); setBoothForDetails(null); }}
+          onSendCommand={handleSendCommand}
+          formatTimeAgo={formatTimeAgo}
+          getSlotStatusDisplay={getSlotStatusDisplay}
+          onRefreshStatus={fetchBoothStatuses}
+          pendingCommands={pendingCommands}
+        />
+      ) : (
+        <BoothListView
+          booths={filteredBooths} loading={loading} error={error} viewMode={boothViewMode}
+          onViewDetails={handleViewDetailsClick}
+          onEdit={(b) => onNavigate('editBooth', b)}
+          onShowQrCode={setBoothForQrCode}
+          onDelete={handleDeleteClick} />
+      )}
 
       <ConfirmationModal
         isOpen={!!boothToDelete}
@@ -299,8 +274,53 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate }) => {
         onCancel={() => setBoothToDelete(null)}
         isDestructive={true}
       />
+
+      {boothForQrCode && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 animate-fade-in-fast">
+          <div className="bg-gray-800 rounded-xl border border-gray-700 p-8 text-center max-w-sm w-full">
+            <div className="mb-4">
+              <h3 className="text-xl font-bold text-white">Rider CMS</h3>
+              <p className="text-sm text-gray-400">Scan to access booth</p>
+            </div>
+            <div className="bg-white p-4 rounded-lg inline-block relative">
+              <QRCodeCanvas
+                id="booth-qr-code"
+                value={boothForQrCode.booth_uid}
+                size={220}
+                bgColor={"#ffffff"}
+                fgColor={"#000000"}
+                level={"H"} // High error correction for logo
+                includeMargin={true}
+                imageSettings={{
+                  src: "/logo.png", // Make sure your logo is in the /public folder
+                  height: 40,
+                  width: 40,
+                  excavate: true,
+                }}
+              />
+            </div>
+            <div className="mt-4">
+              <p className="text-lg font-semibold text-white">{boothForQrCode.name}</p>
+              <p className="text-xs text-gray-500 mt-1 font-mono">{boothForQrCode.booth_uid}</p>
+            </div>
+
+            <div className="mt-6 flex gap-4">
+              <button
+                onClick={() => setBoothForQrCode(null)}
+                className="w-full bg-gray-700 hover:bg-gray-600 text-gray-300 px-4 py-2 rounded-lg font-bold text-sm"
+              >
+                Close
+              </button>
+              <button onClick={handleDownloadQrCode} className="w-full bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded-lg font-bold text-sm">
+                Download PNG
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default BoothManagement;
+    

@@ -15,7 +15,10 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
   // While checking the session, show a loading indicator.
   // This prevents a flicker from the login page to the dashboard.
   if (isLoading) {
-    return <div>Loading...</div>; // Or a spinner component
+    return <div className="flex flex-col items-center justify-center h-[70vh] animate-fade-in">
+            <div className="w-12 h-12 border-4 border-gray-700 border-t-emerald-500 rounded-full animate-spin"></div>
+            <p className="text-gray-400 mt-4 text-sm">Loading your session...</p>
+          </div>; // Or a spinner component
   }
 
   // If the user is not logged in, redirect them to the login page.

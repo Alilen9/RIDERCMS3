@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { Station, SlotStatus, BatteryType, Transaction, SystemLog, Battery, Booth } from '../types';
+import { SlotStatus, BatteryType, Transaction, SystemLog, Battery, Booth, Station } from '../types';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { generateSystemInsight } from '../services/geminiService';
 import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus } from '../services/adminService';
@@ -13,12 +13,11 @@ import EditBoothsForm from './admin/booths/forms/EditBoothsForm';
 import BoothManagement from './admin/booths/BoothManagement';
 import FinanceManagement from './admin/FinanceManagement';
 import SystemConfig from './admin/SystemConfiguration';
+import SimulationTools from './admin/SimulationTools';
 
 
 
 interface AdminDashboardProps {
-  station: Station; // Represents the "Live" station for the demo
-  onUpdateStation: (station: Station) => void;
   onLogout: () => void;
 }
 
@@ -43,8 +42,8 @@ const NETWORK_STATIONS: Partial<Station>[] = [
   { id: 'ST-004', name: 'Airport Node', location: 'JKIA', coordinates: { lat: 80, lng: 80 } },
 ];
 
-const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStation, onLogout }) => {
-  const [activeSection, setActiveSection] = useState<'dashboard' | 'map' | 'intelligence' | 'stations' | 'addBooth' | 'editBooth' | 'users' | 'batteries' | 'finance' | 'settings' | 'logs'>('dashboard');
+const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
+  const [activeSection, setActiveSection] = useState<'dashboard' | 'map' | 'intelligence' | 'stations' | 'addBooth' | 'editBooth' | 'users' | 'batteries' | 'finance' | 'settings' | 'logs' | 'simulation'>('dashboard');
   const [batteries, setBatteries] = useState<Battery[]>(MOCK_BATTERIES);
   const [booths, setBooths] = useState<Booth[]>([]);
   const [boothToEdit, setBoothToEdit] = useState<Booth | null>(null);
@@ -62,45 +61,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
  
   // --- Handlers ---
   const handleSlotToggle = (slotId: number) => {
-    // Hardware toggle (Door/Relay)
-    const updatedSlots = station.slots.map(slot => {
-      if (slot.id === slotId) {
-        const newDoorState = !slot.doorClosed;
-        return {
-          ...slot,
-          doorClosed: newDoorState,
-          isDoorOpen: !newDoorState,
-          doorLocked: newDoorState
-        };
-      }
-      return slot;
-    });
-    onUpdateStation({ ...station, slots: updatedSlots });
-  };
-
-  const toggleSlotFaulty = (slotId: number) => {
-    // Configuration toggle
-    const updatedSlots = station.slots.map(slot => {
-      if (slot.id === slotId) {
-        const isFaulty = slot.status === SlotStatus.FAULTY;
-        return {
-          ...slot,
-          status: isFaulty ? SlotStatus.EMPTY : SlotStatus.FAULTY,
-          // Safety: turn off relay if faulty
-          relayOn: isFaulty ? slot.relayOn : false
-        };
-      }
-      return slot;
-    });
-    onUpdateStation({ ...station, slots: updatedSlots });
+    // This handler is no longer relevant as station state is not managed here
   };
 
   const generateReport = async () => {
     setGeneratingReport(true);
     const systemSnapshot = {
-      stations: [station],
+      stations: NETWORK_STATIONS,
       activeAlerts: 3,
-      revenue: 12450,
+      revenue: 12450, // This will need to be fetched from a service
       batteries: batteries.map(b => ({ id: b.id, health: b.health, cycles: b.cycles, status: b.status })),
       recentLogs: MOCK_LOGS.slice(0, 5)
     };
@@ -436,6 +405,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
             { id: 'finance', label: 'Transactions', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
             { id: 'settings', label: 'System Config', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z' },
             { id: 'logs', label: 'Audit Logs', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
+            { id: 'simulation', label: 'Simulation Tools', icon: 'M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z' },
           ].map(item => (
             <button
               key={item.id}
@@ -495,6 +465,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ station, onUpdateStatio
         {activeSection === 'finance' && <FinanceManagement />}
         {activeSection === 'settings' && <SystemConfig />}
         {activeSection === 'logs' && renderLogs()}
+        {activeSection === 'simulation' && <SimulationTools />}
       </main>
 
       <ConfirmationModal

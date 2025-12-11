@@ -1,5 +1,5 @@
 {
-  "name": "voltvault",
+  "name": "RiderCMS",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -16,6 +16,7 @@
     "axios": "^1.13.2",
     "firebase": "^12.6.0",
     "html5-qrcode": "^2.3.8",
+    "qrcode.react": "^4.2.0",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "react-google-recaptcha": "^3.1.0",
@@ -30,6 +31,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
+    "@types/qrcode.react": "^1.0.5",
     "@types/react-google-recaptcha": "^2.1.9",
     "@vitejs/plugin-react": "^5.0.0",
     "@vitejs/plugin-vue": "^6.0.2",

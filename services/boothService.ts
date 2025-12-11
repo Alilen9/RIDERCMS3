@@ -1,4 +1,18 @@
 import apiClient from '../client/apiClient';
+import { Slot } from '../types';
+
+/**
+ * The shape of a public booth object for the map/list view.
+ * GET /api/booths
+ */
+export interface PublicBooth {
+  booth_uid: string;
+  name: string;
+  location_address: string;
+  latitude: number;
+  longitude: number;
+  availableSlots: number;
+}
 
 //================================================================
 // Types & Interfaces based on Endpoints.md
@@ -13,16 +27,31 @@ export interface MyBatteryStatusResponse {
   chargeLevel: number;
   boothUid: string;
   slotIdentifier: string;
+  sessionStatus: 'pending' | 'in_progress' | 'completed' | 'cancelled' | 'failed';
+  telemetry: {
+    batteryInserted: boolean;
+    doorClosed: boolean;
+    doorLocked: boolean;
+    plugConnected: boolean;
+    relayOn: boolean;
+    soc: number;
+    temperature: number;
+    temperatureC: number;
+    timestamp: number;
+    voltage: number;
+  } | null;
 }
 
 /**
  * Response from initiating a withdrawal, which triggers an STK push.
  * POST /api/booths/initiate-withdrawal
+ * This is now a two-step process. This is the first step.
  */
 export interface InitiateWithdrawalResponse {
-  message: string;
-  checkoutRequestId: string;
+  sessionId: number;
   amount: number;
+  durationMinutes: number;
+  energyDelivered: number;
 }
 
 /**
@@ -51,12 +80,27 @@ export interface UserTransaction {
 //================================================================
 
 /**
+ * Fetches a list of all public, online booths.
+ * @returns A promise that resolves with an array of public booths.
+ */
+export const getBooths = async (): Promise<PublicBooth[]> => {
+  try {
+    const response = await apiClient.get<PublicBooth[]>('/booths');
+    return response.data;
+  } catch (error) {
+    console.error('Failed to fetch public booths:', error);
+    throw error;
+  }
+};
+
+/**
  * Initiates a battery deposit session for the logged-in user at a specific booth.
  * @param boothId - The unique identifier of the booth (e.g., from a QR code).
  */
-export const initiateDeposit = async (boothId: string): Promise<void> => {
+export const initiateDeposit = async (boothId: string): Promise<Slot> => {
   try {
-    await apiClient.post('/booths/initiate-deposit', { boothId });
+    const response = await apiClient.post<{ slot: Slot }>('/booths/initiate-deposit', { boothUid: boothId });
+    return response.data.slot;
   } catch (error) {
     // The global interceptor will handle 401/403 errors.
     // We re-throw so the component can handle other errors (e.g., show a specific message).
@@ -86,6 +130,36 @@ export const initiateWithdrawal = async (): Promise<InitiateWithdrawalResponse> 
     const response = await apiClient.post<InitiateWithdrawalResponse>('/booths/initiate-withdrawal');
     return response.data;
   } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Fetches details of a user's pending withdrawal session, if one exists.
+ * @returns A promise that resolves with the session details or null if none is found.
+ */
+export const getPendingWithdrawal = async (): Promise<InitiateWithdrawalResponse | null> => {
+  try {
+    const response = await apiClient.get<InitiateWithdrawalResponse>('/booths/sessions/pending-withdrawal');
+    // A 204 No Content status will result in empty data.
+    return response.data || null;
+  } catch (error) {
+    console.error('Failed to fetch pending withdrawal session:', error);
+    throw error;
+  }
+};
+
+/**
+ * Triggers the M-Pesa STK push for a pre-calculated withdrawal session.
+ * @param sessionId The ID of the session to pay for.
+ * @returns A promise that resolves with the checkout request ID.
+ */
+export const payForWithdrawal = async (sessionId: number): Promise<{ checkoutRequestId: string }> => {
+  try {
+    const response = await apiClient.post<{ checkoutRequestId: string }>(`/booths/sessions/${sessionId}/pay`);
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to trigger payment for session ${sessionId}:`, error);
     throw error;
   }
 };

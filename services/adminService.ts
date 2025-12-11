@@ -36,6 +36,8 @@ export interface AdminBoothStatus {
   slots: {
     slotIdentifier: string;
     status: string;
+    doorStatus: 'locked' | 'unlocked' | 'ajar' | 'unknown';
+    relayState: 'on' | 'off';
     battery: {
       batteryUid: string;
       chargeLevel: number;
@@ -139,6 +141,24 @@ export const updateBooth = async (boothUid: string, boothData: Partial<CreateBoo
  */
 export const deleteBooth = async (boothUid: string): Promise<void> => {
   await apiClient.delete(`/admin/booths/${boothUid}`);
+};
+
+/**
+ * The shape of a command to be sent to a slot.
+ * Keys are command names, values are their parameters (often just `true`).
+ */
+export interface SlotCommand {
+  [key: string]: any;
+}
+
+/**
+ * Sends a command to a specific booth slot.
+ * @param boothUid The UID of the target booth.
+ * @param slotIdentifier The identifier of the target slot.
+ * @param command The command object to send.
+ */
+export const sendSlotCommand = async (boothUid: string, slotIdentifier: string, command: SlotCommand): Promise<void> => {
+  await apiClient.post(`/admin/booths/${boothUid}/slots/${slotIdentifier}/command`, command);
 };
 
 /**
@@ -267,6 +287,7 @@ export const getSettings = async (): Promise<AppSettings> => {
   }
 };
 
+
 /**
  * Updates one or more application settings.
  * @param settings The settings object to update.
@@ -278,4 +299,26 @@ export const updateSettings = async (settings: Partial<AppSettings>): Promise<vo
     console.error('Failed to update settings:', error);
     throw error;
   }
+};
+
+/**
+ * (Dev Tool) Simulates a hardware confirmation of a battery deposit.
+ * @param data The simulation data.
+ */
+export const simulateConfirmDeposit = async (data: {
+  boothUid: string;
+  slotIdentifier: string;
+  chargeLevel: number;
+}): Promise<void> => {
+  await apiClient.post('/admin/simulate/confirm-deposit', data);
+};
+
+/**
+ * (Dev Tool) Simulates a successful M-Pesa payment for a withdrawal.
+ * @param data The simulation data.
+ */
+export const simulateConfirmPayment = async (data: {
+  checkoutRequestId: string;
+}): Promise<void> => {
+  await apiClient.post('/admin/simulate/confirm-payment', data);
 };

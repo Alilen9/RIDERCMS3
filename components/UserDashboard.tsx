@@ -1,93 +1,193 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Station, SlotStatus, Battery, Slot, User, BatteryType } from '../types';
+import { Battery, Slot, User, BatteryType } from '../types';
 import { analyzeBatteryHealth } from '../services/geminiService';
-import * as boothService from '../services/boothService';
+import * as boothService from '../services/boothService'; // Imports getBooths
 import QrScanner from './user/QrScanner'; // Import the new component
+import ChargingStatusView from './user/ChargingStatusView';
+import SessionSummary from './user/SessionSummary';
+import toast from 'react-hot-toast';
 
 interface UserDashboardProps {
   user: User;
-  station: Station;
-  onUpdateStation: (station: Station) => void;
   onLogout: () => void;
 }
 
 // Removed 'select_type' from ViewState
-type ViewState = 'home' | 'map_view' | 'scan_qr' | 'assigning_slot' | 'deposit_guide' | 'status' | 'billing' | 'collect_guide';
+type ViewState = 'loading' | 'home' | 'map_view' | 'scan_qr' | 'assigning_slot' | 'deposit_guide' | 'status' | 'billing' | 'collect_guide';
 
-// Mock Data for Nearby Stations
-// Coordinates are in % (0-100) relative to the map container
-const MOCK_STATIONS_DATA = [
-  { id: 'ST-002', name: 'Westlands Express', available: 4, lat: 35, lng: 65 }, // Closer to (50,50)
-  { id: 'ST-003', name: 'Kilimani Point', available: 1, lat: 75, lng: 25 },
-  { id: 'ST-004', name: 'Airport Node', available: 0, lat: 80, lng: 80 },
-];
-
-const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateStation, onLogout }) => {
-  const [view, setView] = useState<ViewState>('home');
+const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
+  const [view, setView] = useState<ViewState>('loading');
   const [assignedSlot, setAssignedSlot] = useState<Slot | null>(null);
   const [activeBattery, setActiveBattery] = useState<Battery | null>(null);
-  const [selectedType, setSelectedType] = useState<BatteryType>(BatteryType.E_BIKE); // Defaulted since selection UI is removed
   const [aiAnalysis, setAiAnalysis] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<'idle' | 'push_sent' | 'success'>('idle');
-  const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [withdrawalSessionId, setWithdrawalSessionId] = useState<number | null>(null);
   const [checkoutRequestId, setCheckoutRequestId] = useState<string>('');
   const [withdrawalCost, setWithdrawalCost] = useState<number>(0);
-  const [doorState, setDoorState] = useState<'OPEN' | 'CLOSING' | 'CLOSED' | 'LOCKED'>('OPEN');
+  const [withdrawalDuration, setWithdrawalDuration] = useState<number>(0);
+  const [withdrawalEnergy, setWithdrawalEnergy] = useState<number>(0);
+  const [manualBoothId, setManualBoothId] = useState('');
+  const [booths, setBooths] = useState<boothService.PublicBooth[]>([]);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
 
   // --- Map Logic: Calculate Nearest ---
-  const userLocation = { lat: 50, lng: 50 };
   const sortedStations = useMemo(() => {
-    return MOCK_STATIONS_DATA.map(st => {
-      // Calculate Euclidean distance in the % grid
-      const dx = st.lng - userLocation.lng;
-      const dy = st.lat - userLocation.lat;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+    if (!userLocation) return [];
+
+    return booths.map(booth => {
+      // Haversine formula for distance between two lat/lng points
+      const R = 6371; // Radius of Earth in km
+      const dLat = (booth.latitude - userLocation.lat) * (Math.PI / 180);
+      const dLng = (booth.longitude - userLocation.lng) * (Math.PI / 180);
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(userLocation.lat * (Math.PI / 180)) * Math.cos(booth.latitude * (Math.PI / 180)) *
+        Math.sin(dLng / 2) * Math.sin(dLng / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const dist = R * c; // Calculate distance using Haversine result
+
       return {
-        ...st,
+        id: booth.booth_uid,
+        name: booth.name,
+        available: booth.availableSlots,
+        lat: booth.latitude,
+        lng: booth.longitude,
         rawDist: dist,
-        distanceLabel: `${(dist * 0.15).toFixed(1)} km` // Mock conversion factor
+        distanceLabel: `${dist.toFixed(1)} km`
       };
     }).sort((a, b) => a.rawDist - b.rawDist);
-  }, []);
+  }, [booths, userLocation]);
+
   const nearestStation = sortedStations[0];
 
   // Load user's current battery status on mount
   useEffect(() => {
+    // Get user's location
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+      },
+      () => {
+        // Fallback location if user denies permission
+        setUserLocation({ lat: -1.2921, lng: 36.8219 }); // Default to Nairobi
+      }
+    );
+
     const loadBatteryStatus = async () => {
+      // 1. Check for a pending withdrawal first. This is the most specific state.
+      const pendingWithdrawal = await boothService.getPendingWithdrawal();
+      if (pendingWithdrawal) {
+        setWithdrawalSessionId(pendingWithdrawal.sessionId);
+        setWithdrawalCost(pendingWithdrawal.amount);
+        setWithdrawalDuration(pendingWithdrawal.durationMinutes);
+        setWithdrawalEnergy(pendingWithdrawal.energyDelivered);
+        setView('billing');
+        return; // Session restored, stop here.
+      }
+
+      // 2. If no pending withdrawal, check for any other active battery session.
+      const batteryStatus = await boothService.getMyBatteryStatus();
+    
+      if (batteryStatus) {        
+        setActiveBattery({
+          id: batteryStatus.batteryUid,
+          type: BatteryType.E_BIKE,
+          chargeLevel: batteryStatus.telemetry?.soc ?? batteryStatus.chargeLevel,
+          temperature: batteryStatus.telemetry?.temperatureC ?? 0,
+          voltage: batteryStatus.telemetry?.voltage ?? 0,
+          health: 95, 
+          cycles: 150, 
+          ownerId: user.id
+        });
+        setAssignedSlot({
+          identifier: batteryStatus.slotIdentifier,
+          status: 'occupied', doorStatus: 'locked',
+          batteryUid: batteryStatus.batteryUid, chargeLevel: batteryStatus.chargeLevel,
+        });
+
+        if (batteryStatus.sessionStatus === 'pending') {
+          setView('deposit_guide');
+        } else {
+          setView('status');
+        }
+      } else {
+        // 3. If no sessions of any kind, go to the initial screen.
+        setView('scan_qr');
+      }
+    };
+    loadBatteryStatus();
+
+    const loadBooths = async () => {
+      try {
+        const publicBooths = await boothService.getBooths();
+        setBooths(publicBooths);
+      } catch (err) {
+        toast.error('Could not load nearby stations.');
+      }
+    };
+    loadBooths();
+  }, [user.id]);
+
+  // This effect handles polling for deposit confirmation
+  useEffect(() => {
+    if (view !== 'deposit_guide') {
+      return; // Only run when in the deposit guide view
+    }
+
+    const pollForDeposit = setInterval(async () => {
       try {
         const batteryStatus = await boothService.getMyBatteryStatus();
         if (batteryStatus) {
-          setActiveBattery({
+          // Success! The backend has confirmed the deposit.
+          clearInterval(pollForDeposit);
+          setActiveBattery({ // Correctly set the 'id' property
             id: batteryStatus.batteryUid,
-            type: BatteryType.E_BIKE,
-            chargeLevel: batteryStatus.chargeLevel,
-            health: 95,
-            temperature: 30,
-            voltage: 48,
-            cycles: 150,
+            type: BatteryType.E_BIKE, // This might need to come from the backend eventually
+            chargeLevel: batteryStatus.telemetry?.soc ?? batteryStatus.chargeLevel,
+            health: 95, // This data is not in the response, keeping mock for now
+            temperature: batteryStatus.telemetry?.temperatureC ?? 0,
+            voltage: batteryStatus.telemetry?.voltage ?? 0,
+            cycles: 150, // This data is not in the response, keeping mock for now
             ownerId: user.id
           });
           setView('status');
         }
-      } catch (err) {
-        // A 404 error is expected if the user has no battery.
-        // We can safely ignore it and stay on the home screen.
-        if (err.response?.status === 404) {
-          // This is the "No battery currently deposited" case. Do nothing.
-        } else {
-          // Log other unexpected errors for debugging, but don't show the user.
-          console.error('Failed to load battery status:', err);
+      } catch (err) { /* Ignore errors, just keep polling */ }
+    }, 3000); // Poll every 3 seconds
+
+    return () => clearInterval(pollForDeposit); // Cleanup on component unmount or view change
+  }, [view, user.id]);
+
+  // This effect polls for live battery status updates while on the status screen
+  useEffect(() => {
+    if (view !== 'status') {
+      return; // Only run when in the status view
+    }
+
+    const pollForStatus = setInterval(async () => {
+      try {
+        const batteryStatus = await boothService.getMyBatteryStatus();
+        console.log('Polled battery status:', batteryStatus);
+        if (batteryStatus && activeBattery) {
+          // Update the charge level of the existing active battery
+          setActiveBattery(prev => prev ? { ...prev, chargeLevel: batteryStatus.telemetry?.soc ?? batteryStatus.chargeLevel, temperature: batteryStatus.telemetry?.temperatureC ?? prev.temperature, voltage: batteryStatus.telemetry?.voltage ?? prev.voltage } : null);
+        } else if (!batteryStatus) {
+          // The battery was collected, end the session.
+          finishSession();
         }
-      }
-    };
-    loadBatteryStatus();
-  }, [user.id]);
+      } catch (err) { /* Ignore errors, just keep polling */ }
+    }, 10000); // Poll every 10 seconds
+
+    return () => clearInterval(pollForStatus); // Cleanup on view change
+  }, [view, activeBattery]);
 
   // 1. Start Deposit
   const startDeposit = () => {
-    setError(''); // Clear previous errors
     setView('scan_qr');
   };
 
@@ -96,113 +196,42 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
     setLoading(true);
     try {
       // The QR code text is the boothId
-      await boothService.initiateDeposit(decodedText);
-      
-      // Simulate Backend Assignment Time
-      setTimeout(() => {
-        const emptySlot = station.slots.find(s => s.status === SlotStatus.EMPTY);
-        if (emptySlot) {
-          setAssignedSlot(emptySlot);
-          setDoorState('OPEN'); // Physical door opens
-          setView('deposit_guide');
-        } else {
-          alert("Station Full!");
-          setView('home');
-        }
-      }, 1500);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to initiate deposit');
-      setLoading(false);
+      const assignedSlotFromApi = await boothService.initiateDeposit(decodedText);
+      setAssignedSlot(assignedSlotFromApi);
+      setView('deposit_guide');
+    } catch (err: any) {
+      if (err.response?.status === 409) {
+        // User already has an active session, redirect them to the status page.
+        toast.error("You already have an active session.", { duration: 4000 });
+        setView('status');
+      } else {
+        toast.error(err.response?.data?.message || err.message || 'Failed to initiate deposit');
+      }
     }
+    setLoading(false); // Ensure loading is always stopped
   }, []); // No dependencies, this function is stable.
 
   // 4. Handle Physical Door Close (User Interaction)
-  const handleDoorClose = () => {
-    setDoorState('CLOSING');
-    setTimeout(() => {
-      setDoorState('CLOSED');
-      // Automatically move to lock/confirm after a brief pause
-      setTimeout(() => {
-        setDoorState('LOCKED');
-      }, 1000);
-    }, 1000);
-  };
-
   const handleScanFailure = useCallback((error: string) => {
-    setError(error);
-    setView('home');
-    // We don't need to stop the scanner here, the component's
-    // cleanup effect will handle it automatically upon unmounting.
+    // Don't redirect on camera failure. Just log it and allow manual input.
+    // The user will see the manual input field as a fallback.
+    console.warn("QR Scanner failed to start, allowing manual input:", error);
+    toast.error("Camera not available. Please use manual input below.");
   }, []); // No dependencies, this function is stable.
-
-
-  // 3. Handle Type Selection - simulates slot assignment
-  const handleTypeSelection = (type: BatteryType) => {
-    setSelectedType(type);
-    setView('assigning_slot');
-
-    // Simulate Backend Assignment
-    setTimeout(() => {
-      const emptySlot = station.slots.find(s => s.status === SlotStatus.EMPTY);
-      if (emptySlot) {
-        setAssignedSlot(emptySlot);
-        setView('deposit_guide');
-      } else {
-        setError("Station Full! Please try another booth.");
-        setView('home');
-      }
-    }, 1500);
-  };
-
-  // 5. Confirm Deposit (System Lock)
-  const confirmDeposit = () => {
-    if (!assignedSlot) return;
-
-    // Simulate auto-detection of battery type upon insertion
-    const detectedType = selectedType;
-
-    const newBattery: Battery = {
-      id: `bat-${Date.now()}`,
-      type: selectedType,
-      chargeLevel: Math.floor(Math.random() * 20) + 10,
-      health: Math.floor(Math.random() * 10) + 90,
-      temperature: 35,
-      voltage: 48,
-      cycles: 150,
-      ownerId: user.id
-    };
-
-    const updatedSlots = station.slots.map(s => {
-      if (s.id === assignedSlot.id) {
-        return {
-          ...s,
-          status: SlotStatus.OCCUPIED_CHARGING,
-          battery: newBattery,
-          isDoorOpen: false,
-          doorClosed: true,
-          doorLocked: true
-        };
-      }
-      return s;
-    });
-
-    onUpdateStation({ ...station, slots: updatedSlots });
-    setActiveBattery(newBattery);
-    setView('status');
-  };
 
   // 5. Initiate Collection - calls initiateWithdrawal API
   const initiateCollection = async () => {
     setLoading(true);
-    setError('');
     try {
       const response = await boothService.initiateWithdrawal();
-      setCheckoutRequestId(response.checkoutRequestId);
+      setWithdrawalSessionId(response.sessionId);
       setWithdrawalCost(response.amount);
+      setWithdrawalDuration(response.durationMinutes);
+      setWithdrawalEnergy(response.energyDelivered);
       setView('billing');
       setPaymentStatus('idle');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to initiate withdrawal');
+      toast.error(err instanceof Error ? err.message : 'Failed to initiate withdrawal');
     } finally {
       setLoading(false);
     }
@@ -213,6 +242,11 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
     setPaymentStatus('push_sent');
     setLoading(true);
 
+    if (!withdrawalSessionId) {
+      toast.error('Session ID is missing. Cannot initiate payment.');
+      setLoading(false);
+      return;
+    }
     try {
       // Poll for payment status
       let isPaymentComplete = false;
@@ -220,6 +254,10 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
       const maxAttempts = 30; // Poll for up to 30 seconds
 
       while (!isPaymentComplete && attempts < maxAttempts) {
+        if (attempts === 0) {
+          const payResponse = await boothService.payForWithdrawal(withdrawalSessionId);
+          setCheckoutRequestId(payResponse.checkoutRequestId);
+        }
         await new Promise(resolve => setTimeout(resolve, 1000));
 
         const statusResponse = await boothService.getWithdrawalStatus(checkoutRequestId);
@@ -234,26 +272,17 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
 
           setTimeout(() => {
             setView('collect_guide');
-            // Update Station: Remove Battery
-            if (assignedSlot) {
-              const updatedSlots = station.slots.map(s => {
-                if (s.id === assignedSlot.id) {
-                  return { ...s, status: SlotStatus.EMPTY, battery: undefined, isDoorOpen: true };
-                }
-                return s;
-              });
-              onUpdateStation({ ...station, slots: updatedSlots });
-            }
+            // The UI state should be updated based on backend data, not mock updates.
           }, 2000);
         }
       }
 
       if (!isPaymentComplete) {
-        setError('Payment timeout. Please try again.');
+        toast.error('Payment timeout. Please try again.');
         setPaymentStatus('idle');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Payment failed');
+      toast.error(err instanceof Error ? err.message : 'Payment failed');
       setPaymentStatus('idle');
     } finally {
       setLoading(false);
@@ -264,7 +293,10 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
     setAssignedSlot(null);
     setActiveBattery(null);
     setAiAnalysis('');
+    setWithdrawalSessionId(null);
     setCheckoutRequestId('');
+    setWithdrawalCost(0);
+    setWithdrawalDuration(0);
     setView('home');
   };
 
@@ -277,39 +309,16 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
     setIsAnalyzing(false);
   };
 
-  // Charging Animation Effect
-  useEffect(() => {
-    if (view === 'status' && activeBattery && activeBattery.chargeLevel < 100) {
-      const interval = setInterval(() => {
-        setActiveBattery(prev => {
-          if (!prev) return null;
-          const nextLevel = prev.chargeLevel + 1;
-          if (nextLevel >= 100) return { ...prev, chargeLevel: 100 };
-          return { ...prev, chargeLevel: nextLevel };
-        });
-      }, 500);
-      return () => clearInterval(interval);
-    }
-  }, [view, activeBattery]);
-
-  // Calculations
-  const calculateCost = () => {
-    return withdrawalCost > 0 ? withdrawalCost.toFixed(2) : (5.00).toFixed(2);
-  };
-
   return (
     <div className="min-h-screen bg-gray-900 text-white pb-20 relative overflow-hidden font-sans">
       {/* Navbar */}
       <div className="bg-gray-800/80 backdrop-blur-md px-6 py-4 flex justify-between items-center border-b border-gray-700 sticky top-0 z-20">
         <div className="flex items-center space-x-2" onClick={() => setView('home')}>
-          <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center font-bold text-gray-900 shadow-[0_0_15px_rgba(16,185,129,0.5)] cursor-pointer">V</div>
-          <span className="font-bold text-lg tracking-tight cursor-pointer">VoltVault</span>
+          <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center font-bold text-gray-900 shadow-[0_0_15px_rgba(16,185,129,0.5)] cursor-pointer">R</div>
+          <span className="font-bold text-lg tracking-tight cursor-pointer">RIDERCMS</span>
         </div>
         <div className="flex items-center gap-4">
-          <div className="hidden sm:block text-right">
-            <p className="text-[10px] text-gray-400 uppercase tracking-widest">Balance</p>
-            <p className="text-sm font-bold text-emerald-400">${user.balance}</p>
-          </div>
+          
           <button onClick={onLogout} className="p-2 bg-gray-700 rounded-full hover:bg-gray-600 transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 2.062-2.062a.75.75 0 0 0 0-1.061L15.75 12" />
@@ -320,33 +329,48 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
 
       <div className="p-6 max-w-md mx-auto relative z-10 h-full">
 
+        {/* VIEW: LOADING */}
+        {view === 'loading' && (
+          <div className="flex flex-col items-center justify-center h-[70vh] animate-fade-in">
+            <div className="w-12 h-12 border-4 border-gray-700 border-t-emerald-500 rounded-full animate-spin"></div>
+            <p className="text-gray-400 mt-4 text-sm">Loading your session...</p>
+          </div>
+        )}
+
         {/* VIEW: HOME */}
         {view === 'home' && (
           <div className="flex flex-col items-center justify-center h-[70vh] space-y-8 animate-fade-in">
-            {error && (
-              <div className="p-4 bg-red-900/50 border border-red-500 text-red-200 rounded-lg w-full max-w-sm">
-                {error}
-              </div>
-            )}
             <div className="text-center space-y-2">
               <h2 className="text-3xl font-bold">Welcome, {user.name}</h2>
               <p className="text-gray-400">Ready to swap?</p>
             </div>
 
-            <button
-              onClick={startDeposit}
-              className="group relative w-64 h-64 rounded-full bg-gray-800 border border-gray-700 flex flex-col items-center justify-center shadow-2xl hover:scale-105 transition-all duration-300 overflow-hidden"
-            >
-              <div className="absolute inset-0 bg-emerald-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-              <div className="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.4)] group-hover:shadow-[0_0_50px_rgba(16,185,129,0.6)] transition-all">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-10 h-10 text-white">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 3.75 9.375v-4.5ZM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 0 1-1.125-1.125v-4.5ZM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 13.5 9.375v-4.5Z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75ZM6.75 16.5h.75v.75h-.75v-.75ZM16.5 6.75h.75v.75h-.75v-.75ZM13.5 13.5h.75v.75h-.75v-.75ZM13.5 19.5h.75v.75h-.75v-.75ZM19.5 13.5h.75v.75h-.75v-.75ZM19.5 19.5h.75v.75h-.75v-.75ZM16.5 16.5h.75v.75h-.75v-.75Z" />
-                </svg>
-              </div>
-              <span className="mt-4 font-bold text-xl text-gray-200">Scan Station QR</span>
-              <span className="text-xs text-gray-500 mt-1">Identify Station & Deposit</span>
-            </button>
+            <div className="w-full max-w-sm text-center bg-gray-800/50 p-6 rounded-2xl border border-gray-700">
+                <p className="text-gray-300 font-semibold mb-3">Start a session by entering a Booth UID:</p>
+                <div className="flex gap-2">
+                    <input
+                        type="text"
+                        placeholder="Paste Booth UID here..."
+                        value={manualBoothId}
+                        onChange={(e) => setManualBoothId(e.target.value)}
+                        className="flex-grow bg-gray-900 border border-gray-600 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                    <button onClick={() => handleScanSuccess(manualBoothId)} disabled={!manualBoothId || loading} className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-white font-bold px-5 py-3 rounded-lg transition-colors">
+                      {loading ? '...' : 'Go'}
+                    </button>
+                </div>
+                <div className="text-center text-gray-500 my-4 text-xs">OR</div>
+                <button
+                  onClick={startDeposit}
+                  className="w-full flex items-center justify-center gap-3 bg-gray-700 hover:bg-gray-600 px-4 py-3 rounded-lg border border-gray-600 transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 3.75 9.375v-4.5ZM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 0 1-1.125-1.125v-4.5ZM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 13.5 9.375v-4.5Z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75ZM6.75 16.5h.75v.75h-.75v-.75ZM16.5 6.75h.75v.75h-.75v-.75ZM13.5 13.5h.75v.75h-.75v-.75ZM13.5 19.5h.75v.75h-.75v-.75ZM19.5 13.5h.75v.75h-.75v-.75ZM19.5 19.5h.75v.75h-.75v-.75ZM16.5 16.5h.75v.75h-.75v-.75Z" />
+                  </svg>
+                  <span className="font-semibold text-sm">Scan Station QR Code</span>
+                </button>
+            </div>
 
             <button
               onClick={() => setView('map_view')}
@@ -509,7 +533,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
 
         {/* VIEW: SCAN QR */}
         {view === 'scan_qr' && (
-          <div className="fixed inset-0 bg-[#0B1E4B] z-50 flex flex-col items-center justify-center animate-fade-in">
+          <div className="fixed inset-0 bg-[#0B1E4B] z-50 flex flex-col items-center justify-center animate-fade-in p-4">
             <div className="relative w-full max-w-sm aspect-[3/4] bg-gray-900 rounded-2xl overflow-hidden border border-gray-700 shadow-2xl">
               {/* The QrScanner component will render the camera feed here */}
               <QrScanner 
@@ -517,11 +541,29 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
                 onScanFailure={handleScanFailure}
               />
               {/* Camera Overlay */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 border-2 border-emerald-500 rounded-3xl shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 border-2 border-emerald-500 rounded-3xl shadow-[0_0_20px_rgba(16,185,129,0.3)] pointer-events-none">
                 <div className="absolute top-0 w-full h-1 bg-emerald-400 shadow-[0_0_10px_#34d399] animate-[scan_2s_ease-in-out_infinite]"></div>
               </div>
             </div>
-            <button onClick={() => { setView('home'); setError(''); }} className="mt-6 text-gray-400 hover:text-white">Cancel</button>
+            
+            {/* Manual Input for Laptops */}
+            <div className="mt-6 w-full max-w-sm text-center">
+                <p className="text-gray-400 text-sm mb-2">Or enter Booth UID manually:</p>
+                <div className="flex gap-2">
+                    <input
+                        type="text"
+                        placeholder="Paste Booth UID here..."
+                        value={manualBoothId}
+                        onChange={(e) => setManualBoothId(e.target.value)}
+                        className="flex-grow bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                    <button onClick={() => handleScanSuccess(manualBoothId)} disabled={!manualBoothId} className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-white font-bold px-4 py-2 rounded-lg">
+                        Go
+                    </button>
+                </div>
+            </div>
+
+            <button onClick={() => { setView('home'); }} className="mt-8 text-gray-400 hover:text-white">Cancel</button>
           </div>
         )}
 
@@ -541,166 +583,43 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
               SLOT ALLOCATED
             </div>
 
-            <div className={`relative w-48 h-48 mx-auto bg-gray-800 rounded-2xl border-4 ${doorState === 'CLOSED' || doorState === 'LOCKED' ? 'border-gray-500' : 'border-emerald-500'} flex items-center justify-center mb-8 shadow-xl transition-colors duration-500`}>
-              {doorState === 'OPEN' && (
-                <>
-                  <span className="text-8xl font-bold text-white">{assignedSlot.id}</span>
-                  <div className="absolute -bottom-3 bg-gray-900 px-4 text-emerald-400 text-sm font-bold border border-emerald-500 rounded-full">DOOR OPEN</div>
-                </>
-              )}
-              {(doorState === 'CLOSING' || doorState === 'CLOSED' || doorState === 'LOCKED') && (
-                <div className="w-full h-full bg-gray-700 flex items-center justify-center">
-                  <div className="text-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-gray-400 mx-auto mb-2" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-gray-300 font-bold">{doorState}</span>
-                  </div>
-                </div>
-              )}
+            <div className="relative w-48 h-48 mx-auto bg-gray-800 rounded-2xl border-4 border-emerald-500 flex items-center justify-center mb-8 shadow-xl">
+              <span className="text-8xl font-bold text-white">{assignedSlot.identifier.replace('slot','')}</span>
+              <div className="absolute -bottom-3 bg-gray-900 px-4 text-emerald-400 text-sm font-bold border border-emerald-500 rounded-full">DOOR OPEN</div>
             </div>
 
-            <h3 className="text-xl font-bold mb-2">
-              {doorState === 'OPEN' ? `Insert Battery in Slot ${assignedSlot.id}` :
-                doorState === 'LOCKED' ? 'Verifying Connection...' : 'Securing Door...'}
-            </h3>
+            <h3 className="text-xl font-bold mb-2">Insert Battery in Slot {assignedSlot.identifier}</h3>
+            <p className="text-gray-400 text-sm mb-8 px-8">Place your battery inside and firmly close the door. The system will automatically detect it and begin charging.</p>
 
-            {doorState === 'OPEN' ? (
-              <>
-                <p className="text-gray-400 text-sm mb-8 px-8">Place battery inside. Then firmly close the door to begin diagnostics.</p>
-                <button
-                  onClick={handleDoorClose}
-                  className="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-4 rounded-xl shadow-lg border-b-4 border-gray-900 active:border-b-0 active:translate-y-1 transition-all"
-                >
-                  Simulate Door Close
-                </button>
-              </>
-            ) : (
-              <div className="space-y-4">
-                <div className="h-2 w-full bg-gray-700 rounded-full overflow-hidden">
-                  <div className="h-full bg-emerald-500 animate-[progress_2s_ease-in-out]"></div>
-                </div>
-                {doorState === 'LOCKED' && (
-                  <button
-                    onClick={confirmDeposit}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl shadow-lg animate-pulse"
-                  >
-                    Confirm & Start Charging
-                  </button>
-                )}
-              </div>
-            )}
+            <div className="flex flex-col items-center justify-center text-center p-4 bg-gray-800/50 rounded-xl border border-gray-700">
+              <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mb-4"></div>
+              <h4 className="font-semibold text-blue-300">Waiting for Confirmation...</h4>
+              <p className="text-xs text-gray-400 mt-1">This may take a few seconds after the door is closed.</p>
+            </div>
           </div>
         )}
 
         {/* VIEW: CHARGING STATUS */}
         {view === 'status' && activeBattery && (
-          <div className="animate-fade-in space-y-6 pt-4">
-            {error && (
-              <div className="p-4 bg-red-900/50 border border-red-500 text-red-200 rounded-lg">
-                {error}
-              </div>
-            )}
-            {/* Charging Card */}
-            <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700 relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-blue-500"></div>
-
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-white">{activeBattery.type}</h2>
-                  <p className="text-sm text-gray-400">ID: {activeBattery.id.substr(-6)}</p>
-                </div>
-                <div className="flex flex-col items-end">
-                  <span className="text-xs text-gray-400 uppercase tracking-wide">Slot</span>
-                  <span className="text-2xl font-mono font-bold text-emerald-400">{assignedSlot?.id}</span>
-                </div>
-              </div>
-
-              <div className="flex justify-center mb-8">
-                <div className="relative w-48 h-48">
-                  {/* Circular Progress */}
-                  <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                    <path className="text-gray-700" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="2.5" />
-                    <path className="text-emerald-500 transition-all duration-1000 ease-linear" strokeDasharray={`${activeBattery.chargeLevel}, 100`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-5xl font-bold text-white">{activeBattery.chargeLevel}<span className="text-2xl">%</span></span>
-                    <span className="text-sm text-emerald-400 font-medium animate-pulse">Charging...</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="bg-gray-900/50 p-3 rounded-lg">
-                  <p className="text-[10px] text-gray-500 uppercase">Health</p>
-                  <p className="font-mono text-emerald-400">{activeBattery.health}%</p>
-                </div>
-                <div className="bg-gray-900/50 p-3 rounded-lg">
-                  <p className="text-[10px] text-gray-500 uppercase">Temp</p>
-                  <p className="font-mono text-orange-400">{activeBattery.temperature}°C</p>
-                </div>
-                <div className="bg-gray-900/50 p-3 rounded-lg">
-                  <p className="text-[10px] text-gray-500 uppercase">Cycles</p>
-                  <p className="font-mono text-blue-400">{activeBattery.cycles}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Gemini AI Card */}
-            <div className="bg-gradient-to-br from-indigo-900/80 to-purple-900/80 p-6 rounded-2xl border border-indigo-500/30 shadow-lg">
-              <div className="flex items-center gap-2 mb-3">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                <h3 className="font-bold text-indigo-100">AI Battery Doctor</h3>
-              </div>
-              {aiAnalysis ? (
-                <p className="text-sm text-indigo-200 italic leading-relaxed">"{aiAnalysis}"</p>
-              ) : (
-                <button
-                  onClick={runAiAnalysis}
-                  disabled={isAnalyzing}
-                  className="text-xs bg-indigo-500/20 hover:bg-indigo-500/40 text-indigo-300 px-3 py-2 rounded-lg border border-indigo-500/30 transition-colors w-full disabled:opacity-50"
-                >
-                  {isAnalyzing ? "Running Diagnostics..." : "Analyze Battery Health"}
-                </button>
-              )}
-            </div>
-
-            {/* Collect Button */}
-            <button
-              onClick={initiateCollection}
-              disabled={activeBattery.chargeLevel < 20 || loading}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl shadow-lg transition-colors mt-4"
-            >
-              {loading ? 'Processing...' : activeBattery.chargeLevel < 20 ? 'Charge > 20% to Collect' : 'Collect Battery & Pay'}
-            </button>
-          </div>
+          <ChargingStatusView
+            activeBattery={activeBattery}
+            assignedSlot={assignedSlot}
+            aiAnalysis={aiAnalysis}
+            isAnalyzing={isAnalyzing}
+            loading={loading}
+            runAiAnalysis={runAiAnalysis}
+            initiateCollection={initiateCollection}
+          />
         )}
 
         {/* VIEW: BILLING & PAYMENT */}
         {view === 'billing' && (
           <div className="animate-fade-in pt-10">
-            {error && (
-              <div className="p-4 bg-red-900/50 border border-red-500 text-red-200 rounded-lg mb-6">
-                {error}
-              </div>
-            )}
-            <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700 mb-6">
-              <h2 className="text-xl font-bold mb-4 border-b border-gray-700 pb-2">Session Summary</h2>
-              <div className="flex justify-between mb-2">
-                <span className="text-gray-400">Energy Delivered</span>
-                <span>4.2 kWh</span>
-              </div>
-              <div className="flex justify-between mb-2">
-                <span className="text-gray-400">Duration</span>
-                <span>45 mins</span>
-              </div>
-              <div className="flex justify-between mt-4 pt-4 border-t border-gray-700 text-lg font-bold">
-                <span>Total Due</span>
-                <span className="text-emerald-400">KES {calculateCost()}</span>
-              </div>
-            </div>
+            <SessionSummary
+              durationMinutes={withdrawalDuration}
+              energyDelivered={withdrawalEnergy}
+              totalCost={withdrawalCost}
+            />
 
             {paymentStatus === 'idle' && (
               <button
@@ -731,7 +650,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
                   </svg>
                 </div>
                 <h3 className="text-xl font-bold text-white mb-1">Payment Received</h3>
-                <p className="text-emerald-400 text-sm">Unlocking Slot {assignedSlot?.id}...</p>
+                <p className="text-emerald-400 text-sm">Unlocking Slot {assignedSlot?.identifier}...</p>
               </div>
             )}
           </div>
@@ -740,41 +659,19 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, station, onUpdateSt
         {/* VIEW: COLLECT GUIDE (WITH DOOR LOGIC) */}
         {view === 'collect_guide' && (
           <div className="flex flex-col items-center justify-center h-[70vh] animate-fade-in text-center">
-
-            {doorState === 'OPEN' ? (
-              <>
-                <div className="w-24 h-24 bg-gray-800 rounded-full border-4 border-emerald-500 flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(16,185,129,0.3)] animate-bounce">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <h2 className="text-3xl font-bold text-white mb-2">Slot {assignedSlot?.id} Open</h2>
-                <p className="text-gray-400 max-w-xs mx-auto mb-8">Your battery is released. Please retrieve it, then close the door to finish.</p>
-
-                <button
-                  onClick={handleDoorClose}
-                  className="w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold py-4 rounded-xl transition-colors border-b-4 border-gray-900 active:border-b-0 active:translate-y-1"
-                >
-                  Simulate Door Close
-                </button>
-              </>
-            ) : (
-              <>
-                <div className="w-24 h-24 bg-gray-800 rounded-full border-4 border-gray-600 flex items-center justify-center mb-6">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <h2 className="text-3xl font-bold text-white mb-2">Thank You!</h2>
-                <p className="text-gray-400 mb-8">Session Completed.</p>
-                <button
-                  onClick={finishSession}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-4 rounded-xl transition-colors"
-                >
-                  Back to Home
-                </button>
-              </>
-            )}
+            <div className="w-24 h-24 bg-gray-800 rounded-full border-4 border-emerald-500 flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(16,185,129,0.3)] animate-bounce">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <h2 className="text-3xl font-bold text-white mb-2">Slot {assignedSlot?.identifier} Open</h2>
+            <p className="text-gray-400 max-w-xs mx-auto mb-8">Your battery is released. Please retrieve it and close the door to finish the session.</p>
+            <button
+              onClick={finishSession}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-4 rounded-xl transition-colors"
+            >
+              Finish Session
+            </button>
           </div>
         )}
 

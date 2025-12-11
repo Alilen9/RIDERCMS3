@@ -43,17 +43,19 @@ const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess, onScanFailure }) =
 
       // Cleanup function to stop the scanner when the component unmounts
       return () => {
-        // Check if the scanner is running before trying to stop it.
-        // This prevents errors if the scanner never started successfully.
-        if (qrScanner && qrScanner.isScanning) {
-          qrScanner.stop()
-            .then(() => {
+        // The stop method is async, so we should handle it that way.
+        // This prevents race conditions, especially in React's StrictMode.
+        const cleanup = async () => {
+          if (qrScanner && qrScanner.isScanning) {
+            try {
+              await qrScanner.stop();
               console.log("QR Scanner stopped successfully.");
-            })
-            .catch(err => {
+            } catch (err) {
               console.error("Failed to stop QR scanner:", err);
-            });
-        }
+            }
+          }
+        };
+        cleanup();
       };
     }
   }, [onScanSuccess, onScanFailure, scannerContainerId]);

@@ -32,7 +32,7 @@ export const analyzeBatteryHealth = async (battery: Battery): Promise<string> =>
 export const generateSystemInsight = async (systemData: any): Promise<string> => {
   try {
     const prompt = `
-      You are an AI System Analyst for 'VoltVault', an EV battery swapping network. 
+      You are an AI System Analyst for 'RIDERCMS', an EV battery swapping network. 
       Analyze the provided JSON system snapshot and generate a professional "Daily Situation Report" for the Admin.
       
       Format with Markdown. Include:
