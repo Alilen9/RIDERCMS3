@@ -16,7 +16,7 @@ const SessionSummary: React.FC<SessionSummaryProps> = ({
       <h2 className="text-xl font-bold mb-4 border-b border-gray-700 pb-2">Session Summary</h2>
       <div className="flex justify-between mb-2">
         <span className="text-gray-400">Energy Delivered</span>
-        <span>{energyDelivered.toFixed(2)} kWh</span>
+        <span>{energyDelivered} SOC</span>
       </div>
       <div className="flex justify-between mb-2">
         <span className="text-gray-400">Duration</span>

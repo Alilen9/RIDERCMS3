@@ -265,56 +265,47 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
   };
 
   // 6. Handle STK Push - calls getWithdrawalStatus API
-  const handleSTKPush = async () => {
-    setPaymentStatus('push_sent');
-    setLoading(true);
+const handleSTKPush = async () => {
+  setPaymentStatus('push_sent');
+  setLoading(true);
 
-    if (!withdrawalSessionId) {
-      toast.error('Session ID is missing. Cannot initiate payment.');
-      setLoading(false);
-      return;
-    }
-    try {
-      // Poll for payment status
-      let isPaymentComplete = false;
-      let attempts = 0;
-      const maxAttempts = 30; // Poll for up to 30 seconds
+  try {
+    const payResponse = await boothService.payForWithdrawal(withdrawalSessionId);
+    const localCheckoutId = payResponse.checkoutRequestId; // 🔥 use local variable
+    setCheckoutRequestId(localCheckoutId);
 
-      while (!isPaymentComplete && attempts < maxAttempts) {
-        if (attempts === 0) {
-          const payResponse = await boothService.payForWithdrawal(withdrawalSessionId);
-          setCheckoutRequestId(payResponse.checkoutRequestId);
-        }
-        await new Promise(resolve => setTimeout(resolve, 1000));
+    let attempts = 0;
+    const maxAttempts = 30;
 
-        const statusResponse = await boothService.getWithdrawalStatus(checkoutRequestId);
-        attempts++;
+    while (attempts < maxAttempts) {
+      await new Promise(res => setTimeout(res, 1000));
 
-        if (statusResponse.paymentStatus === 'paid') {
-          isPaymentComplete = true;
-          setPaymentStatus('success');
+      const statusResponse = await boothService.getWithdrawalStatus(localCheckoutId); // 🔥 correct ID
+      attempts++;
 
-          // Call openForCollection to unlock the slot
-          await boothService.openForCollection(checkoutRequestId);
+      if (statusResponse.paymentStatus === "paid") {
+        setPaymentStatus("success");
 
-          setTimeout(() => {
-            setView('collect_guide');
-            // The UI state should be updated based on backend data, not mock updates.
-          }, 2000);
-        }
+        await boothService.openForCollection(localCheckoutId);
+
+        setTimeout(() => setView("collect_guide"), 1500);
+        return;
       }
-
-      if (!isPaymentComplete) {
-        toast.error('Payment timeout. Please try again.');
-        setPaymentStatus('idle');
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Payment failed');
-      setPaymentStatus('idle');
-    } finally {
-      setLoading(false);
     }
-  };
+
+    toast.error("Payment timeout. Please try again.");
+    setPaymentStatus("idle");
+
+  } catch (err) {
+    toast.error(err?.message || "Payment failed");
+    setPaymentStatus("idle");
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+
 
   const finishSession = () => {
     setAssignedSlot(null);

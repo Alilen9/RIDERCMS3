@@ -100,8 +100,10 @@ export const getBooths = async (): Promise<PublicBooth[]> => {
 export const initiateDeposit = async (boothId: string): Promise<Slot> => {
   try {
     const response = await apiClient.post<{ slot: Slot }>('/booths/initiate-deposit', { boothUid: boothId });
+    console.log("deposit Response: ", response);
     return response.data.slot;
   } catch (error) {
+    console.error('Failed to initiate deposit session:', error);
     // The global interceptor will handle 401/403 errors.
     // We re-throw so the component can handle other errors (e.g., show a specific message).
     throw error;
