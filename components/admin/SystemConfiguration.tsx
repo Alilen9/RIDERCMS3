@@ -101,7 +101,7 @@ const SystemConfig: React.FC = () => {
               <input type="number" value={settings?.pricing?.base_swap_fee || ''} onChange={(e) => handleInputChange('pricing', 'base_swap_fee', parseFloat(e.target.value))} className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" />
             </div>
             <div>
-              <label className="block text-xs uppercase text-gray-500 mb-1">Cost per kWh (KES)</label>
+              <label className="block text-xs uppercase text-gray-500 mb-1">Cost per SOC (KES)</label>
               <input type="number" value={settings?.pricing?.cost_per_kwh || ''} onChange={(e) => handleInputChange('pricing', 'cost_per_kwh', parseFloat(e.target.value))} className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" />
             </div>
             <div>
