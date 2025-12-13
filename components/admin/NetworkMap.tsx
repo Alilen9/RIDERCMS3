@@ -4,7 +4,7 @@ import { getBooths } from '../../services/adminService';
 import toast from 'react-hot-toast';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
+import L, { LatLngBoundsExpression } from 'leaflet';
 
 interface NetworkMapProps {
   onBoothClick: (booth: Booth) => void;
@@ -24,22 +24,47 @@ const ChangeView = ({ center, zoom }: { center: [number, number]; zoom: number }
   return null;
 };
 
+// A helper component to fit the map to a given set of bounds
+const FitBounds = ({ bounds }: { bounds: LatLngBoundsExpression | null }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (bounds) {
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+    }
+  }, [bounds, map]);
+  return null;
+};
+
 const NetworkMap: React.FC<NetworkMapProps> = ({ onBoothClick }) => {
   const [booths, setBooths] = useState<Booth[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<Booth[]>([]);
   const [mapCenter, setMapCenter] = useState<[number, number]>([-1.286389, 36.817223]); // Default center
+  const [mapBounds, setMapBounds] = useState<LatLngBoundsExpression | null>(null);
 
   useEffect(() => {
     const fetchMapData = async () => {
       setLoading(true);
       try {
         const response = await getBooths();
-        console.log("Fetched booths for map:", response);
+        console.log("Fetched booths for map:", response.booths);
+        const allBooths = response.booths;
+        
         // Filter for booths that have coordinate data to display on the map
         const mappableBooths = response.booths.filter(b => b.latitude != null && b.longitude != null);
+        
+        if (mappableBooths.length < allBooths.length) {
+          console.warn(`NetworkMap: ${allBooths.length - mappableBooths.length} booth(s) could not be displayed due to missing coordinate data.`);
+        }
+
         setBooths(mappableBooths);
+
+        if (mappableBooths.length > 0) {
+          const bounds = L.latLngBounds(mappableBooths.map(b => [Number(b.latitude), Number(b.longitude)]));
+          setMapBounds(bounds);
+        }
+
       } catch (err) {
         toast.error("Failed to load network map data.");
       } finally {
@@ -74,7 +99,7 @@ const NetworkMap: React.FC<NetworkMapProps> = ({ onBoothClick }) => {
 
   const handleSearchResultClick = (booth: Booth) => {
     if (booth.latitude && booth.longitude) {
-      setMapCenter([booth.latitude, booth.longitude]);
+      setMapCenter([Number(booth.latitude), Number(booth.longitude)]);
       setSearchTerm('');
       setSearchResults([]);
     }
@@ -124,6 +149,7 @@ const NetworkMap: React.FC<NetworkMapProps> = ({ onBoothClick }) => {
           style={{ backgroundColor: '#111827' }}
         >
           <ChangeView center={mapCenter} zoom={16} />
+          <FitBounds bounds={mapBounds} />
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
@@ -131,7 +157,7 @@ const NetworkMap: React.FC<NetworkMapProps> = ({ onBoothClick }) => {
           {booths.map((booth) => (
             <Marker
               key={booth.booth_uid}
-              position={[parseFloat(booth.latitude as any), parseFloat(booth.longitude as any)]}
+              position={[Number(booth.latitude), Number(booth.longitude)]}
               icon={createCustomIcon(booth.status)}
               eventHandlers={{
                 click: () => {

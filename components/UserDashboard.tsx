@@ -303,10 +303,7 @@ const handleSTKPush = async () => {
     setLoading(false);
   }
 };
-
-
-
-
+  // 7. Finish Session - resets all state
   const finishSession = () => {
     setAssignedSlot(null);
     setActiveBattery(null);
