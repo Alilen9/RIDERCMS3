@@ -1,49 +1,117 @@
-import React, { useState, useEffect } from 'react';
-import * as adminService from '../../services/adminService';
-import { UserRole } from '../../types';
+import React, { useState, useEffect, useCallback } from 'react';
+import toast from 'react-hot-toast';
+import { getUsers, setUserStatus, deleteUser, inviteOperator, AdminUser, UserAccountStatus } from '../../services/adminService';
+import ConfirmationModal from './ConfirmationModal';
+import InviteOperatorModal from './InviteOperatorModal';
 
 const UserManagement: React.FC = () => {
-  const [users, setUsers] = useState<adminService.AdminUser[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isInviteModalOpen, setInviteModalOpen] = useState(false);
+  const [isInviting, setIsInviting] = useState(false);
+  const [modalState, setModalState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await adminService.getUsers();
+      const response = await getUsers();
       setUsers(response.users);
     } catch (err) {
-      setError('Failed to load user data.');
+      const errorMessage = 'Failed to load user data.';
+      setError(errorMessage);
+      toast.error(errorMessage);
       console.error(err);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [fetchUsers]);
 
-  const handleDeleteUser = async (userId: string, userName: string) => {
-    if (window.confirm(`Are you sure you want to permanently delete user: ${userName}? This action cannot be undone.`)) {
-      try {
-        await adminService.deleteUser(userId);
-        setUsers(prev => prev.filter(u => u.uid !== userId));
-      } catch (err) {
-        setError('Failed to delete user.');
-      }
-    }
+  const handleDeleteUser = (userId: string, userName: string) => {
+    setModalState({
+      isOpen: true,
+      title: 'Confirm User Deletion',
+      message: `Are you sure you want to permanently delete user: ${userName}? This action cannot be undone.`,
+      onConfirm: () => confirmDeleteUser(userId),
+    });
   };
 
-  const handleSetUserStatus = async (userId: string, currentStatus: boolean) => {
-    const newStatus: adminService.UserAccountStatus = currentStatus ? 'active' : 'disabled';
-    try {
-      await adminService.setUserStatus(userId, newStatus);
-      setUsers(prev => prev.map(u => u.uid === userId ? { ...u, disabled: newStatus === 'disabled' } : u));
-    } catch (err) {
-      setError('Failed to update user status.');
-    }
+  const confirmDeleteUser = useCallback(async (userId: string) => {
+    const promise = deleteUser(userId);
+
+    toast.promise(promise, {
+      loading: 'Deleting user...',
+      success: () => {
+        setUsers(prev => prev.filter(u => u.uid !== userId));
+        return 'User deleted successfully.';
+      },
+      error: 'Failed to delete user.',
+    });
+
+    closeModal();
+  }, []);
+
+  const handleSetUserStatus = useCallback((userId: string, newStatus: UserAccountStatus) => {
+    const originalUsers = users;
+    const optimisticNewUsers = users.map(u => u.uid === userId ? { ...u, disabled: newStatus === 'disabled' } : u);
+    setUsers(optimisticNewUsers);
+
+    // The backend expects a specific payload: { uid: string, status: 'active' | 'inactive' | 'suspended' }
+    // We map our frontend status ('disabled') to the backend's expected status ('inactive').
+    const backendStatus = newStatus === 'disabled' ? 'inactive' : 'active';
+
+    // We must also ensure the service function sends this object as the request body.
+    // The key for the user identifier must be `uid`, not `userId`.
+    const promise = setUserStatus({ uid: userId, status: backendStatus });
+
+    toast.promise(promise, {
+      loading: 'Updating user status...',
+      success: 'User status updated successfully.',
+      error: (err) => {
+        setUsers(originalUsers); // Revert on failure
+        console.error('Failed to set user status:', err);
+        return 'Failed to update user status.';
+      },
+    });
+  }, [users]);
+
+  const handleInviteOperator = async (name: string, email: string) => {
+    setIsInviting(true);
+    const promise = inviteOperator({ name, email });
+
+    toast.promise(promise, {
+      loading: 'Sending invitation...',
+      success: (newUser) => {
+        setUsers(prev => [newUser, ...prev]);
+        setInviteModalOpen(false);
+        return 'Operator invited successfully!';
+      },
+      error: (err: any) => {
+        // Attempt to provide a more specific error message from the server
+        return err.response?.data?.error || 'Failed to invite operator.';
+      },
+    }).finally(() => {
+      setIsInviting(false);
+    });
+  };
+
+  const closeModal = () => {
+    setModalState({ isOpen: false, title: '', message: '', onConfirm: () => {} });
   };
 
   if (loading) {
@@ -88,9 +156,23 @@ const UserManagement: React.FC = () => {
 
   return (
     <div className="animate-fade-in">
+      <ConfirmationModal
+        isOpen={modalState.isOpen}
+        title={modalState.title}
+        message={modalState.message}
+        onConfirm={modalState.onConfirm}
+        onCancel={closeModal}
+        isDestructive
+      />
+      <InviteOperatorModal
+        isOpen={isInviteModalOpen}
+        onClose={() => setInviteModalOpen(false)}
+        onInvite={handleInviteOperator}
+        isInviting={isInviting}
+      />
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold">User & Operator Management</h2>
-        <button className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold text-sm">Invite Operator</button>
+        <button onClick={() => setInviteModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold text-sm">Invite Operator</button>
       </div>
       <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
         <table className="w-full text-left">
@@ -120,7 +202,7 @@ const UserManagement: React.FC = () => {
                   </span>
                 </td>
                 <td className="px-6 py-4 flex gap-3">
-                  <button onClick={() => handleSetUserStatus(u.uid, !u.disabled)} className="text-yellow-400 hover:underline">
+                  <button onClick={() => handleSetUserStatus(u.uid, u.disabled ? 'active' : 'disabled')} className="text-yellow-400 hover:underline">
                     {u.disabled ? 'Enable' : 'Disable'}
                   </button>
                   <button onClick={() => handleDeleteUser(u.uid, u.displayName)} className="text-red-400 hover:underline">

@@ -132,7 +132,7 @@ const AddBoothsForm: React.FC<AddBoothsFormProps> = ({ onBoothAdded, onCancel })
                     <label className="block text-xs uppercase text-gray-500 mb-2 font-bold tracking-wider">Initial Slots</label>
                     <select name="initialSlots" value={formState.initialSlots} onChange={handleChange} className="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none">
                         <option value="4">4 Slots (Standard)</option>
-                        <option value="8">8 Slots (Large)</option>
+                        <option value="12">12 Slots (Large)</option>
                         <option value="15">15 Slots (Hub)</option>
                     </select>
                 </div>

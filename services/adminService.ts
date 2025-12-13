@@ -144,6 +144,19 @@ export const deleteBooth = async (boothUid: string): Promise<void> => {
 };
 
 /**
+ * Deletes a specific slot from a booth.
+ * @param boothUid The UID of the booth.
+ * @param slotIdentifier The identifier of the slot to delete.
+ */
+export const deleteBoothSlot = async (boothUid: string, slotIdentifier: string): Promise<void> => {
+  try {
+    await apiClient.delete(`/admin/booths/${boothUid}/slots/${slotIdentifier}`);
+  } catch (error) {
+    console.error(`Failed to delete slot ${slotIdentifier} from booth ${boothUid}:`, error);
+    throw error;
+  }
+};
+/**
  * The shape of a command to be sent to a slot.
  * Keys are command names, values are their parameters (often just `true`).
  */
@@ -219,11 +232,11 @@ export const setRole = async (userId: string, newRole: UserRole): Promise<void> 
  * @param userId The UID of the user to modify.
  * @param status The new status to set.
  */
-export const setUserStatus = async (userId: string, status: UserAccountStatus): Promise<void> => {
+export const setUserStatus = async (payload: { uid: string; status: string }): Promise<void> => {
   try {
-    await apiClient.put(`/admin/users/${userId}/status`, { disabled: status === 'disabled' });
+    await apiClient.post(`/admin/users/set-status`, payload);
   } catch (error) {
-    console.error(`Failed to set status for user ${userId}:`, error);
+    console.error(`Failed to set status for user ${payload.uid}:`, error);
     throw error;
   }
 };
@@ -333,6 +346,28 @@ export const resetBoothSlots = async (boothUid: string, slotIdentifier?: string)
   await apiClient.post(`/admin/booths/${boothUid}/reset-slots`, slotIdentifier ? { slotIdentifier } : {});
 };
 
+/**
+ * The data required to invite a new operator.
+ */
+export interface InviteOperatorData {
+  email: string;
+  name: string;
+}
+
+/**
+ * Invites a new operator to the system.
+ * @param inviteData The data for the new operator.
+ * @returns A promise that resolves with the newly created user.
+ */
+export const inviteOperator = async (inviteData: InviteOperatorData): Promise<AdminUser> => {
+  try {
+    const response = await apiClient.post<{ user: AdminUser }>('/admin/invite-operator', inviteData);
+    return response.data.user;
+  } catch (error) {
+    console.error('Failed to invite operator:', error);
+    throw error;
+  }
+};
 /**
  * The shape of the dashboard summary data.
  */

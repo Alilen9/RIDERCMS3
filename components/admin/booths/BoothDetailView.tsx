@@ -11,6 +11,7 @@ interface BoothDetailViewProps {
   getSlotStatusDisplay: (status: string | null | undefined) => { classes: string; text: string };
   onRefreshStatus: () => void;
   onResetSlots: () => void;
+  onDeleteSlot: (slotIdentifier: string) => void;
   onResetSlot: (slotIdentifier: string) => void;
   pendingCommands: Record<string, string | null>;
 }
@@ -24,6 +25,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
   getSlotStatusDisplay,
   onRefreshStatus,
   onResetSlots,
+  onDeleteSlot,
   onResetSlot,
   pendingCommands,
 }) => {
@@ -125,6 +127,12 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                               className="col-span-2 mt-2 bg-yellow-900/50 hover:bg-yellow-900/80 text-yellow-300 py-2 rounded text-xs font-bold border border-yellow-700/50"
                             >
                               Reset Slot
+                            </button>
+                            <button
+                              onClick={() => onDeleteSlot(slot.slotIdentifier)}
+                              className="col-span-2 mt-2 bg-red-900/50 hover:bg-red-900/80 text-red-300 py-2 rounded text-xs font-bold border border-red-700/50"
+                            >
+                              Delete Slot
                             </button>
                           </div>
                         </div>

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { QRCodeCanvas } from 'qrcode.react';
 import { Booth } from '@/types';
-import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, sendSlotCommand, SlotCommand, resetBoothSlots } from '../../../services/adminService';
+import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, sendSlotCommand, SlotCommand, resetBoothSlots, deleteBoothSlot } from '../../../services/adminService';
 import ConfirmationModal from '../ConfirmationModal';
 import BoothListView from './BoothListView';
 import BoothDetailView from './BoothDetailView';
@@ -65,6 +65,7 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
   const [pendingCommands, setPendingCommands] = useState<Record<string, string | null>>({});
   const [boothToReset, setBoothToReset] = useState<Booth | null>(null);
   const [slotToReset, setSlotToReset] = useState<{ booth: Booth, slotIdentifier: string } | null>(null);
+  const [slotToDelete, setSlotToDelete] = useState<{ booth: Booth, slotIdentifier: string } | null>(null);
 
   useEffect(() => {
     fetchBooths();
@@ -174,6 +175,27 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
     } finally {
       setSlotToReset(null); // Close the modal
     }
+  };
+
+  const handleConfirmDeleteSlot = async () => {
+    if (!slotToDelete) return;
+    const { booth, slotIdentifier } = slotToDelete;
+
+    const promise = deleteBoothSlot(booth.booth_uid, slotIdentifier);
+
+    toast.promise(promise, {
+      loading: `Deleting slot ${slotIdentifier}...`,
+      success: () => {
+        fetchBoothStatuses(); // Refresh statuses to reflect the deletion
+        return `Slot ${slotIdentifier} deleted successfully!`;
+      },
+      error: (err: any) => {
+        return err.response?.data?.error || 'Failed to delete slot.';
+      },
+    });
+
+    // Close the modal immediately
+    setSlotToDelete(null);
   };
 
   const handleSendCommand = async (slotIdentifier: string, command: SlotCommand) => {
@@ -310,6 +332,7 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
           getSlotStatusDisplay={getSlotStatusDisplay}
           onRefreshStatus={fetchBoothStatuses}
           onResetSlots={() => setBoothToReset(boothForDetails)}
+          onDeleteSlot={(slotIdentifier) => setSlotToDelete({ booth: boothForDetails, slotIdentifier })}
           onResetSlot={(slotIdentifier) => setSlotToReset({ booth: boothForDetails, slotIdentifier })}
           pendingCommands={pendingCommands}
         />
@@ -346,6 +369,15 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
         message={`Are you sure you want to reset slot "${slotToReset?.slotIdentifier}" in booth "${slotToReset?.booth.name}"? This will set the slot to 'available' and clear any linked battery data.`}
         onConfirm={handleResetSlot}
         onCancel={() => setSlotToReset(null)}
+        isDestructive={true}
+      />
+
+      <ConfirmationModal
+        isOpen={!!slotToDelete}
+        title="Delete Slot"
+        message={`Are you sure you want to permanently delete slot "${slotToDelete?.slotIdentifier}" from booth "${slotToDelete?.booth.name}"? This action is irreversible and will remove all associated data.`}
+        onConfirm={handleConfirmDeleteSlot}
+        onCancel={() => setSlotToDelete(null)}
         isDestructive={true}
       />
 
