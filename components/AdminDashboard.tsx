@@ -287,7 +287,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         {activeSection === 'users' && <UserManagement />}
         {activeSection === 'batteries' && renderBatteries()}
         {activeSection === 'sessions' && <SessionManagement />}
-        {activeSection === 'finance' && <FinanceManagement />}
+        
         {activeSection === 'settings' && <SystemConfig />}
         {activeSection === 'logs' && renderLogs()}
         {activeSection === 'simulation' && <SimulationTools />}
