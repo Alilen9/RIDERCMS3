@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Booth } from '../../types';
 import { getBooths } from '../../services/adminService';
 import toast from 'react-hot-toast';
-import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader, InfoWindow, MarkerF } from '@react-google-maps/api';
 
 interface NetworkMapProps {
   onBoothClick: (booth: Booth) => void;
@@ -71,28 +71,21 @@ const NetworkMap: React.FC<NetworkMapProps> = ({ onBoothClick }) => {
     setSearchResults(results.slice(0, 5)); // Limit to 5 results
   }, [searchTerm, booths]);
 
-  const createCustomIcon = (status: 'online' | 'offline' | 'maintenance' | string): google.maps.Icon => {
+  const CustomAdminMarker: React.FC<{ status: string }> = ({ status }) => {
     const color = status === 'online' ? '#10b981' : '#ef4444';
-    return {
-      url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
-        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
-          <style>
-            .pulse {
-              animation: pulse 1.5s infinite;
-            }
-            @keyframes pulse {
-              0% { transform: scale(0.5); opacity: 0.5; }
-              70% { transform: scale(1); opacity: 0; }
-              100% { transform: scale(1); opacity: 0; }
-            }
-          </style>
-          <circle cx="20" cy="20" r="16" fill="${color}" fill-opacity="0.3" class="pulse" />
-          <circle cx="20" cy="20" r="8" fill="${color}" />
-        </svg>`
-      )}`,
-      scaledSize: new window.google.maps.Size(40, 40),
-      anchor: new window.google.maps.Point(20, 20),
-    };
+    return (
+      <div style={{ width: 40, height: 40, position: 'relative', transform: 'translate(-50%, -50%)' }}>
+        <style>{`
+          .pulse-animation-admin { animation: pulse-admin 1.5s infinite; }
+          @keyframes pulse-admin {
+            0% { transform: scale(0.5); opacity: 0.5; }
+            70% { transform: scale(1); opacity: 0; }
+            100% { transform: scale(1); opacity: 0; }
+          }`}</style>
+        <div className="pulse-animation-admin" style={{ position: 'absolute', width: '100%', height: '100%', borderRadius: '50%', backgroundColor: color, opacity: 0.3 }} />
+        <div style={{ position: 'absolute', top: '50%', left: '50%', width: 16, height: 16, borderRadius: '50%', backgroundColor: color, transform: 'translate(-50%, -50%)' }} />
+      </div>
+    );
   };
 
   const handleSearchResultClick = (booth: Booth) => {
@@ -160,6 +153,7 @@ const NetworkMap: React.FC<NetworkMapProps> = ({ onBoothClick }) => {
         </div>
       ) : (
         <GoogleMap
+          // mapId="admin-dark-map" // A mapId is required for AdvancedMarker
           mapContainerStyle={mapContainerStyle}
           center={defaultCenter}
           zoom={10}
@@ -191,18 +185,17 @@ const NetworkMap: React.FC<NetworkMapProps> = ({ onBoothClick }) => {
           }}
         >
           {booths.map((booth) => (
-            <Marker
+            <MarkerF
               key={booth.booth_uid}
               position={{ lat: Number(booth.latitude), lng: Number(booth.longitude) }}
-              icon={createCustomIcon(booth.status)}
               onClick={() => {
                 onBoothClick(booth);
                 setSelectedBooth(booth);
                 setHoveredBooth(null); // Hide hover info window on click
               }}
-              onMouseOver={() => setHoveredBooth(booth)}
-              onMouseOut={() => setHoveredBooth(null)}
-            />
+            >
+              <CustomAdminMarker status={booth.status} />
+            </MarkerF>
           ))}
           {hoveredBooth && !selectedBooth && (
             <InfoWindow position={{ lat: Number(hoveredBooth.latitude), lng: Number(hoveredBooth.longitude) }} onCloseClick={() => setHoveredBooth(null)}>

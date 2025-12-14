@@ -1,12 +1,38 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { PublicBooth } from '../../services/boothService';
-import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader, MarkerF, InfoWindow } from '@react-google-maps/api';
 
 interface UserNetworkMapProps {
   booths: PublicBooth[];
   userLocation: { lat: number; lng: number } | null;
   onBoothClick: (booth: PublicBooth) => void;
 }
+
+// A dedicated component for the custom marker to be used with AdvancedMarker
+const CustomBoothMarker: React.FC<{ booth: PublicBooth }> = ({ booth }) => {
+  const isOnline = booth.status === 'online';
+  const hasAvailability = booth.availableSlots > 0;
+  const color = isOnline && hasAvailability ? '#10b981' : '#ef4444'; // Green if online & available, else red
+
+  return (
+    <div style={{ width: 40, height: 40, position: 'relative', transform: 'translate(-50%, -50%)' }}>
+      <style>
+        {`
+          .pulse-animation {
+            animation: pulse 1.5s infinite;
+          }
+          @keyframes pulse {
+            0% { transform: scale(0.5); opacity: 0.5; }
+            70% { transform: scale(1); opacity: 0; }
+            100% { transform: scale(1); opacity: 0; }
+          }
+        `}
+      </style>
+      <div className={isOnline && hasAvailability ? 'pulse-animation' : ''} style={{ position: 'absolute', width: '100%', height: '100%', borderRadius: '50%', backgroundColor: color, opacity: 0.3 }} />
+      <div style={{ position: 'absolute', top: '50%', left: '50%', width: 16, height: 16, borderRadius: '50%', backgroundColor: color, transform: 'translate(-50%, -50%)' }} />
+    </div>
+  );
+};
 
 const UserNetworkMap: React.FC<UserNetworkMapProps> = ({ booths, userLocation, onBoothClick }) => {
   const [selectedBooth, setSelectedBooth] = useState<PublicBooth | null>(null);
@@ -17,33 +43,6 @@ const UserNetworkMap: React.FC<UserNetworkMapProps> = ({ booths, userLocation, o
     id: 'user-google-map-script',
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ""
   });
-
-  const createCustomIcon = (booth: PublicBooth): google.maps.Icon => {
-    const isOnline = booth.status === 'online';
-    const hasAvailability = booth.availableSlots > 0;
-    const color = isOnline && hasAvailability ? '#10b981' : '#ef4444'; // Green if online & available, else red
-
-    return {
-      url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
-        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
-          <style>
-            .pulse {
-              animation: pulse 1.5s infinite;
-            }
-            @keyframes pulse {
-              0% { transform: scale(0.5); opacity: 0.5; }
-              70% { transform: scale(1); opacity: 0; }
-              100% { transform: scale(1); opacity: 0; }
-            }
-          </style>
-          <circle cx="20" cy="20" r="16" fill="${color}" fill-opacity="0.3" class="${isOnline && hasAvailability ? 'pulse' : ''}" />
-          <circle cx="20" cy="20" r="8" fill="${color}" />
-        </svg>`
-      )}`,
-      scaledSize: new window.google.maps.Size(40, 40),
-      anchor: new window.google.maps.Point(20, 20),
-    };
-  };
 
   const onLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
@@ -67,6 +66,7 @@ const UserNetworkMap: React.FC<UserNetworkMapProps> = ({ booths, userLocation, o
         </div>
       ) : (
         <GoogleMap
+          // mapId="user-dark-map" // A mapId is required for AdvancedMarker
           mapContainerStyle={mapContainerStyle}
           center={mapCenter}
           zoom={14}
@@ -97,20 +97,21 @@ const UserNetworkMap: React.FC<UserNetworkMapProps> = ({ booths, userLocation, o
             ]
           }}
         >
-          {userLocation && <Marker position={userLocation} title="Your Location" />}
+          {userLocation && <MarkerF position={userLocation} title="Your Location"/>}
           {booths.map((booth) => (
-            <Marker
+            <MarkerF
               key={booth.booth_uid}
               position={{ lat: booth.latitude, lng: booth.longitude }}
-              icon={createCustomIcon(booth)}
               onClick={() => {
                 onBoothClick(booth);
                 setSelectedBooth(booth);
                 setHoveredBooth(null);
               }}
-              onMouseOver={() => setHoveredBooth(booth)}
-              onMouseOut={() => setHoveredBooth(null)}
-            />
+              // onMouseOver and onMouseOut are not directly supported on AdvancedMarker
+              // The click handler is the primary interaction method.
+            >
+              <CustomBoothMarker booth={booth} />
+            </MarkerF>
           ))}
           {(hoveredBooth || selectedBooth) && (
             <InfoWindow
