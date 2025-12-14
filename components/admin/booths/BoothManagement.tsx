@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { QRCodeCanvas } from 'qrcode.react';
 import { Booth } from '@/types';
-import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, sendSlotCommand, SlotCommand, resetBoothSlots, deleteBoothSlot } from '../../../services/adminService';
+import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, sendSlotCommand, SlotCommand, resetBoothSlots, deleteBoothSlot, updateSlotStatus } from '../../../services/adminService';
 import ConfirmationModal from '../ConfirmationModal';
 import BoothListView from './BoothListView';
 import BoothDetailView from './BoothDetailView';
@@ -66,6 +66,14 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
   const [boothToReset, setBoothToReset] = useState<Booth | null>(null);
   const [slotToReset, setSlotToReset] = useState<{ booth: Booth, slotIdentifier: string } | null>(null);
   const [slotToDelete, setSlotToDelete] = useState<{ booth: Booth, slotIdentifier: string } | null>(null);
+  const [modalState, setModalState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    isDestructive?: boolean;
+  }>({ isOpen: false, title: '', message: '', onConfirm: () => {}, isDestructive: false });
+
 
   useEffect(() => {
     fetchBooths();
@@ -96,6 +104,7 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
   const fetchBoothStatuses = useCallback(async () => {
     try {
       const statuses = await getBoothStatus();
+      console.log('DEBUG: Fetched Booth Statuses:', statuses);
       setBoothStatuses(statuses);
     } catch (err) {
       console.error('Failed to fetch booth statuses:', err);
@@ -198,8 +207,50 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
     setSlotToDelete(null);
   };
 
+  const handleUpdateSlotStatus = async (boothUid: string, slotIdentifier: string, status: 'available' | 'disabled') => {
+    const promise = updateSlotStatus(boothUid, slotIdentifier, status);
+
+    console.log("Updating Slot Response: ", promise);
+
+    toast.promise(promise, {
+      loading: `Setting slot to ${status}...`,
+      success: () => {
+        fetchBoothStatuses(); // Refresh to show the change
+        return `Slot successfully set to ${status}.`;
+      },
+      error: (err: any) => {
+        return err.response?.data?.error || `Failed to update slot status.`;
+      }
+    });
+  };
+
+  const handleShowConfirmation = (action: () => void, title: string, message: string, isDestructive = false) => {
+    setModalState({
+      isOpen: true,
+      title,
+      message,
+      onConfirm: () => {
+        action();
+        closeConfirmationModal();
+      },
+      isDestructive,
+    });
+  };
+
+  const closeConfirmationModal = () => {
+    setModalState({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+  };
+
+
   const handleSendCommand = async (slotIdentifier: string, command: SlotCommand) => {
     if (!boothForDetails) return;
+
+    // Intercept 'enableSlot' and redirect to the correct handler
+    if ('enableSlot' in command) {
+      handleUpdateSlotStatus(boothForDetails.booth_uid, slotIdentifier, 'available');
+      return;
+    }
+
     const commandName = Object.keys(command)[0];
     setPendingCommands(prev => ({ ...prev, [slotIdentifier]: commandName }));
 
@@ -225,24 +276,30 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
     const loadingToast = toast.loading(loadingMessage);
 
     try {
-      await sendSlotCommand(boothForDetails.booth_uid, slotIdentifier, command);
+      const commandResponse = await sendSlotCommand(boothForDetails.booth_uid, slotIdentifier, command);
+      console.log(`DEBUG: Response from sending command '${Object.keys(command)[0]}' to slot ${slotIdentifier}:`, commandResponse);
+
       toast.dismiss(loadingToast);
       toast.success(getCommandMessage(command, 'success'));
-      // Add a small delay to allow hardware to report back, then refresh status.
-      setTimeout(() => {
-        toast.loading('Refreshing status...');
-        fetchBoothStatuses().then(() => toast.dismiss());
-      }, 1500);
+      
+      // Add a small delay to allow hardware to report back, then refresh status
+      setTimeout(async () => {
+        const refreshToast = toast.loading('Refreshing status...');
+        try {
+          await fetchBoothStatuses();
+        } finally {
+          toast.dismiss(refreshToast);
+          // Clear pending state for this slot only after refresh is complete
+          setPendingCommands(prev => ({ ...prev, [slotIdentifier]: null }));
+        }
+      }, 2000); // Increased delay to give hardware more time
     } catch (error) {
       toast.dismiss(loadingToast);
       const errorMessage = (error as any)?.response?.data?.error || (error as Error).message;
       const errorPrefix = getCommandMessage(command, 'error');
       toast.error(`${errorPrefix}: ${errorMessage}`);
-    } finally {
-      // Clear pending state for this slot after a short delay, regardless of outcome
-      setTimeout(() => {
-        setPendingCommands(prev => ({ ...prev, [slotIdentifier]: null }));
-      }, 2500); // A bit longer than the refresh delay
+      // Clear pending state immediately on failure
+      setPendingCommands(prev => ({ ...prev, [slotIdentifier]: null }));
     }
   };
 
@@ -335,6 +392,8 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
           onDeleteSlot={(slotIdentifier) => setSlotToDelete({ booth: boothForDetails, slotIdentifier })}
           onResetSlot={(slotIdentifier) => setSlotToReset({ booth: boothForDetails, slotIdentifier })}
           pendingCommands={pendingCommands}
+          onShowConfirmation={handleShowConfirmation}
+          onUpdateSlotStatus={(slotIdentifier, status) => handleUpdateSlotStatus(boothForDetails.booth_uid, slotIdentifier, status)}
         />
       ) : (
         <BoothListView
@@ -352,6 +411,16 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
         onConfirm={handleConfirmDelete}
         onCancel={() => setBoothToDelete(null)}
         isDestructive={true}
+      />
+      
+      <ConfirmationModal
+        isOpen={modalState.isOpen}
+        title={modalState.title}
+        message={modalState.message}
+        onConfirm={modalState.onConfirm}
+        onCancel={closeConfirmationModal}
+        isDestructive={modalState.isDestructive}
+        confirmButtonText={modalState.isDestructive ? 'Proceed' : 'Confirm'}
       />
 
       <ConfirmationModal

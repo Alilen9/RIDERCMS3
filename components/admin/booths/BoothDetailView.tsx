@@ -7,6 +7,7 @@ interface BoothDetailViewProps {
   boothStatus: AdminBoothStatus | undefined;
   onBack: () => void;
   onUpdateSlotStatus: (slotIdentifier: string, status: 'available' | 'disabled') => void;
+  onShowConfirmation: (action: () => void, title: string, message: string, isDestructive?: boolean) => void;
   onSendCommand: (slotIdentifier: string, command: SlotCommand) => void;
   formatTimeAgo: (timestamp: string | undefined | null) => string;
   getSlotStatusDisplay: (status: string | null | undefined) => { classes: string; text: string };
@@ -22,6 +23,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
   boothStatus,
   onBack,
   onUpdateSlotStatus,
+  onShowConfirmation,
   onSendCommand,
   formatTimeAgo,
   getSlotStatusDisplay,
@@ -31,6 +33,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
   onResetSlot,
   pendingCommands,
 }) => {
+
   return (
     <div className="animate-fade-in space-y-6">
       <div className="flex items-center gap-4 mb-6">
@@ -109,10 +112,20 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                         <div className="border-t border-gray-700/50 pt-3 mt-3">
                           <p className="text-xs font-bold text-gray-400 mb-2">Commands</p>
                           <div className="grid grid-cols-2 gap-2">
-                            <button onClick={() => onSendCommand(slot.slotIdentifier, { forceUnlock: true })} className="bg-gray-700 hover:bg-gray-600 py-2 rounded text-xs font-bold text-gray-300">
+                            <button onClick={() => {
+                              onSendCommand(slot.slotIdentifier, { forceUnlock: true });
+                              setTimeout(onRefreshStatus, 1500); // Refresh after a delay
+                            }}
+                              className="bg-gray-700 hover:bg-gray-600 py-2 rounded text-xs font-bold text-gray-300"
+                            >
                               Unlock
                             </button>
-                            <button onClick={() => onSendCommand(slot.slotIdentifier, { forceLock: true })} className="bg-gray-700 hover:bg-gray-600 py-2 rounded text-xs font-bold text-gray-300">
+                            <button onClick={() => {
+                              onSendCommand(slot.slotIdentifier, { forceLock: true });
+                              setTimeout(onRefreshStatus, 1500); // Refresh after a delay
+                            }}
+                              className="bg-gray-700 hover:bg-gray-600 py-2 rounded text-xs font-bold text-gray-300"
+                            >
                               Lock
                             </button>
                             {slot.status === 'charging' ? (
@@ -122,7 +135,12 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                             ) : (
                               slot.status === 'disabled' ? (
                                 <button
-                                  onClick={() => onUpdateSlotStatus(slot.slotIdentifier, 'available')}
+                                  onClick={() => onShowConfirmation(
+                                    () => onSendCommand(slot.slotIdentifier, { enableSlot: true }), // Assuming a command, or could be a direct status update
+                                    'Enable Slot?',
+                                    `Are you sure you want to enable slot ${slot.slotIdentifier}? This will make it available for new sessions.`,
+                                    false
+                                  )}
                                   className="col-span-2 bg-green-800 hover:bg-green-700 py-2 rounded text-xs font-bold text-white"
                                 >
                                   Enable Slot
@@ -140,7 +158,12 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                             </button>
                             {slot.status !== 'disabled' && (
                               <button
-                                onClick={() => onUpdateSlotStatus(slot.slotIdentifier, 'disabled')}
+                                onClick={() => onShowConfirmation(
+                                  () => onUpdateSlotStatus(slot.slotIdentifier, 'disabled'),
+                                  'Disable Slot?',
+                                  `Are you sure you want to disable slot ${slot.slotIdentifier}? This will prevent it from being used until it's re-enabled.`,
+                                  true
+                                )}
                                 className="col-span-2 bg-gray-700 hover:bg-gray-600 text-gray-300 py-2 rounded text-xs font-bold"
                               >
                                 Disable Slot
