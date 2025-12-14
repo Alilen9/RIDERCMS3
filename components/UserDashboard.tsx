@@ -8,6 +8,7 @@ import SessionSummary from './user/SessionSummary';
 import toast from 'react-hot-toast';
 import NetworkMap from './admin/NetworkMap';
 import ConfirmationModal from './admin/ConfirmationModal';
+import UserNetworkMap from './user/UserNetworkMap';
 
 interface UserDashboardProps {
   user: User;
@@ -35,7 +36,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
 
-  const handleMapBoothClick = (booth: { booth_uid: string }) => {
+  const handleMapBoothClick = (booth: boothService.PublicBooth) => {
     setManualBoothId(booth.booth_uid);
     setView('home');
   };
@@ -410,7 +411,11 @@ const handleSTKPush = async () => {
              <button onClick={() => setView('home')} className="absolute top-4 left-4 z-20 bg-gray-900/90 backdrop-blur text-white p-3 rounded-full shadow-lg pointer-events-auto border border-gray-700 active:scale-95 transition-transform">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
              </button>
-            <NetworkMap onBoothClick={handleMapBoothClick} />
+            <UserNetworkMap
+              booths={booths}
+              userLocation={userLocation}
+              onBoothClick={handleMapBoothClick}
+            />
           </div>
         )}
 

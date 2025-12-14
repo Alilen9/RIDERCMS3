@@ -1,59 +1,39 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Booth } from '../../types';
 import { getBooths } from '../../services/adminService';
 import toast from 'react-hot-toast';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import L, { LatLngBoundsExpression } from 'leaflet';
+import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api';
 
 interface NetworkMapProps {
   onBoothClick: (booth: Booth) => void;
 }
-
-// A helper component to programmatically change the map's view
-const ChangeView = ({ center, zoom }: { center: [number, number]; zoom: number }) => {
-  const map = useMap();
-  useEffect(() => {
-    if (center) {
-      map.flyTo(center, zoom, {
-        animate: true,
-        duration: 1.5,
-      });
-    }
-  }, [center, zoom, map]);
-  return null;
-};
-
-// A helper component to fit the map to a given set of bounds
-const FitBounds = ({ bounds }: { bounds: LatLngBoundsExpression | null }) => {
-  const map = useMap();
-  useEffect(() => {
-    if (bounds) {
-      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
-    }
-  }, [bounds, map]);
-  return null;
-};
 
 const NetworkMap: React.FC<NetworkMapProps> = ({ onBoothClick }) => {
   const [booths, setBooths] = useState<Booth[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<Booth[]>([]);
-  const [mapCenter, setMapCenter] = useState<[number, number]>([-1.286389, 36.817223]); // Default center
-  const [mapBounds, setMapBounds] = useState<LatLngBoundsExpression | null>(null);
+  const [selectedBooth, setSelectedBooth] = useState<Booth | null>(null);
+  const [hoveredBooth, setHoveredBooth] = useState<Booth | null>(null);
+
+  const mapRef = useRef<google.maps.Map | null>(null);
+
+  const { isLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+  });
 
   useEffect(() => {
     const fetchMapData = async () => {
       setLoading(true);
       try {
         const response = await getBooths();
-        console.log("Fetched booths for map:", response.booths);
+        console.log('NetworkMap: Fetched booth data from API:', response);
         const allBooths = response.booths;
-        
-        // Filter for booths that have coordinate data to display on the map
+
+        console.log(`NetworkMap: Retrieved ${allBooths.length} booths from API.`);
         const mappableBooths = response.booths.filter(b => b.latitude != null && b.longitude != null);
-        
+
         if (mappableBooths.length < allBooths.length) {
           console.warn(`NetworkMap: ${allBooths.length - mappableBooths.length} booth(s) could not be displayed due to missing coordinate data.`);
         }
@@ -61,8 +41,13 @@ const NetworkMap: React.FC<NetworkMapProps> = ({ onBoothClick }) => {
         setBooths(mappableBooths);
 
         if (mappableBooths.length > 0) {
-          const bounds = L.latLngBounds(mappableBooths.map(b => [Number(b.latitude), Number(b.longitude)]));
-          setMapBounds(bounds);
+          if (mapRef.current) {
+            const bounds = new window.google.maps.LatLngBounds();
+            mappableBooths.forEach(booth => {
+              bounds.extend(new window.google.maps.LatLng(Number(booth.latitude), Number(booth.longitude)));
+            });
+            mapRef.current.fitBounds(bounds);
+          }
         }
 
       } catch (err) {
@@ -86,24 +71,57 @@ const NetworkMap: React.FC<NetworkMapProps> = ({ onBoothClick }) => {
     setSearchResults(results.slice(0, 5)); // Limit to 5 results
   }, [searchTerm, booths]);
 
-  // Custom icon function to replicate the previous style
-  const createCustomIcon = (status: 'online' | 'offline' | 'maintenance' | string) => {
+  const createCustomIcon = (status: 'online' | 'offline' | 'maintenance' | string): google.maps.Icon => {
     const color = status === 'online' ? '#10b981' : '#ef4444';
-    return L.divIcon({
-      html: `<div style="background-color: ${color}; box-shadow: 0 0 15px ${color};" class="w-4 h-4 rounded-full"></div><div style="background-color: ${color};" class="absolute -inset-2 rounded-full opacity-20 animate-ping"></div>`,
-      className: 'relative',
-      iconSize: [16, 16],
-      iconAnchor: [8, 8],
-    });
+    return {
+      url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
+          <style>
+            .pulse {
+              animation: pulse 1.5s infinite;
+            }
+            @keyframes pulse {
+              0% { transform: scale(0.5); opacity: 0.5; }
+              70% { transform: scale(1); opacity: 0; }
+              100% { transform: scale(1); opacity: 0; }
+            }
+          </style>
+          <circle cx="20" cy="20" r="16" fill="${color}" fill-opacity="0.3" class="pulse" />
+          <circle cx="20" cy="20" r="8" fill="${color}" />
+        </svg>`
+      )}`,
+      scaledSize: new window.google.maps.Size(40, 40),
+      anchor: new window.google.maps.Point(20, 20),
+    };
   };
 
   const handleSearchResultClick = (booth: Booth) => {
     if (booth.latitude && booth.longitude) {
-      setMapCenter([Number(booth.latitude), Number(booth.longitude)]);
+      mapRef.current?.panTo({ lat: Number(booth.latitude), lng: Number(booth.longitude) });
+      mapRef.current?.setZoom(16);
+      setSelectedBooth(booth);
       setSearchTerm('');
       setSearchResults([]);
     }
   };
+
+  const onLoad = useCallback(function callback(map: google.maps.Map) {
+    mapRef.current = map;
+    if (booths.length > 0) {
+      const bounds = new window.google.maps.LatLngBounds();
+      booths.forEach(booth => {
+        bounds.extend(new window.google.maps.LatLng(Number(booth.latitude), Number(booth.longitude)));
+      });
+      map.fitBounds(bounds);
+    }
+  }, [booths]);
+
+  const onUnmount = useCallback(function callback() {
+    mapRef.current = null;
+  }, []);
+
+  const mapContainerStyle = { width: '100%', height: '100%' };
+  const defaultCenter = { lat: -1.286389, lng: 36.817223 };
 
   return <div className="animate-fade-in h-[calc(100vh-140px)] flex flex-col">
     <div className="flex justify-between items-center mb-6">
@@ -135,47 +153,75 @@ const NetworkMap: React.FC<NetworkMapProps> = ({ onBoothClick }) => {
       </div>
     </div>
     <div className="flex-1 bg-gray-900 rounded-xl border border-gray-700 relative overflow-hidden">
-      {loading ? (
+      {loading || !isLoaded ? (
         <div className="absolute inset-0 flex items-center justify-center text-gray-500">
           <div className="w-8 h-8 border-4 border-gray-700 border-t-emerald-500 rounded-full animate-spin"></div>
-          <p className="ml-4">Loading Booth Locations...</p>
+          <p className="ml-4">{!isLoaded ? "Loading Google Maps..." : "Loading Booth Locations..."}</p>
         </div>
       ) : (
-        <MapContainer
-          center={mapCenter}
-          zoom={13}
-          scrollWheelZoom={true}
-          className="w-full h-full"
-          style={{ backgroundColor: '#111827' }}
+        <GoogleMap
+          mapContainerStyle={mapContainerStyle}
+          center={defaultCenter}
+          zoom={10}
+          onLoad={onLoad}
+          onUnmount={onUnmount}
+          options={{
+            disableDefaultUI: true,
+            zoomControl: true,
+            styles: [ // Dark mode map style
+              { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+              { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+              { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+              { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+              { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+              { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#263c3f" }] },
+              { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#6b9a76" }] },
+              { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
+              { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#212a37" }] },
+              { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#9ca5b3" }] },
+              { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#746855" }] },
+              { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1f2835" }] },
+              { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#f3d19c" }] },
+              { featureType: "transit", elementType: "geometry", stylers: [{ color: "#2f3948" }] },
+              { featureType: "transit.station", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+              { featureType: "water", elementType: "geometry", stylers: [{ color: "#17263c" }] },
+              { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#515c6d" }] },
+              { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#17263c" }] },
+            ]
+          }}
         >
-          <ChangeView center={mapCenter} zoom={16} />
-          <FitBounds bounds={mapBounds} />
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-          />
           {booths.map((booth) => (
             <Marker
               key={booth.booth_uid}
-              position={[Number(booth.latitude), Number(booth.longitude)]}
+              position={{ lat: Number(booth.latitude), lng: Number(booth.longitude) }}
               icon={createCustomIcon(booth.status)}
-              eventHandlers={{
-                click: () => {
-                  onBoothClick(booth);
-                },
+              onClick={() => {
+                onBoothClick(booth);
+                setSelectedBooth(booth);
+                setHoveredBooth(null); // Hide hover info window on click
               }}
-            >
-              <Popup>
-                <div className="bg-gray-800 text-white p-0 m-[-12px] rounded-lg">
-                  <div className="p-2">
-                    <p className="font-bold text-sm">{booth.name}</p>
-                    <p className="text-xs text-gray-400">{booth.location_address}</p>
-                  </div>
-                </div>
-              </Popup>
-            </Marker>
+              onMouseOver={() => setHoveredBooth(booth)}
+              onMouseOut={() => setHoveredBooth(null)}
+            />
           ))}
-        </MapContainer>
+          {hoveredBooth && !selectedBooth && (
+            <InfoWindow position={{ lat: Number(hoveredBooth.latitude), lng: Number(hoveredBooth.longitude) }} onCloseClick={() => setHoveredBooth(null)}>
+              <div className="p-1 text-black">
+                <p className="font-bold text-sm">{hoveredBooth.name}</p>
+                <p className="text-xs text-gray-600">Total Slots: {hoveredBooth.slotCount ?? 'N/A'}</p>
+                <p className="text-xs text-gray-600">Availability: {hoveredBooth.status ?? 'N/A'}</p>
+              </div>
+            </InfoWindow>
+          )}
+          {selectedBooth && (
+            <InfoWindow position={{ lat: Number(selectedBooth.latitude), lng: Number(selectedBooth.longitude) }} onCloseClick={() => setSelectedBooth(null)}>
+              <div className="p-1 text-black">
+                <p className="font-bold text-sm">{selectedBooth.name}</p>
+                <p className="text-xs text-gray-600">{selectedBooth.location_address}</p>
+              </div>
+            </InfoWindow>
+          )}
+        </GoogleMap>
       )}
     </div>
   </div>

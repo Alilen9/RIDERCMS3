@@ -12,6 +12,7 @@ export interface PublicBooth {
   latitude: number;
   longitude: number;
   availableSlots: number;
+  status: string;
 }
 
 //================================================================
