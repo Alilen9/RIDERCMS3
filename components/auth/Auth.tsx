@@ -143,17 +143,11 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       // Step 2: Register the user in our backend.
       await authService.register({ ...data, recaptchaToken });
 
-      toast.success('Registration successful! Logging you in...');
-
-      // Step 3: Sign in with the credentials just used for registration
-      await signInWithEmailAndPassword(auth, data.email, data.password);
-
-      // Step 4: Fetch the user profile from our backend
-      const userProfile = await authService.getUserProfile();
-
-      // Step 5: Log the user in
-      onLogin(userProfile);
-
+      // Display the success message from the backend (e.g., "pending admin approval")
+      toast.success('Registration successful! Your account is pending admin approval.', { duration: 6000 });
+      
+      // Switch back to login mode and clear the form
+      switchMode('login');
     } catch (err: any) {
       let errorMessage = 'Registration failed. Please try again.';
       if (err.response?.status === 409 && err.response?.data?.error) {
@@ -162,8 +156,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         errorMessage = err.response.data.message;
       } else if (err.message.includes('reCAPTCHA')) {
         errorMessage = err.message;
-      } else {
-        console.error('OTP Request Error:', err); // Log the full error for debugging
       }
       toast.error(errorMessage);
     }

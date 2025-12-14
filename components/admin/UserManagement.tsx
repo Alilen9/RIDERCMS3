@@ -58,14 +58,18 @@ const UserManagement: React.FC = () => {
     toast.promise(promise, {
       loading: 'Deleting user...',
       success: () => {
-        setUsers(prev => prev.filter(u => u.uid !== userId));
+        // Refetch the user list to ensure the UI is in sync with the backend
+        fetchUsers();
         return 'User deleted successfully.';
       },
-      error: 'Failed to delete user.',
+      error: (err: any) => {
+        // Provide more specific feedback based on the server's response
+        return err.response?.data?.error || 'Failed to delete user. The user may have already been removed.';
+      },
     });
 
     closeModal();
-  }, []);
+  }, [fetchUsers]);
 
   const handleSetUserStatus = useCallback(async (userId: string, newStatus: UserAccountStatus) => {
     const backendStatus = newStatus === 'disabled' ? 'inactive' : 'active';
