@@ -157,6 +157,18 @@ export const deleteBoothSlot = async (boothUid: string, slotIdentifier: string):
   }
 };
 /**
+ * Updates the status of a specific booth slot (e.g., to enable or disable it).
+ * @param boothUid The UID of the target booth.
+ * @param slotIdentifier The identifier of the target slot.
+ * @param status The new status to set for the slot.
+ */
+export const updateSlotStatus = async (boothUid: string, slotIdentifier: string, status: 'available' | 'disabled'): Promise<{ message: string, slot: any }> => {
+  const response = await apiClient.post(`/admin/booths/${boothUid}/slots/${slotIdentifier}/status`, { status });
+  return response.data;
+};
+
+
+/**
  * The shape of a command to be sent to a slot.
  * Keys are command names, values are their parameters (often just `true`).
  */

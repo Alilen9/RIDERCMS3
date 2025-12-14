@@ -6,6 +6,7 @@ interface BoothDetailViewProps {
   booth: Booth;
   boothStatus: AdminBoothStatus | undefined;
   onBack: () => void;
+  onUpdateSlotStatus: (slotIdentifier: string, status: 'available' | 'disabled') => void;
   onSendCommand: (slotIdentifier: string, command: SlotCommand) => void;
   formatTimeAgo: (timestamp: string | undefined | null) => string;
   getSlotStatusDisplay: (status: string | null | undefined) => { classes: string; text: string };
@@ -20,6 +21,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
   booth,
   boothStatus,
   onBack,
+  onUpdateSlotStatus,
   onSendCommand,
   formatTimeAgo,
   getSlotStatusDisplay,
@@ -118,6 +120,14 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                                 Stop Charging
                               </button>
                             ) : (
+                              slot.status === 'disabled' ? (
+                                <button
+                                  onClick={() => onUpdateSlotStatus(slot.slotIdentifier, 'available')}
+                                  className="col-span-2 bg-green-800 hover:bg-green-700 py-2 rounded text-xs font-bold text-white"
+                                >
+                                  Enable Slot
+                                </button>
+                              ) :
                               <button onClick={() => onSendCommand(slot.slotIdentifier, { startCharging: true })} className="col-span-2 bg-blue-800 hover:bg-blue-700 py-2 rounded text-xs font-bold text-white">
                                 Start Charging
                               </button>
@@ -128,6 +138,14 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                             >
                               Reset Slot
                             </button>
+                            {slot.status !== 'disabled' && (
+                              <button
+                                onClick={() => onUpdateSlotStatus(slot.slotIdentifier, 'disabled')}
+                                className="col-span-2 bg-gray-700 hover:bg-gray-600 text-gray-300 py-2 rounded text-xs font-bold"
+                              >
+                                Disable Slot
+                              </button>
+                            )}
                             <button
                               onClick={() => onDeleteSlot(slot.slotIdentifier)}
                               className="col-span-2 mt-2 bg-red-900/50 hover:bg-red-900/80 text-red-300 py-2 rounded text-xs font-bold border border-red-700/50"
