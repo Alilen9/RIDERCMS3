@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { getSessions, AdminSession, SessionFilters } from '../../services/adminService';
+import ConfirmationModal from './ConfirmationModal';
 import { format } from 'date-fns';
 
 const SESSIONS_PER_PAGE = 15;
@@ -16,6 +17,17 @@ const SessionManagement: React.FC = () => {
     sessionType: '',
   });
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(filters.searchTerm);
+  const [modalState, setModalState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
 
   // Debounce search term
   useEffect(() => {
@@ -28,7 +40,7 @@ const SessionManagement: React.FC = () => {
     };
   }, [filters.searchTerm]);
 
-  useEffect(() => {
+  const fetchSessionsData = useCallback(async () => {
     const fetchSessionsData = async () => {
       setIsLoading(true);
       try {
@@ -49,13 +61,43 @@ const SessionManagement: React.FC = () => {
     };
 
     fetchSessionsData();
-  }, [currentPage, debouncedSearchTerm, filters.status, filters.sessionType]);
+  }, [currentPage, debouncedSearchTerm, filters.status, filters.sessionType, setIsLoading, setSessions, setTotalSessions]);
+
+  useEffect(() => {
+    fetchSessionsData();
+  }, [fetchSessionsData]);
 
   // Reset to page 1 when filters change
   useEffect(() => {
     if (currentPage !== 1) setCurrentPage(1);
   }, [debouncedSearchTerm, filters.status, filters.sessionType]);
 
+
+  const handleDeleteSession = (session: AdminSession) => {
+    setModalState({
+      isOpen: true,
+      title: 'Confirm Session Deletion',
+      message: `Are you sure you want to permanently delete session ID ${session.id} for user ${session.userEmail}? This will also reset the associated slot. This action cannot be undone.`,
+      onConfirm: () => confirmDeleteSession(session.id),
+    });
+  };
+
+  const confirmDeleteSession = async (sessionId: number) => {
+    // We need to add `deleteSession` to `adminService.ts`
+    // For now, we assume it exists and looks like: `export const deleteSession = (id) => api.delete(`/admin/sessions/${id}`);`
+    const promise = (window as any).adminService.deleteSession(sessionId);
+
+    toast.promise(promise, {
+      loading: 'Deleting session...',
+      success: () => {
+        fetchSessionsData(); // Refetch data to update the list
+        return 'Session deleted successfully.';
+      },
+      error: (err: any) => err.response?.data?.error || 'Failed to delete session.',
+    });
+
+    closeModal();
+  };
 
   const totalPages = Math.ceil(totalSessions / SESSIONS_PER_PAGE);
 
@@ -76,8 +118,17 @@ const SessionManagement: React.FC = () => {
     return <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${classes}`}>{status.replace('_', ' ')}</span>;
   };
 
+  const closeModal = () => {
+    setModalState({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+  };
+
   return (
     <div className="animate-fade-in">
+      <ConfirmationModal
+        isOpen={modalState.isOpen}
+        title={modalState.title} message={modalState.message}
+        onConfirm={modalState.onConfirm} onCancel={closeModal}
+        isDestructive />
       {/* Filter Controls */}
       <div className="mb-6 p-4 bg-gray-800/50 rounded-xl border border-gray-700 flex flex-col md:flex-row gap-4">
         <input
@@ -117,19 +168,22 @@ const SessionManagement: React.FC = () => {
           <table className="w-full text-left min-w-[1000px]">
             <thead className="bg-gray-900/70 text-gray-400 text-xs uppercase">
               <tr>
+                <th className="px-4 py-3">Session ID</th>
                 <th className="px-4 py-3">User</th>
                 <th className="px-4 py-3">Type</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Amount</th>
                 <th className="px-4 py-3">Booth / Slot</th>
-                <th className="px-4 py-3">Battery</th>
+                <th className="px-4 py-3">Battery UID</th>
                 <th className="px-4 py-3">Date Initiated</th>
+                <th className="px-4 py-3">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800 text-sm">
               {isLoading ? (
                 [...Array(SESSIONS_PER_PAGE)].map((_, index) => (
                   <tr key={index} className="animate-pulse">
+                    <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-1/2"></div></td>
                     <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-3/4"></div></td>
                     <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-1/2"></div></td>
                     <td className="px-4 py-3"><div className="h-6 bg-gray-700 rounded-full w-24"></div></td>
@@ -140,11 +194,13 @@ const SessionManagement: React.FC = () => {
                     </td>
                     <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-3/4"></div></td>
                     <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-1/2"></div></td>
+                    <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-16"></div></td>
                   </tr>
                 ))
               ) : sessions.length > 0 ? (
                 sessions.map(session => (
                 <tr key={session.id} className="hover:bg-gray-800/60">
+                  <td className="px-4 py-3 font-mono text-xs text-gray-500">{session.id}</td>
                   <td className="px-4 py-3 text-gray-300">{session.userEmail || 'N/A'}</td>
                   <td className="px-4 py-3 capitalize">{session.sessionType}</td>
                   <td className="px-4 py-3">{renderStatusBadge(session.status)}</td>
@@ -159,11 +215,21 @@ const SessionManagement: React.FC = () => {
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-gray-400">{session.batteryUid ? `${session.batteryUid.substring(0, 12)}...` : 'N/A'}</td>
                   <td className="px-4 py-3 text-gray-400">{formatDate(session.createdAt)}</td>
+                  <td className="px-4 py-3 flex items-center gap-3">
+                    {session.status === 'completed' && session.sessionType === 'withdrawal' && (
+                      <button onClick={() => toast.error('Refund functionality not yet implemented.')} className="text-yellow-400 hover:text-yellow-300 hover:underline text-xs font-semibold">
+                        Refund
+                      </button>
+                    )}
+                    <button onClick={() => handleDeleteSession(session)} className="text-red-500 hover:text-red-400 hover:underline text-xs font-semibold">
+                      Delete
+                    </button>
+                  </td>
                 </tr>
               ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-gray-500">No sessions match the current filters.</td>
+                  <td colSpan={9} className="text-center py-12 text-gray-500">No sessions match the current filters.</td>
                 </tr>
               )}
             </tbody>
