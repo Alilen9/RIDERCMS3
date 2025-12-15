@@ -34,6 +34,19 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
   pendingCommands,
 }) => {
 
+  // Merge administrative slot data (from `booth`) with live telemetry data (from `boothStatus`).
+  // This ensures the administrative status (like 'disabled') is respected over the live status.
+  const mergedSlots = React.useMemo(() => {
+    if (!boothStatus?.slots) {
+      return [];
+    }
+    return boothStatus.slots.map(liveSlot => {
+      const adminSlot = booth.slots.find(s => s.identifier === liveSlot.slotIdentifier);
+      // Combine live data with admin data, giving precedence to the admin status.
+      return { ...liveSlot, status: adminSlot?.status || liveSlot.status };
+    });
+  }, [booth, boothStatus]);
+
   return (
     <div className="animate-fade-in space-y-6">
       <div className="flex items-center gap-4 mb-6">
@@ -66,8 +79,8 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
       {/* Slot Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
         {boothStatus ? (
-          boothStatus.slots.length > 0 ? (
-            boothStatus.slots.map(slot => (
+          mergedSlots.length > 0 ? (
+            mergedSlots.map(slot => (
               <div key={slot.slotIdentifier} className={`relative bg-gray-800 border ${slot.status === 'booting' ? 'border-red-500' : 'border-gray-700'} rounded-xl overflow-hidden`}>
                 {(() => {
                   const { classes, text } = getSlotStatusDisplay(slot.status);
