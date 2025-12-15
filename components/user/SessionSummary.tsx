@@ -24,7 +24,7 @@ const SessionSummary: React.FC<SessionSummaryProps> = ({
       </div>
       <div className="flex justify-between mt-4 pt-4 border-t border-gray-700 text-lg font-bold">
         <span>Total Due</span>
-        <span className="text-emerald-400">KES {totalCost.toFixed(2)}</span>
+        <span className="text-emerald-400">KES {totalCost}</span>
       </div>
     </div>
   );

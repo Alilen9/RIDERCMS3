@@ -95,8 +95,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
         setWithdrawalSessionId(pendingWithdrawal.sessionId);
         setWithdrawalCost(pendingWithdrawal.amount);
         setWithdrawalDuration(pendingWithdrawal.durationMinutes);
-        setWithdrawalEnergy(pendingWithdrawal.energyDelivered);
-        console.log(pendingWithdrawal.energyDelivered);
+        setWithdrawalEnergy(pendingWithdrawal.soc);
         setView('billing');
         return; // Session restored, stop here.
       }
@@ -303,7 +302,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
       setWithdrawalSessionId(response.sessionId);
       setWithdrawalCost(response.amount);
       setWithdrawalDuration(response.durationMinutes);
-      setWithdrawalEnergy(response.energyDelivered);
+      setWithdrawalEnergy(response.soc);
       setView('billing');
       setPaymentStatus('idle');
     } catch (err) {

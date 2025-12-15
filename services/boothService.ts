@@ -44,6 +44,18 @@ export interface MyBatteryStatusResponse {
 }
 
 /**
+ * The shape of the pricing rules object.
+ */
+interface PricingRules {
+  cost_per_kwh: number;
+  base_swap_fee: number;
+  cost_per_charge_percent: number;
+  overtime_penalty_per_min: number;
+  overtime_penalty_per_minute: number;
+}
+
+
+/**
  * Response from initiating a withdrawal, which triggers an STK push.
  * POST /api/booths/initiate-withdrawal
  * This is now a two-step process. This is the first step.
@@ -52,7 +64,12 @@ export interface InitiateWithdrawalResponse {
   sessionId: number;
   amount: number;
   durationMinutes: number;
-  energyDelivered: number;
+  soc: number;
+  initialCharge: number;
+  baseSwapFee: number;
+  costPerChargePercent: number;
+  depositCompletedAt: string;
+  pricingRules: PricingRules;
 }
 
 /**
