@@ -41,7 +41,7 @@ const UserNetworkMap: React.FC<UserNetworkMapProps> = ({ booths, userLocation, o
 
   const { isLoaded } = useJsApiLoader({
     id: 'user-google-map-script',
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ""
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyCD1_cfwN7m0a5R_NxXclDNK-S1gw7NZgk"
   });
 
   const onLoad = useCallback((map: google.maps.Map) => {
