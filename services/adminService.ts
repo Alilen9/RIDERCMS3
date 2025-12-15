@@ -99,6 +99,9 @@ export interface AppSettings {
 export interface CreateBoothData {
   name: string;
   locationAddress: string;
+  latitude?: number;
+  longitude?: number;
+  initialSlots: number;
 }
 
 /**

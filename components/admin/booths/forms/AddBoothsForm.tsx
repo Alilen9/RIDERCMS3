@@ -15,8 +15,8 @@ const AddBoothsForm: React.FC<AddBoothsFormProps> = ({ onBoothAdded, onCancel })
   const [formState, setFormState] = useState({
     name: '',
     location: '',
-    lat: '',
-    lng: '',
+    latitude: '',
+    longitude: '',
     initialSlots: '4',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -24,8 +24,8 @@ const AddBoothsForm: React.FC<AddBoothsFormProps> = ({ onBoothAdded, onCancel })
   const [errors, setErrors] = useState({
     name: '',
     location: '',
-    lat: '',
-    lng: '',
+    latitude: '',
+    longitude: '',
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -38,7 +38,7 @@ const AddBoothsForm: React.FC<AddBoothsFormProps> = ({ onBoothAdded, onCancel })
   };
 
   const validate = (): boolean => {
-    const newErrors = { name: '', location: '', lat: '', lng: '' };
+    const newErrors = { name: '', location: '', latitude: '', longitude: '' };
     let isValid = true;
 
     if (!formState.name.trim()) {
@@ -63,6 +63,9 @@ const AddBoothsForm: React.FC<AddBoothsFormProps> = ({ onBoothAdded, onCancel })
     try {
       const result = await createBooth({
         name: formState.name,
+        latitude: formState.latitude ? parseFloat(formState.latitude) : undefined,
+        longitude: formState.longitude ? parseFloat(formState.longitude) : undefined,
+        initialSlots: parseInt(formState.initialSlots, 10),
         locationAddress: formState.location, // Maps frontend 'location' to backend 'locationAddress'
       });
 
@@ -124,8 +127,8 @@ const AddBoothsForm: React.FC<AddBoothsFormProps> = ({ onBoothAdded, onCancel })
                 </div>
                 
                 <div className="grid grid-cols-2 gap-6">
-                    <Input label="Latitude" name="lat" type="number" step="any" value={formState.lat} onChange={handleChange} placeholder="e.g. 1.2921" />
-                    <Input label="Longitude" name="lng" type="number" step="any" value={formState.lng} onChange={handleChange} placeholder="e.g. 36.8219" />
+                    <Input label="Latitude" name="latitude" type="number" step="any" value={formState.latitude} onChange={handleChange} placeholder="e.g. 1.2921" />
+                    <Input label="Longitude" name="longitude" type="number" step="any" value={formState.longitude} onChange={handleChange} placeholder="e.g. 36.8219" />
                 </div>
 
                 <div>
