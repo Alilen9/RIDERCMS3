@@ -83,6 +83,7 @@ export interface ListTransactionsResponse {
  */
 export interface AppSettings {
   pricing?: {
+    cost_per_charge_percent: number;
     base_swap_fee: number;
     cost_per_kwh: number;
     overtime_penalty_per_min: number;
