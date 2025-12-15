@@ -214,8 +214,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
           setPaymentStatus("success");
 
           // Open the slot and guide the user to collect
-          await boothService.openForCollection(checkoutRequestId);
-          setTimeout(() => setView("collect_guide"), 1500);
+          //await boothService.openForCollection(checkoutRequestId);
+          setView("collect_guide");
         }
         // If status is 'pending' or something else, we just let the interval run again.
         // If it's 'failed', the backend should handle it, but we could add a check here.
@@ -337,7 +337,7 @@ const handleSTKPush = async () => {
     setCheckoutRequestId('');
     setWithdrawalCost(0);
     setWithdrawalDuration(0);
-    setView('home');
+    setView('scan_qr');
   };
 
   // Gemini AI
