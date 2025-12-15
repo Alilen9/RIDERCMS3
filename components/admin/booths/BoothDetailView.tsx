@@ -68,7 +68,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
         {boothStatus ? (
           boothStatus.slots.length > 0 ? (
             boothStatus.slots.map(slot => (
-              <div key={slot.slotIdentifier} className={`relative bg-gray-800 border ${slot.status === 'faulty' ? 'border-red-500' : 'border-gray-700'} rounded-xl overflow-hidden`}>
+              <div key={slot.slotIdentifier} className={`relative bg-gray-800 border ${slot.status === 'booting' ? 'border-red-500' : 'border-gray-700'} rounded-xl overflow-hidden`}>
                 {(() => {
                   const { classes, text } = getSlotStatusDisplay(slot.status);
                   const pendingCommand = pendingCommands[slot.slotIdentifier];
@@ -95,7 +95,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                           {isRelayCommandPending ? (
                             <span className="text-xs font-semibold text-yellow-400 animate-pulse">Updating...</span>
                           ) : (
-                            <span className={`font-semibold ${slot.relayState === 'on' ? 'text-blue-400' : 'text-gray-600'}`}>{slot.relayState?.toUpperCase() || 'N/A'}</span>
+                            <span className={`font-semibold ${slot.telemetry.relayOn === true ? 'text-blue-400' : 'text-gray-600'}`}>{slot.telemetry.relayOn ? 'ON' : 'OFF'.toUpperCase() || 'N/A'}</span>
                           )}
                         </div>
                         <div className="flex justify-between text-sm">
@@ -128,7 +128,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                             >
                               Lock
                             </button>
-                            {slot.status === 'charging' ? (
+                            {slot.telemetry.relayOn === true ? (
                               <button onClick={() => onSendCommand(slot.slotIdentifier, { stopCharging: true })} className="col-span-2 bg-red-800 hover:bg-red-700 py-2 rounded text-xs font-bold text-white">
                                 Stop Charging
                               </button>
@@ -189,9 +189,18 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
             </div>
           )
         ) : (
-          <div className="col-span-full text-center py-12 text-gray-500">
-            <div className="w-6 h-6 border-2 border-gray-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p>Loading slot details...</p>
+          <div className="col-span-full text-center py-12 bg-gray-800/50 border border-dashed border-red-700/50 rounded-xl">
+            <div className="text-red-500 mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <p className="font-semibold text-red-400">Failed to Load Station Status</p>
+            <p className="text-sm text-gray-400 mt-1 mb-4">The server could not retrieve live data for this station.</p>
+            <button onClick={onRefreshStatus} className="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 mx-auto">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M20 4h-5v5M4 20h5v-5" /></svg>
+              Retry
+            </button>
           </div>
         )}
       </div>

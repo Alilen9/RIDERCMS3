@@ -108,6 +108,7 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
       setBoothStatuses(statuses);
     } catch (err) {
       console.error('Failed to fetch booth statuses:', err);
+      toast.error('Could not retrieve live station statuses. Displaying cached data only.', { duration: 5000 });
     }
   }, []);
 

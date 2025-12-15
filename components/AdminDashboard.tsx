@@ -286,8 +286,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         {activeSection === 'editBooth' && boothToEdit && <EditBoothsForm boothToEdit={boothToEdit} onBoothUpdated={handleBoothUpdated} onCancel={() => setActiveSection('stations')} />}
         {activeSection === 'users' && <UserManagement />}
         {activeSection === 'batteries' && renderBatteries()}
-        {activeSection === 'sessions' && <SessionManagement />}
-        
+        {activeSection === 'sessions' && <SessionManagement />}      
         {activeSection === 'settings' && <SystemConfig />}
         {activeSection === 'logs' && renderLogs()}
         {activeSection === 'simulation' && <SimulationTools />}

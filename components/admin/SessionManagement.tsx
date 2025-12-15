@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { getSessions, AdminSession, SessionFilters } from '../../services/adminService';
+import { getSessions, AdminSession, SessionFilters, deleteSession } from '../../services/adminService';
 import ConfirmationModal from './ConfirmationModal';
 import { format } from 'date-fns';
 
@@ -41,27 +41,23 @@ const SessionManagement: React.FC = () => {
   }, [filters.searchTerm]);
 
   const fetchSessionsData = useCallback(async () => {
-    const fetchSessionsData = async () => {
-      setIsLoading(true);
-      try {
-        const offset = (currentPage - 1) * SESSIONS_PER_PAGE;
-        const activeFilters = {
-          ...filters,
-          searchTerm: debouncedSearchTerm,
-        };
-        const { sessions: fetchedSessions, total } = await getSessions(SESSIONS_PER_PAGE, offset, activeFilters);
-        setSessions(fetchedSessions);
-        setTotalSessions(total);
-      } catch (error) {
-        toast.error('Failed to fetch sessions.');
-        console.error(error);
-      } finally {
-        setIsLoading(false);
-      }
+    setIsLoading(true);
+    try {
+      const offset = (currentPage - 1) * SESSIONS_PER_PAGE;
+      const activeFilters = {
+        ...filters,
+        searchTerm: debouncedSearchTerm,
+      };
+      const { sessions: fetchedSessions, total } = await getSessions(SESSIONS_PER_PAGE, offset, activeFilters);
+      setSessions(fetchedSessions);
+      setTotalSessions(total);
+    } catch (error) {
+      toast.error('Failed to fetch sessions.');
+      console.error(error);
+    } finally {
+      setIsLoading(false);
     };
-
-    fetchSessionsData();
-  }, [currentPage, debouncedSearchTerm, filters.status, filters.sessionType, setIsLoading, setSessions, setTotalSessions]);
+  }, [currentPage, debouncedSearchTerm, filters]);
 
   useEffect(() => {
     fetchSessionsData();
@@ -69,7 +65,7 @@ const SessionManagement: React.FC = () => {
 
   // Reset to page 1 when filters change
   useEffect(() => {
-    if (currentPage !== 1) setCurrentPage(1);
+    setCurrentPage(1);
   }, [debouncedSearchTerm, filters.status, filters.sessionType]);
 
 
@@ -84,19 +80,17 @@ const SessionManagement: React.FC = () => {
 
   const confirmDeleteSession = async (sessionId: number) => {
     // We need to add `deleteSession` to `adminService.ts`
-    // For now, we assume it exists and looks like: `export const deleteSession = (id) => api.delete(`/admin/sessions/${id}`);`
-    const promise = (window as any).adminService.deleteSession(sessionId);
+    closeModal();
 
-    toast.promise(promise, {
+    await toast.promise(deleteSession(sessionId), {
       loading: 'Deleting session...',
       success: () => {
         fetchSessionsData(); // Refetch data to update the list
+        
         return 'Session deleted successfully.';
       },
-      error: (err: any) => err.response?.data?.error || 'Failed to delete session.',
+      error: (err: any) => err.response?.data?.message || 'Failed to delete session.',
     });
-
-    closeModal();
   };
 
   const totalPages = Math.ceil(totalSessions / SESSIONS_PER_PAGE);

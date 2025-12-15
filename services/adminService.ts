@@ -35,14 +35,26 @@ export interface AdminBoothStatus {
   lastHeartbeatAt: string;
   slots: {
     slotIdentifier: string;
-    status: string;
+    status: 'booting' | 'available' | 'occupied' | 'disabled' | 'error';
     doorStatus: 'locked' | 'unlocked' | 'ajar' | 'unknown';
-    relayState: 'on' | 'off';
     battery: {
-      batteryUid: string;
+      batteryUid: string | null;
       chargeLevel: number;
       ownerEmail: string | null;
+      isOccupied: boolean;
+      isCharging: boolean;
     } | null;
+    telemetry?: {
+      batteryInserted: boolean;
+      doorClosed: boolean;
+      doorLocked: boolean;
+      plugConnected: boolean;
+      relayOn: boolean;
+      soc: number;
+      temperatureC: number;
+      voltage: number;
+      timestamp: number;
+    };
   }[];
 }
 
@@ -156,6 +168,20 @@ export const deleteBoothSlot = async (boothUid: string, slotIdentifier: string):
     throw error;
   }
 };
+
+/**
+ * Deletes a session from the system.
+ * @param sessionId The ID of the session to delete.
+ */
+export const deleteSession = async (sessionId: number): Promise<void> => {
+  try {
+    // Assumes an API endpoint like DELETE /api/admin/sessions/:id
+    await apiClient.delete(`/admin/sessions/${sessionId}`);
+  } catch (error) {
+    console.error(`Failed to delete session ${sessionId}:`, error);
+    throw error;
+  }
+};
 /**
  * Updates the status of a specific booth slot (e.g., to enable or disable it).
  * @param boothUid The UID of the target booth.
@@ -209,7 +235,12 @@ export const getUsers = async (pageToken?: string): Promise<ListUsersResponse> =
  */
 export const getBoothStatus = async (): Promise<AdminBoothStatus[]> => {
   try {
-    const response = await apiClient.get<AdminBoothStatus[]>('/admin/booths/status');
+    // Add a cache-busting parameter to prevent the browser from returning a 304 Not Modified response
+    const response = await apiClient.get<AdminBoothStatus[]>('/admin/booths/status', {
+      params: {
+        '_': new Date().getTime(),
+      }
+    });
     return response.data;
   } catch (error) {
     console.error('Failed to fetch booths status:', error);

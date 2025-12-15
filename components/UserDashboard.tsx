@@ -90,11 +90,13 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
     const loadBatteryStatus = async () => {
       // 1. Check for a pending withdrawal first. This is the most specific state.
       const pendingWithdrawal = await boothService.getPendingWithdrawal();
+      console.log('Pending withdrawal on mount:', pendingWithdrawal);
       if (pendingWithdrawal) {
         setWithdrawalSessionId(pendingWithdrawal.sessionId);
         setWithdrawalCost(pendingWithdrawal.amount);
         setWithdrawalDuration(pendingWithdrawal.durationMinutes);
         setWithdrawalEnergy(pendingWithdrawal.energyDelivered);
+        console.log(pendingWithdrawal.energyDelivered);
         setView('billing');
         return; // Session restored, stop here.
       }
@@ -195,6 +197,40 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
     return () => clearInterval(pollForStatus); // Cleanup on view change
   }, [view, activeBattery]);
 
+  // This effect polls for payment confirmation after an STK push
+  useEffect(() => {
+    if (view !== 'billing' || paymentStatus !== 'push_sent' || !checkoutRequestId) {
+      return; // Only run when waiting for payment
+    }
+
+    let isCancelled = false;
+    const pollForPayment = setInterval(async () => {
+      if (isCancelled) return;
+
+      try {
+        const statusResponse = await boothService.getWithdrawalStatus(checkoutRequestId);
+
+        if (statusResponse.paymentStatus === "paid") {
+          clearInterval(pollForPayment);
+          setPaymentStatus("success");
+
+          // Open the slot and guide the user to collect
+          await boothService.openForCollection(checkoutRequestId);
+          setTimeout(() => setView("collect_guide"), 1500);
+        }
+        // If status is 'pending' or something else, we just let the interval run again.
+        // If it's 'failed', the backend should handle it, but we could add a check here.
+
+      } catch (err) {
+        // Don't show an error on every poll, just log it. The timeout will handle persistent failures.
+        console.error("Payment poll failed:", err);
+      }
+    }, 2000); // Poll every 2 seconds
+
+    // Cleanup function
+    return () => { isCancelled = true; clearInterval(pollForPayment); };
+  }, [view, paymentStatus, checkoutRequestId]);
+
   // 1. Start Deposit
   const startDeposit = () => {
     setView('scan_qr');
@@ -209,12 +245,23 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
       setAssignedSlot(assignedSlotFromApi);
       setView('deposit_guide');
     } catch (err: any) {
-      if (err.response?.status === 409) {
+      const errorMessage = err.response?.data?.message || 'Failed to initiate deposit. Please try again.';
+
+      if (!err.response) {
+        // This happens on network errors (e.g., server is down)
+        toast.error("Cannot connect to the station. Please check your connection or try again later.", { duration: 4000 });
+      } else if (err.response.status === 409) {
         // User already has an active session, redirect them to the status page.
         toast.error("You already have an active session.", { duration: 4000 });
         setView('status');
+      } else if (errorMessage.includes("All available slots are currently occupied")) {
+        // Specific handling for a full booth
+        toast.error("This station is full. Finding another one for you...", { duration: 4000 });
+        setView('map_view'); // Redirect to map to find another station
       } else {
-        toast.error(err.response?.data?.message || err.message || 'Failed to initiate deposit');
+        // Handle other API errors (e.g., 400, 404, 500)
+        toast.error(errorMessage);
+        setView('home'); // Go back to the home screen on other errors
       }
     }
     setLoading(false); // Ensure loading is always stopped
@@ -252,6 +299,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
     setLoading(true);
     try {
       const response = await boothService.initiateWithdrawal();
+      console.log('Withdrawal initiated:', response);
       setWithdrawalSessionId(response.sessionId);
       setWithdrawalCost(response.amount);
       setWithdrawalDuration(response.durationMinutes);
@@ -267,38 +315,15 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
 
   // 6. Handle STK Push - calls getWithdrawalStatus API
 const handleSTKPush = async () => {
-  setPaymentStatus('push_sent');
   setLoading(true);
-
   try {
     const payResponse = await boothService.payForWithdrawal(withdrawalSessionId);
-    const localCheckoutId = payResponse.checkoutRequestId; // 🔥 use local variable
-    setCheckoutRequestId(localCheckoutId);
-
-    let attempts = 0;
-    const maxAttempts = 30;
-
-    while (attempts < maxAttempts) {
-      await new Promise(res => setTimeout(res, 1000));
-
-      const statusResponse = await boothService.getWithdrawalStatus(localCheckoutId); // 🔥 correct ID
-      attempts++;
-
-      if (statusResponse.paymentStatus === "paid") {
-        setPaymentStatus("success");
-
-        await boothService.openForCollection(localCheckoutId);
-
-        setTimeout(() => setView("collect_guide"), 1500);
-        return;
-      }
-    }
-
-    toast.error("Payment timeout. Please try again.");
-    setPaymentStatus("idle");
-
+    // Set the checkout ID and status to trigger the polling useEffect
+    setCheckoutRequestId(payResponse.checkoutRequestId);
+    setPaymentStatus('push_sent');
   } catch (err) {
-    toast.error(err?.message || "Payment failed");
+    const errorMessage = (err as any)?.response?.data?.message || (err instanceof Error ? err.message : "Payment failed");
+    toast.error(errorMessage);
     setPaymentStatus("idle");
   } finally {
     setLoading(false);
