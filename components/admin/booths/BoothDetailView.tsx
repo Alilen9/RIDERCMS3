@@ -108,7 +108,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                           {isRelayCommandPending ? (
                             <span className="text-xs font-semibold text-yellow-400 animate-pulse">Updating...</span>
                           ) : (
-                            <span className={`font-semibold ${slot.telemetry.relayOn === true ? 'text-blue-400' : 'text-gray-600'}`}>{slot.telemetry.relayOn ? 'ON' : 'OFF'.toUpperCase() || 'N/A'}</span>
+                            <span className={`font-semibold ${slot.telemetry?.relayOn === true ? 'text-blue-400' : 'text-gray-600'}`}>{slot.telemetry?.relayOn ? 'ON' : 'OFF'.toUpperCase() || 'N/A'}</span>
                           )}
                         </div>
                         <div className="flex justify-between text-sm">
@@ -141,7 +141,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                             >
                               Lock
                             </button>
-                            {slot.telemetry.relayOn === true ? (
+                            {slot.telemetry?.relayOn === true ? (
                               <button onClick={() => onSendCommand(slot.slotIdentifier, { stopCharging: true })} className="col-span-2 bg-red-800 hover:bg-red-700 py-2 rounded text-xs font-bold text-white">
                                 Stop Charging
                               </button>
