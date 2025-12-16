@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { SlotStatus, BatteryType, Transaction, SystemLog, Battery, Booth, Station } from '../types';
 import { generateSystemInsight } from '../services/geminiService';
 import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, getDashboardSummary, DashboardSummary } from '../services/adminService';
-import UserManagement from './admin/UserManagement';
+import UserManagement from './admin/user/UserManagement';
 import ConfirmationModal from './admin/ConfirmationModal';
 import AddBoothsForm from './admin/booths/forms/AddBoothsForm';
 import EditBoothsForm from './admin/booths/forms/EditBoothsForm';
