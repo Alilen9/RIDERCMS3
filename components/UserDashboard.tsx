@@ -127,7 +127,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
         }
       } else {
         // 3. If no sessions of any kind, go to the initial screen.
-        setView('scan_qr');
+        setView('home');
       }
     };
     loadBatteryStatus();
