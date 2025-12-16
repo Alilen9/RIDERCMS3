@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { PublicBooth } from '../../services/boothService';
 import { GoogleMap, useJsApiLoader, MarkerF, InfoWindow } from '@react-google-maps/api';
+import { GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_ID } from '@/utils/js-maps-loader';
 
 interface UserNetworkMapProps {
   booths: PublicBooth[];
@@ -40,8 +41,8 @@ const UserNetworkMap: React.FC<UserNetworkMapProps> = ({ booths, userLocation, o
   const mapRef = useRef<google.maps.Map | null>(null);
 
   const { isLoaded } = useJsApiLoader({
-    id: 'user-google-map-script',
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyCD1_cfwN7m0a5R_NxXclDNK-S1gw7NZgk"
+    id: GOOGLE_MAPS_ID,
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY 
   });
 
   const onLoad = useCallback((map: google.maps.Map) => {
@@ -101,7 +102,7 @@ const UserNetworkMap: React.FC<UserNetworkMapProps> = ({ booths, userLocation, o
           {booths.map((booth) => (
             <MarkerF
               key={booth.booth_uid}
-              position={{ lat: booth.latitude, lng: booth.longitude }}
+              position={{ lat: parseFloat(booth.latitude as any), lng: parseFloat(booth.longitude as any) }}
               onClick={() => {
                 onBoothClick(booth);
                 setSelectedBooth(booth);
@@ -115,7 +116,7 @@ const UserNetworkMap: React.FC<UserNetworkMapProps> = ({ booths, userLocation, o
           ))}
           {(hoveredBooth || selectedBooth) && (
             <InfoWindow
-              position={{ lat: (hoveredBooth || selectedBooth)!.latitude, lng: (hoveredBooth || selectedBooth)!.longitude }}
+              position={{ lat: parseFloat((hoveredBooth || selectedBooth)!.latitude as any), lng: parseFloat((hoveredBooth || selectedBooth)!.longitude as any) }}
               onCloseClick={() => {
                 setHoveredBooth(null);
                 setSelectedBooth(null);

@@ -3,6 +3,7 @@ import { Booth } from '../../types';
 import { getBooths } from '../../services/adminService';
 import toast from 'react-hot-toast';
 import { GoogleMap, useJsApiLoader, InfoWindow, MarkerF } from '@react-google-maps/api';
+import { GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_ID } from '@/utils/js-maps-loader';
 
 interface NetworkMapProps {
   onBoothClick: (booth: Booth) => void;
@@ -19,9 +20,9 @@ const NetworkMap: React.FC<NetworkMapProps> = ({ onBoothClick }) => {
   const mapRef = useRef<google.maps.Map | null>(null);
 
   const { isLoaded } = useJsApiLoader({
-    id: 'google-map-script',
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyCD1_cfwN7m0a5R_NxXclDNK-S1gw7NZgk",
-  });
+      id: GOOGLE_MAPS_ID,
+      googleMapsApiKey: GOOGLE_MAPS_API_KEY 
+    });
 
   useEffect(() => {
     const fetchMapData = async () => {
