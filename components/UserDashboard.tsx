@@ -168,7 +168,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
           setView('status');
         }
       } catch (err) { /* Ignore errors, just keep polling */ }
-    }, 3000); // Poll every 3 seconds
+    }, 600); // Poll every 6 miliseconds
 
     return () => clearInterval(pollForDeposit); // Cleanup on component unmount or view change
   }, [view, user.id]);
@@ -191,7 +191,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
           finishSession();
         }
       } catch (err) { /* Ignore errors, just keep polling */ }
-    }, 10000); // Poll every 10 seconds
+    }, 2000); // Poll every 2 seconds
 
     return () => clearInterval(pollForStatus); // Cleanup on view change
   }, [view, activeBattery]);
