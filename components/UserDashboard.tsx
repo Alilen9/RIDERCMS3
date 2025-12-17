@@ -319,6 +319,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
       }
 
       setError(errorMessage);
+      
     } finally {
       setLoading(false);
     }
