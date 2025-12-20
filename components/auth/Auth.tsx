@@ -167,12 +167,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0B1E4B] px-4 font-sans">
       <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-200">
-        {/* 
-          The Toaster component renders the notifications. 
-          For a real app, it's best to place this in your root layout component (like App.tsx) 
-          so toasts can appear on any page.
-        */}
-        <Toaster position="top-center" reverseOrder={false} />
         {/* This div is required for Firebase's invisible reCAPTCHA to mount */}
         <ReCAPTCHA
           ref={recaptchaRef}

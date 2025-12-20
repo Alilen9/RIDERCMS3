@@ -6,7 +6,6 @@ import QrScanner from './user/QrScanner'; // Import the new component
 import ChargingStatusView from './user/ChargingStatusView';
 import SessionSummary from './user/SessionSummary';
 import toast from 'react-hot-toast';
-import NetworkMap from './admin/NetworkMap';
 import ConfirmationModal from './admin/ConfirmationModal';
 import UserNetworkMap from './user/UserNetworkMap';
 
@@ -35,6 +34,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
   const [booths, setBooths] = useState<boothService.PublicBooth[]>([]);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleMapBoothClick = (booth: boothService.PublicBooth) => {
     setManualBoothId(booth.booth_uid);
@@ -168,7 +168,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
           setView('status');
         }
       } catch (err) { /* Ignore errors, just keep polling */ }
-    }, 3000); // Poll every 3 seconds
+    }, 600); // Poll every 6 miliseconds
 
     return () => clearInterval(pollForDeposit); // Cleanup on component unmount or view change
   }, [view, user.id]);
@@ -191,7 +191,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
           finishSession();
         }
       } catch (err) { /* Ignore errors, just keep polling */ }
-    }, 10000); // Poll every 10 seconds
+    }, 2000); // Poll every 2 seconds
 
     return () => clearInterval(pollForStatus); // Cleanup on view change
   }, [view, activeBattery]);
@@ -234,37 +234,41 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
   const startDeposit = () => {
     setView('scan_qr');
   };
-
-  // 2. Scan Success - calls initiateDeposit API
+  // 3. Handle QR Scan Success - calls initiateDeposit API
   const handleScanSuccess = useCallback(async (decodedText: string) => {
     setLoading(true);
     try {
-      // The QR code text is the boothId
       const assignedSlotFromApi = await boothService.initiateDeposit(decodedText);
       setAssignedSlot(assignedSlotFromApi);
       setView('deposit_guide');
     } catch (err: any) {
-      const errorMessage = err.response?.data?.message || 'Failed to initiate deposit. Please try again.';
+      // 1. Extract the specific message from the nested response object
+      const serverMessage = err.response?.data?.message;
+      const statusCode = err.response?.status;
 
       if (!err.response) {
-        // This happens on network errors (e.g., server is down)
-        toast.error("Cannot connect to the station. Please check your connection or try again later.", { duration: 4000 });
-      } else if (err.response.status === 409) {
-        // User already has an active session, redirect them to the status page.
-        toast.error("You already have an active session.", { duration: 4000 });
-        setView('status');
-      } else if (errorMessage.includes("All available slots are currently occupied")) {
-        // Specific handling for a full booth
-        toast.error("This station is full. Finding another one for you...", { duration: 4000 });
-        setView('map_view'); // Redirect to map to find another station
-      } else {
-        // Handle other API errors (e.g., 400, 404, 500)
-        toast.error(errorMessage);
-        setView('home'); // Go back to the home screen on other errors
+        toast.error("Network error: Cannot connect to the station.");
+      } 
+      else if (statusCode === 409) {
+        // 2. Handle the 'Booth Full' scenario specifically
+        if (serverMessage?.includes("occupied")) {
+          toast.error(serverMessage || "This station is currently full.", { duration: 5000 });
+          setView('map_view'); 
+        } else {
+          // Handle other 409 conflicts (like active sessions)
+          toast.error("You already have an active session.");
+          setView('status');
+        }
+      } 
+      else {
+        // Generic fallback for 400, 500, etc.
+        toast.error(serverMessage || "An unexpected error occurred.");
+        setView('home');
       }
+    } finally {
+      setLoading(false); 
     }
-    setLoading(false); // Ensure loading is always stopped
-  }, []); // No dependencies, this function is stable.
+  }, []);
 
   const handleCancelDeposit = () => {
     setIsCancelModalOpen(true);
@@ -295,6 +299,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
 
   // 5. Initiate Collection - calls initiateWithdrawal API
   const initiateCollection = async () => {
+    setError(null); // Clear previous errors
     setLoading(true);
     try {
       const response = await boothService.initiateWithdrawal();
@@ -306,7 +311,19 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
       setView('billing');
       setPaymentStatus('idle');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to initiate withdrawal');
+      const error = err as any;
+      console.error('Full error object on withdrawal failure:', error);
+
+      // Default error message
+      let errorMessage = 'Failed to start collection. Please try again.';
+
+      // Check for a specific API error message
+      if (error.response && error.response.data && typeof error.response.data.message === 'string') {
+        errorMessage = error.response.data.message;
+      }
+
+      setError(errorMessage);
+      
     } finally {
       setLoading(false);
     }
@@ -529,6 +546,13 @@ const handleSTKPush = async () => {
             runAiAnalysis={runAiAnalysis}
             initiateCollection={initiateCollection}
           />
+        )}
+
+        {/* Display error message if it exists */}
+        {error && (
+          <div className="mt-4 p-3 bg-red-900/50 border border-red-700 text-red-300 rounded-lg text-sm text-center">
+            {error}
+          </div>
         )}
 
         {/* VIEW: BILLING & PAYMENT */}

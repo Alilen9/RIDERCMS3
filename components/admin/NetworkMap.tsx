@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Booth } from '../../types';
 import { getBooths } from '../../services/adminService';
 import toast from 'react-hot-toast';
-import { GoogleMap, useJsApiLoader, InfoWindow, MarkerF } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader, InfoWindow, MarkerF, MarkerClustererF } from '@react-google-maps/api';
 import { GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_ID } from '@/utils/js-maps-loader';
 
 interface NetworkMapProps {
@@ -21,7 +21,8 @@ const NetworkMap: React.FC<NetworkMapProps> = ({ onBoothClick }) => {
 
   const { isLoaded } = useJsApiLoader({
       id: GOOGLE_MAPS_ID,
-      googleMapsApiKey: GOOGLE_MAPS_API_KEY 
+      googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+      
     });
 
   useEffect(() => {
@@ -72,21 +73,21 @@ const NetworkMap: React.FC<NetworkMapProps> = ({ onBoothClick }) => {
     setSearchResults(results.slice(0, 5)); // Limit to 5 results
   }, [searchTerm, booths]);
 
-  const CustomAdminMarker: React.FC<{ status: string }> = ({ status }) => {
+  const createMarkerIcon = (status: string) => {
     const color = status === 'online' ? '#10b981' : '#ef4444';
-    return (
-      <div style={{ width: 40, height: 40, position: 'relative', transform: 'translate(-50%, -50%)' }}>
-        <style>{`
-          .pulse-animation-admin { animation: pulse-admin 1.5s infinite; }
-          @keyframes pulse-admin {
-            0% { transform: scale(0.5); opacity: 0.5; }
-            70% { transform: scale(1); opacity: 0; }
-            100% { transform: scale(1); opacity: 0; }
-          }`}</style>
-        <div className="pulse-animation-admin" style={{ position: 'absolute', width: '100%', height: '100%', borderRadius: '50%', backgroundColor: color, opacity: 0.3 }} />
-        <div style={{ position: 'absolute', top: '50%', left: '50%', width: 16, height: 16, borderRadius: '50%', backgroundColor: color, transform: 'translate(-50%, -50%)' }} />
-      </div>
-    );
+    const svg = `
+      <svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="20" cy="20" r="8" fill="${color}" />
+        <circle cx="20" cy="20" r="8" fill="${color}" fill-opacity="0.5">
+          <animate attributeName="r" from="8" to="20" dur="1.5s" begin="0s" repeatCount="indefinite" />
+          <animate attributeName="opacity" from="1" to="0" dur="1.5s" begin="0s" repeatCount="indefinite" />
+        </circle>
+      </svg>
+    `;
+    return {
+      url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+      anchor: new window.google.maps.Point(20, 20),
+    };
   };
 
   const handleSearchResultClick = (booth: Booth) => {
@@ -118,16 +119,16 @@ const NetworkMap: React.FC<NetworkMapProps> = ({ onBoothClick }) => {
   const defaultCenter = { lat: -1.286389, lng: 36.817223 };
 
   return <div className="animate-fade-in h-[calc(100vh-140px)] flex flex-col">
-    <div className="flex justify-between items-center mb-6">
-      <h2 className="text-2xl font-bold">Network Map</h2>
-      <div className="flex items-center gap-4">
+    <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
+      <h2 className="text-2xl font-bold flex-grow">Network Map</h2>
+      <div className="flex items-center gap-4 flex-wrap justify-end">
         <div className="relative">
           <input
             type="text"
             placeholder="Search for a booth..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm w-64 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm w-full sm:w-64 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
           />
           {searchResults.length > 0 && (
             <div className="absolute top-full mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-50">
@@ -185,19 +186,22 @@ const NetworkMap: React.FC<NetworkMapProps> = ({ onBoothClick }) => {
             ]
           }}
         >
-          {booths.map((booth) => (
-            <MarkerF
-              key={booth.booth_uid}
-              position={{ lat: Number(booth.latitude), lng: Number(booth.longitude) }}
-              onClick={() => {
-                onBoothClick(booth);
-                setSelectedBooth(booth);
-                setHoveredBooth(null); // Hide hover info window on click
-              }}
-            >
-              <CustomAdminMarker status={booth.status} />
-            </MarkerF>
-          ))}
+          <MarkerClustererF>
+            {(clusterer) => (
+              <>
+                {booths.map((booth) => (
+                  <MarkerF
+                    key={booth.booth_uid}
+                    position={{ lat: Number(booth.latitude), lng: Number(booth.longitude) }}
+                    clusterer={clusterer}
+                    onClick={() => setSelectedBooth(booth)}
+                    onDblClick={() => onBoothClick(booth)} // Use double-click to navigate to details
+                    icon={createMarkerIcon(booth.status)}
+                  />
+                ))}
+              </>
+            )}
+          </MarkerClustererF>
           {hoveredBooth && !selectedBooth && (
             <InfoWindow position={{ lat: Number(hoveredBooth.latitude), lng: Number(hoveredBooth.longitude) }} onCloseClick={() => setHoveredBooth(null)}>
               <div className="p-1 text-black">
@@ -211,6 +215,9 @@ const NetworkMap: React.FC<NetworkMapProps> = ({ onBoothClick }) => {
             <InfoWindow position={{ lat: Number(selectedBooth.latitude), lng: Number(selectedBooth.longitude) }} onCloseClick={() => setSelectedBooth(null)}>
               <div className="p-1 text-black">
                 <p className="font-bold text-sm">{selectedBooth.name}</p>
+                <button onClick={() => onBoothClick(selectedBooth)} className="text-xs text-indigo-600 hover:underline">
+                  View Details &rarr;
+                </button>
                 <p className="text-xs text-gray-600">{selectedBooth.location_address}</p>
               </div>
             </InfoWindow>
