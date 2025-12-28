@@ -8,6 +8,7 @@ import SessionSummary from './user/SessionSummary';
 import toast from 'react-hot-toast';
 import ConfirmationModal from './admin/ConfirmationModal';
 import UserNetworkMap from './user/UserNetworkMap';
+import { add } from 'date-fns';
 
 interface UserDashboardProps {
   user: User;
@@ -103,15 +104,15 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
       // 2. If no pending withdrawal, check for any other active battery session.
       const batteryStatus = await boothService.getMyBatteryStatus();
       console.log('Loaded battery status on mount:', batteryStatus);
-      if (batteryStatus) {        
+      if (batteryStatus) {
         setActiveBattery({
           id: batteryStatus.batteryUid,
           type: BatteryType.E_BIKE,
           chargeLevel: batteryStatus.telemetry?.soc ?? batteryStatus.chargeLevel,
           temperature: batteryStatus.telemetry?.temperatureC ?? 0,
           voltage: batteryStatus.telemetry?.voltage ?? 0,
-          health: 95, 
-          cycles: 150, 
+          health: 95,
+          cycles: 150,
           ownerId: user.id
         });
         setAssignedSlot({
@@ -248,25 +249,25 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
 
       if (!err.response) {
         toast.error("Network error: Cannot connect to the station.");
-      } 
+      }
       else if (statusCode === 409) {
         // 2. Handle the 'Booth Full' scenario specifically
         if (serverMessage?.includes("occupied")) {
           toast.error(serverMessage || "This station is currently full.", { duration: 5000 });
-          setView('map_view'); 
+          setView('map_view');
         } else {
           // Handle other 409 conflicts (like active sessions)
           toast.error("You already have an active session.");
           setView('status');
         }
-      } 
+      }
       else {
         // Generic fallback for 400, 500, etc.
         toast.error(serverMessage || "An unexpected error occurred.");
         setView('home');
       }
     } finally {
-      setLoading(false); 
+      setLoading(false);
     }
   }, []);
 
@@ -323,28 +324,28 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
       }
 
       setError(errorMessage);
-      
+
     } finally {
       setLoading(false);
     }
   };
 
   // 6. Handle STK Push - calls getWithdrawalStatus API
-const handleSTKPush = async () => {
-  setLoading(true);
-  try {
-    const payResponse = await boothService.payForWithdrawal(withdrawalSessionId);
-    // Set the checkout ID and status to trigger the polling useEffect
-    setCheckoutRequestId(payResponse.checkoutRequestId);
-    setPaymentStatus('push_sent');
-  } catch (err) {
-    const errorMessage = (err as any)?.response?.data?.message || (err instanceof Error ? err.message : "Payment failed");
-    toast.error(errorMessage);
-    setPaymentStatus("idle");
-  } finally {
-    setLoading(false);
-  }
-};
+  const handleSTKPush = async () => {
+    setLoading(true);
+    try {
+      const payResponse = await boothService.payForWithdrawal(withdrawalSessionId);
+      // Set the checkout ID and status to trigger the polling useEffect
+      setCheckoutRequestId(payResponse.checkoutRequestId);
+      setPaymentStatus('push_sent');
+    } catch (err) {
+      const errorMessage = (err as any)?.response?.data?.message || (err instanceof Error ? err.message : "Payment failed");
+      toast.error(errorMessage);
+      setPaymentStatus("idle");
+    } finally {
+      setLoading(false);
+    }
+  };
   // 7. Finish Session - resets all state
   const finishSession = () => {
     setAssignedSlot(null);
@@ -375,7 +376,7 @@ const handleSTKPush = async () => {
           <span className="font-bold text-lg tracking-tight cursor-pointer">RIDERCMS</span>
         </div>
         <div className="flex items-center gap-4">
-          
+
           <button onClick={onLogout} className="p-2 bg-gray-700 rounded-full hover:bg-gray-600 transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 2.062-2.062a.75.75 0 0 0 0-1.061L15.75 12" />
@@ -403,30 +404,30 @@ const handleSTKPush = async () => {
             </div>
 
             <div className="w-full max-w-sm text-center bg-gray-800/50 p-6 rounded-2xl border border-gray-700">
-                <p className="text-gray-300 font-semibold mb-3">Start a session by entering a Booth UID:</p>
-                <div className="flex gap-2">
-                    <input
-                        type="text"
-                        placeholder="Paste Booth UID here..."
-                        value={manualBoothId}
-                        onChange={(e) => setManualBoothId(e.target.value)}
-                        className="flex-grow bg-gray-900 border border-gray-600 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                    />
-                    <button onClick={() => handleScanSuccess(manualBoothId)} disabled={!manualBoothId || loading} className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-white font-bold px-5 py-3 rounded-lg transition-colors">
-                      {loading ? '...' : 'Go'}
-                    </button>
-                </div>
-                <div className="text-center text-gray-500 my-4 text-xs">OR</div>
-                <button
-                  onClick={startDeposit}
-                  className="w-full flex items-center justify-center gap-3 bg-gray-700 hover:bg-gray-600 px-4 py-3 rounded-lg border border-gray-600 transition-colors"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 3.75 9.375v-4.5ZM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 0 1-1.125-1.125v-4.5ZM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 13.5 9.375v-4.5Z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75ZM6.75 16.5h.75v.75h-.75v-.75ZM16.5 6.75h.75v.75h-.75v-.75ZM13.5 13.5h.75v.75h-.75v-.75ZM13.5 19.5h.75v.75h-.75v-.75ZM19.5 13.5h.75v.75h-.75v-.75ZM19.5 19.5h.75v.75h-.75v-.75ZM16.5 16.5h.75v.75h-.75v-.75Z" />
-                  </svg>
-                  <span className="font-semibold text-sm">Scan Station QR Code</span>
+              <p className="text-gray-300 font-semibold mb-3">Start a session by entering a Booth UID:</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Paste Booth UID here..."
+                  value={manualBoothId}
+                  onChange={(e) => setManualBoothId(e.target.value)}
+                  className="flex-grow bg-gray-900 border border-gray-600 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+                <button onClick={() => handleScanSuccess(manualBoothId)} disabled={!manualBoothId || loading} className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-white font-bold px-5 py-3 rounded-lg transition-colors">
+                  {loading ? '...' : 'Go'}
                 </button>
+              </div>
+              <div className="text-center text-gray-500 my-4 text-xs">OR</div>
+              <button
+                onClick={startDeposit}
+                className="w-full flex items-center justify-center gap-3 bg-gray-700 hover:bg-gray-600 px-4 py-3 rounded-lg border border-gray-600 transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 3.75 9.375v-4.5ZM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 0 1-1.125-1.125v-4.5ZM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 13.5 9.375v-4.5Z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75ZM6.75 16.5h.75v.75h-.75v-.75ZM16.5 6.75h.75v.75h-.75v-.75ZM13.5 13.5h.75v.75h-.75v-.75ZM13.5 19.5h.75v.75h-.75v-.75ZM19.5 13.5h.75v.75h-.75v-.75ZM19.5 19.5h.75v.75h-.75v-.75ZM16.5 16.5h.75v.75h-.75v-.75Z" />
+                </svg>
+                <span className="font-semibold text-sm">Scan Station QR Code</span>
+              </button>
             </div>
 
             <button
@@ -449,9 +450,9 @@ const handleSTKPush = async () => {
         {/* VIEW: MAP */}
         {view === 'map_view' && (
           <div className="animate-fade-in h-[calc(100vh-140px)] flex flex-col relative">
-             <button onClick={() => setView('home')} className="absolute top-4 left-4 z-20 bg-gray-900/90 backdrop-blur text-white p-3 rounded-full shadow-lg pointer-events-auto border border-gray-700 active:scale-95 transition-transform">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-             </button>
+            <button onClick={() => setView('home')} className="absolute top-4 left-4 z-20 bg-gray-900/90 backdrop-blur text-white p-3 rounded-full shadow-lg pointer-events-auto border border-gray-700 active:scale-95 transition-transform">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            </button>
             <UserNetworkMap
               booths={booths}
               userLocation={userLocation}
@@ -465,7 +466,7 @@ const handleSTKPush = async () => {
           <div className="fixed inset-0 bg-[#0B1E4B] z-50 flex flex-col items-center justify-center animate-fade-in p-4">
             <div className="relative w-full max-w-sm aspect-[3/4] bg-gray-900 rounded-2xl overflow-hidden border border-gray-700 shadow-2xl">
               {/* The QrScanner component will render the camera feed here */}
-              <QrScanner 
+              <QrScanner
                 onScanSuccess={handleScanSuccess}
                 onScanFailure={handleScanFailure}
               />
@@ -474,22 +475,22 @@ const handleSTKPush = async () => {
                 <div className="absolute top-0 w-full h-1 bg-emerald-400 shadow-[0_0_10px_#34d399] animate-[scan_2s_ease-in-out_infinite]"></div>
               </div>
             </div>
-            
+
             {/* Manual Input for Laptops */}
             <div className="mt-6 w-full max-w-sm text-center">
-                <p className="text-gray-400 text-sm mb-2">Or enter Booth UID manually:</p>
-                <div className="flex gap-2">
-                    <input
-                        type="text"
-                        placeholder="Paste Booth UID here..."
-                        value={manualBoothId}
-                        onChange={(e) => setManualBoothId(e.target.value)}
-                        className="flex-grow bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                    />
-                    <button onClick={() => handleScanSuccess(manualBoothId)} disabled={!manualBoothId} className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-white font-bold px-4 py-2 rounded-lg">
-                        Go
-                    </button>
-                </div>
+              <p className="text-gray-400 text-sm mb-2">Or enter Booth UID manually:</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Paste Booth UID here..."
+                  value={manualBoothId}
+                  onChange={(e) => setManualBoothId(e.target.value)}
+                  className="flex-grow bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+                <button onClick={() => handleScanSuccess(manualBoothId)} disabled={!manualBoothId} className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-white font-bold px-4 py-2 rounded-lg">
+                  Go
+                </button>
+              </div>
             </div>
 
             <button onClick={() => { setView('home'); }} className="mt-8 text-gray-400 hover:text-white">Cancel</button>
@@ -513,7 +514,7 @@ const handleSTKPush = async () => {
             </div>
 
             <div className="relative w-48 h-48 mx-auto bg-gray-800 rounded-2xl border-4 border-emerald-500 flex items-center justify-center mb-8 shadow-xl">
-              <span className="text-8xl font-bold text-white">{assignedSlot.identifier.replace('slot','')}</span>
+              <span className="text-8xl font-bold text-white">{assignedSlot.identifier.replace('slot', '')}</span>
               <div className="absolute -bottom-3 bg-gray-900 px-4 text-emerald-400 text-sm font-bold border border-emerald-500 rounded-full">DOOR OPEN</div>
             </div>
 
