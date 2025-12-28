@@ -9,6 +9,7 @@ import { Toaster, toast } from 'react-hot-toast';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import ReCAPTCHA from 'react-google-recaptcha';
 import { auth } from '../../firebase';
+import loginBg from '../../assets/images/login.jpeg';
 
 interface AuthProps {
   onLogin: (user: User) => void;
@@ -165,7 +166,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const isLoading = isSubmitting;
   
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0B1E4B] px-4 font-sans">
+    <div 
+      className="min-h-screen flex items-center justify-center bg-cover bg-center bg-no-repeat px-4 font-sans"
+      style={{ backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url(${loginBg})` }}
+    >
       <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-200">
         {/* This div is required for Firebase's invisible reCAPTCHA to mount */}
         <ReCAPTCHA
