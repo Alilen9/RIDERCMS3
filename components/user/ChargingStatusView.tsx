@@ -35,11 +35,11 @@ const ChargingStatusView: React.FC<ChargingStatusViewProps> = ({
           <div className="flex flex-col items-end">
             <span className="text-xs text-gray-400 uppercase tracking-wide">Slot</span>
             <span className="text-2xl font-mono font-bold text-emerald-400">{assignedSlot?.identifier}</span>
-            {assignedSlot?.doorStatus && (
+            {assignedSlot?.status && (
               <div className={`flex items-center gap-1 mt-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
                 assignedSlot.doorStatus === 'locked' 
                   ? 'bg-emerald-900/30 text-emerald-400 border-emerald-500/30' 
-                  : 'bg-red-900/30 text-red-400 border-red-500/30'
+                  : 'bg-red-900/30 text-red-400 border-red-500/30 animate-pulse shadow-[0_0_10px_rgba(248,113,113,0.3)]'
               }`}>
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
                   {assignedSlot.doorStatus === 'locked' 

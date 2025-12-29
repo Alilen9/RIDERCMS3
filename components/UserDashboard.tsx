@@ -120,6 +120,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
           status: 'occupied', doorStatus: 'locked',
           batteryUid: batteryStatus.batteryUid, chargeLevel: batteryStatus.chargeLevel,
         });
+        
 
         if (batteryStatus.sessionStatus === 'pending') {
           setView('deposit_guide');
@@ -168,6 +169,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
           });
           setView('status');
         }
+
+        
       } catch (err) { /* Ignore errors, just keep polling */ }
     }, 600); // Poll every 6 miliseconds
 
@@ -184,9 +187,18 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
       try {
         const batteryStatus = await boothService.getMyBatteryStatus();
         console.log('Polled battery status:', batteryStatus);
+        
         if (batteryStatus && activeBattery) {
           // Update the charge level of the existing active battery
           setActiveBattery(prev => prev ? { ...prev, chargeLevel: batteryStatus.telemetry?.soc ?? batteryStatus.chargeLevel, temperature: batteryStatus.telemetry?.temperatureC ?? prev.temperature, voltage: batteryStatus.telemetry?.voltage ?? prev.voltage } : null);
+          
+          // Update assigned slot door status from telemetry
+          if (batteryStatus.telemetry) {
+            setAssignedSlot(prev => prev ? {
+              ...prev,
+              doorStatus: batteryStatus.telemetry!.doorLocked ? 'locked' : 'open'
+            } : null);
+          }
         } else if (!batteryStatus) {
           // The battery was collected, end the session.
           finishSession();
