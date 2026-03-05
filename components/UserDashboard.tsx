@@ -163,7 +163,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
             chargeLevel: batteryStatus.telemetry?.soc ?? batteryStatus.chargeLevel,
             health: 95, // This data is not in the response, keeping mock for now
             temperature: batteryStatus.telemetry?.temperatureC ?? 0,
-            voltage: batteryStatus.telemetry?.voltage ?? 0,
+            voltage: batteryStatus.telemetry?.restVoltage ?? 0,
             cycles: 150, // This data is not in the response, keeping mock for now
             ownerId: user.id
           });
