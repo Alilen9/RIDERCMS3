@@ -1,6 +1,6 @@
 import React from 'react';
 import { AdminUser, UserAccountStatus } from '../../../services/adminService';
-import { User, Shield, Mail, MoreVertical, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react';
+import { User, Shield, Mail, Phone, MoreVertical, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react';
 
 interface UserListViewProps {
   users: AdminUser[];
@@ -33,6 +33,12 @@ const UserCard: React.FC<Omit<UserListViewProps, 'users' | 'viewMode'> & { user:
               <Mail size={12} />
               {user.email}
             </p>
+            {user.phoneNumber && (
+                <p className="text-xs text-gray-400 flex items-center gap-1.5 mt-1">
+                    <Phone size={12} />
+                    {user.phoneNumber}
+                </p>
+            )}
           </div>
           <div className="relative">
             <button onClick={() => setIsMenuOpen(!isMenuOpen)} onBlur={() => setTimeout(() => setIsMenuOpen(false), 150)} className="text-gray-400 hover:text-white p-1 rounded-md">
@@ -105,6 +111,7 @@ const UserListView: React.FC<UserListViewProps> = ({ users, onSetUserStatus, onD
           <tr>
             <th className="px-6 py-4">Name</th>
             <th className="px-6 py-4">Email</th>
+            <th className="px-6 py-4">Phone Number</th>
             <th className="px-6 py-4">Role</th>
             <th className="px-6 py-4">Status</th>
             <th className="px-6 py-4">Actions</th>
@@ -119,6 +126,7 @@ const UserListView: React.FC<UserListViewProps> = ({ users, onSetUserStatus, onD
                 </button>
               </td>
               <td className="px-6 py-4 text-gray-400">{u.email}</td>
+              <td className="px-6 py-4 text-gray-400">{u.phoneNumber || 'N/A'}</td>
               <td className="px-6 py-4">
                 <span className={`px-2 py-1 rounded text-xs font-bold ${
                   u.role === 'admin' ? 'bg-purple-900 text-purple-400' :
