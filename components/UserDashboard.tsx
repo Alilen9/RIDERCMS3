@@ -393,7 +393,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
             {/* <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 2.062-2.062a.75.75 0 0 0 0-1.061L15.75 12" />
             </svg> */}
-            <span>Logout</span>
+            <span className='p-8 m-8'>Logout</span>
           </button>
         </div>
       </div>
