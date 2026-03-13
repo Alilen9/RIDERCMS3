@@ -139,9 +139,11 @@ const UserManagement: React.FC = () => {
     if (!searchTerm) {
       return users;
     }
+    const lowercasedTerm = searchTerm.toLowerCase();
     return users.filter(user =>
-      user.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase())
+      user.displayName.toLowerCase().includes(lowercasedTerm) ||
+      user.email.toLowerCase().includes(lowercasedTerm) ||
+      (user.phoneNumber && user.phoneNumber.includes(searchTerm))
     );
   }, [users, searchTerm]);
 
@@ -159,6 +161,7 @@ const UserManagement: React.FC = () => {
               <tr>
                 <th className="px-6 py-4">Name</th>
                 <th className="px-6 py-4">Email</th>
+                <th className="px-6 py-4">Phone Number</th>
                 <th className="px-6 py-4">Role</th>
                 <th className="px-6 py-4">Status</th>
                 <th className="px-6 py-4">Actions</th>
@@ -168,6 +171,7 @@ const UserManagement: React.FC = () => {
               {Array.from({ length: 5 }).map((_, index) => (
                 <tr key={index}>
                   <td className="px-6 py-4"><div className="h-4 bg-gray-700 rounded animate-pulse w-3/4"></div></td>
+                  <td className="px-6 py-4"><div className="h-4 bg-gray-700 rounded animate-pulse w-full"></div></td>
                   <td className="px-6 py-4"><div className="h-4 bg-gray-700 rounded animate-pulse w-full"></div></td>
                   <td className="px-6 py-4"><div className="h-6 bg-gray-700 rounded animate-pulse w-16"></div></td>
                   <td className="px-6 py-4"><div className="h-6 bg-gray-700 rounded animate-pulse w-20"></div></td>

@@ -39,6 +39,7 @@ export interface MyBatteryStatusResponse {
     temperature: number;
     temperatureC: number;
     timestamp: number;
+    restVoltage: number;
     voltage: number;
   } | null;
 }

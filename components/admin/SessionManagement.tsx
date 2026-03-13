@@ -198,7 +198,7 @@ const SessionManagement: React.FC = () => {
                   <td className="px-4 py-3 text-gray-300">{session.userEmail || 'N/A'}</td>
                   <td className="px-4 py-3 capitalize">{session.sessionType}</td>
                   <td className="px-4 py-3">{renderStatusBadge(session.status)}</td>
-                  <td className="px-4 py-3 font-mono">{session.amount ? `Ksh ${session.amount.toFixed(2)}` : 'N/A'}</td>
+                  <td className="px-4 py-3 font-mono">{session.amount ? `Ksh ${session.amount}` : 'N/A'}</td>
                   <td className="px-4 py-3 font-mono text-xs">
                     {session.boothUid ? (
                       <>

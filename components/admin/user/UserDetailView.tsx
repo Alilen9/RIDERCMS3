@@ -9,7 +9,7 @@ interface UserDetailViewProps {
 }
 
 const UserDetailView: React.FC<UserDetailViewProps> = ({ user, onBack, onSetUserStatus, onDeleteUser }) => {
-  const { uid, displayName, email, role, disabled, creationTime, lastSignInTime } = user;
+  const { uid, displayName, email, phoneNumber, role, disabled, creationTime, lastSignInTime } = user;
 
   const formatDate = (timestamp: string | undefined) => {
     if (!timestamp) return 'N/A';
@@ -54,6 +54,10 @@ const UserDetailView: React.FC<UserDetailViewProps> = ({ user, onBack, onSetUser
           <div>
             <p className="text-gray-400">Email Address</p>
             <p className="font-semibold text-white">{email}</p>
+          </div>
+          <div>
+            <p className="text-gray-400">Phone Number</p>
+            <p className="font-semibold text-white">{phoneNumber || 'N/A'}</p>
           </div>
           <div>
             <p className="text-gray-400">Role</p>
