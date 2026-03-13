@@ -660,6 +660,29 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
         .animate-fade-in {
             animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         }
+        @keyframes bubble-rise {
+          from {
+            bottom: -30px;
+            opacity: 0;
+          }
+          25% {
+            opacity: 0.7;
+          }
+          95% {
+            opacity: 0.4;
+          }
+          to {
+            bottom: 105%;
+            opacity: 0;
+          }
+        }
+        .bubble {
+          position: absolute;
+          background-color: rgba(255, 255, 255, 0.25);
+          border-radius: 50%;
+          animation: bubble-rise linear infinite;
+          transform: translateX(-50%);
+        }
       `}</style>
     </div>
   );
