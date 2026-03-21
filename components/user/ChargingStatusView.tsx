@@ -20,16 +20,6 @@ const ChargingStatusView: React.FC<ChargingStatusViewProps> = ({
   runAiAnalysis,
   initiateCollection,
 }) => {
-  const getChargeColor = (level: number): string => {
-    if (level < 20) {
-      return 'bg-red-500';
-    }
-    if (level < 80) {
-      return 'bg-yellow-400';
-    }
-    return 'bg-emerald-500';
-  };
-
   return (
     <div className="animate-fade-in space-y-6 pt-4">
       
@@ -62,33 +52,18 @@ const ChargingStatusView: React.FC<ChargingStatusViewProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-col items-center justify-center mb-6">
-          {/* Battery Icon */}
-          <div className="relative w-24 h-40">
-            {/* Battery Body */}
-            <div className="h-full w-full border-4 border-gray-500 rounded-2xl p-1.5 flex flex-col-reverse bg-gray-900/50">
-              {/* Charge Level */}
-              <div
-                className={`relative overflow-hidden w-full ${getChargeColor(activeBattery.chargeLevel)} rounded-lg transition-all duration-1000 ease-linear`}
-                style={{ height: `${activeBattery.chargeLevel}%` }}
-              >
-                {/* Bubbles */}
-                <span className="bubble" style={{ left: '15%', width: '15px', height: '15px', animationDuration: '5s', animationDelay: '0s' }}></span>
-                <span className="bubble" style={{ left: '40%', width: '8px', height: '8px', animationDuration: '8s', animationDelay: '2s' }}></span>
-                <span className="bubble" style={{ left: '65%', width: '12px', height: '12px', animationDuration: '6s', animationDelay: '1s' }}></span>
-                <span className="bubble" style={{ left: '85%', width: '10px', height: '10px', animationDuration: '10s', animationDelay: '4s' }}></span>
-              </div>
-            </div>
-            {/* Battery Cap */}
-            <div className="absolute -top-1 left-1/2 -translate-x-1/2 h-2 w-10 bg-gray-500 rounded-t-md"></div>
-            {/* Lightning Bolt Icon */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-white/90 drop-shadow-lg animate-pulse" viewBox="0 0 24 24" fill="currentColor">
-                <path fillRule="evenodd" d="M14.615 1.595a.75.75 0 01.359.852L12.982 9.75h7.268a.75.75 0 01.548 1.262l-10.5 11.25a.75.75 0 01-1.272-.71l1.992-7.302H3.75a.75.75 0 01-.548-1.262l10.5-11.25a.75.75 0 01.913-.143z" clipRule="evenodd" />
-              </svg>
+        <div className="flex justify-center mb-8">
+          <div className="relative w-48 h-48">
+            {/* Circular Progress */}
+            <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+              <path className="text-gray-700" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="2.5" />
+              <path className="text-emerald-500 transition-all duration-1000 ease-linear" strokeDasharray={`${activeBattery.chargeLevel}, 100`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-5xl font-bold text-white">{activeBattery.chargeLevel}<span className="text-2xl">%</span></span>
+              <span className="text-sm text-emerald-400 font-medium animate-pulse">Charging...</span>
             </div>
           </div>
-          <span className="text-sm text-emerald-400 font-medium animate-pulse mt-4">Charging...</span>
         </div>
 
         <div className="grid grid-cols-2 gap-2 text-center">
