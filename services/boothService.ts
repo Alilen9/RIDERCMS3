@@ -22,10 +22,14 @@ export interface PublicBooth {
 /**
  * Response from checking the logged-in user's deposited battery status.
  * GET /api/booths/my-battery-status
+ *  res.status(200).json({
+      boothUid, slotIdentifier, chargeLevel: realTimeCharge, lastChargeLevel: lastChargeLevelSoc, sessionStatus, telemetry: realTimeTelemetry
+    });
  */
 export interface MyBatteryStatusResponse {
   batteryUid: string;
   chargeLevel: number;
+  lastChargeLevel: number;
   boothUid: string;
   slotIdentifier: string;
   sessionStatus: 'pending' | 'in_progress' | 'completed' | 'cancelled' | 'failed';
