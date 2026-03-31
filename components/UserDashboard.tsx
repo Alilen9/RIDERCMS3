@@ -16,7 +16,7 @@ interface UserDashboardProps {
 }
 
 // Removed 'select_type' from ViewState
-type ViewState = 'loading' | 'home' | 'map_view' | 'scan_qr' | 'assigning_slot' | 'deposit_guide' | 'status' | 'billing' | 'collect_guide';
+type ViewState = 'loading' | 'home' | 'map_view' | 'scan_qr' | 'assigning_slot' | 'deposit_guide' | 'status' | 'billing' | 'collect_guide' | 'scan_to_release';
 
 const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
   const [view, setView] = useState<ViewState>('loading');
@@ -225,10 +225,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
         if (statusResponse.paymentStatus === "paid") {
           clearInterval(pollForPayment);
           setPaymentStatus("success");
-
-          // Open the slot and guide the user to collect
-          //await boothService.openForCollection(checkoutRequestId);
-          setView("collect_guide");
+          // After payment, user must scan the booth QR to physically release the battery
+          setView("scan_to_release");
         }
         // If status is 'pending' or something else, we just let the interval run again.
         // If it's 'failed', the backend should handle it, but we could add a check here.
@@ -247,6 +245,31 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
   const startDeposit = () => {
     setView('scan_qr');
   };
+
+  // Handle verification scan after payment to release the battery
+  const handleReleaseScan = useCallback(async (decodedText: string) => {
+    setLoading(true);
+    try {
+      const result = await boothService.releaseBattery(decodedText);
+      toast.success(result.message || "Booth verified! Slot opening...");
+      
+      // Update assigned slot info to ensure the collection guide displays the correct slot
+      if (result.slotIdentifier) {
+        setAssignedSlot(prev => prev ? {
+          ...prev,
+          identifier: result.slotIdentifier
+        } : { identifier: result.slotIdentifier, status: 'occupied', doorStatus: 'open' } as Slot);
+      }
+
+      setView('collect_guide');
+    } catch (err: any) {
+      const serverMessage = err.response?.data?.error || "Verification failed. Please scan the booth QR code.";
+      toast.error(serverMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   // 3. Handle QR Scan Success - calls initiateDeposit API
   const handleScanSuccess = useCallback(async (decodedText: string) => {
     setLoading(true);
@@ -510,6 +533,44 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
           </div>
         )}
 
+        {/* VIEW: SCAN TO RELEASE (Verification after payment) */}
+        {view === 'scan_to_release' && (
+          <div className="fixed inset-0 bg-[#0B1E4B] z-50 flex flex-col items-center justify-center animate-fade-in p-4">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold text-white mb-2">Verify Booth</h2>
+              <p className="text-emerald-400 text-sm">Scan the QR code on the booth to release your battery</p>
+            </div>
+            <div className="relative w-full max-w-sm aspect-[3/4] bg-gray-900 rounded-2xl overflow-hidden border border-emerald-500/50 shadow-2xl">
+              <QrScanner
+                onScanSuccess={handleReleaseScan}
+                onScanFailure={handleScanFailure}
+              />
+              {/* Camera Overlay */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 border-2 border-emerald-500 rounded-3xl shadow-[0_0_20px_rgba(16,185,129,0.3)] pointer-events-none">
+                <div className="absolute top-0 w-full h-1 bg-emerald-400 shadow-[0_0_10px_#34d399] animate-[scan_2s_ease-in-out_infinite]"></div>
+              </div>
+            </div>
+
+            {/* Manual Input Fallback */}
+            <div className="mt-6 w-full max-w-sm text-center">
+              <p className="text-gray-400 text-sm mb-2">Or enter Booth UID manually:</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Booth UID..."
+                  value={manualBoothId}
+                  onChange={(e) => setManualBoothId(e.target.value)}
+                  className="flex-grow bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+                <button onClick={() => handleReleaseScan(manualBoothId)} disabled={!manualBoothId || loading} className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-white font-bold px-4 py-2 rounded-lg">
+                  {loading ? '...' : 'Verify'}
+                </button>
+              </div>
+            </div>
+            <button onClick={() => { setView('billing'); }} className="mt-8 text-gray-400 hover:text-white">Back to Payment Summary</button>
+          </div>
+        )}
+
         {/* VIEW: ASSIGNING */}
         {view === 'assigning_slot' && (
           <div className="flex flex-col items-center justify-center h-[60vh] animate-fade-in">
@@ -607,7 +668,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
                   </svg>
                 </div>
                 <h3 className="text-xl font-bold text-white mb-1">Payment Received</h3>
-                <p className="text-emerald-400 text-sm">Unlocking Slot {assignedSlot?.identifier}...</p>
+                <p className="text-emerald-400 text-sm">Verification required to release battery...</p>
               </div>
             )}
           </div>

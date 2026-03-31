@@ -216,6 +216,20 @@ export const openForCollection = async (checkoutRequestId: string): Promise<void
 };
 
 /**
+ * Triggers the release of a battery after physical QR scan verification.
+ * @param boothUid - The UID of the booth being scanned.
+ */
+export const releaseBattery = async (boothUid: string): Promise<{ message: string; slotIdentifier: string }> => {
+  try {
+    const response = await apiClient.post<{ message: string; slotIdentifier: string }>('/booths/release-battery', { boothUid });
+    return response.data;
+  } catch (error) {
+    console.error('Failed to release battery:', error);
+    throw error;
+  }
+};
+
+/**
  * Retrieves the deposit and withdrawal history for the logged-in user.
  * @returns A promise that resolves with an array of user transactions.
  */
