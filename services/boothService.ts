@@ -71,6 +71,8 @@ export interface InitiateWithdrawalResponse {
   durationMinutes: number;
   soc: number;
   initialCharge: number;
+  socAtInitiation: number;
+  currentBoothSoc: number;
   baseSwapFee: number;
   costPerChargePercent: number;
   depositCompletedAt: string;
