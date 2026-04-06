@@ -80,6 +80,19 @@ export interface InitiateWithdrawalResponse {
 }
 
 /**
+ * Response from stopping charging.
+ * POST /api/booths/stop-charging
+ */
+export interface StopChargingResponse {
+  message: string;
+  boothUid: string;
+  slotIdentifier: string;
+  socAtStopRequest: number | null;
+  relayAlreadyOff: boolean;
+  recommendedWaitSeconds: number;
+}
+
+/**
  * Response from polling the withdrawal payment status.
  * GET /api/booths/withdrawal-status/:checkoutRequestId
  */
@@ -175,6 +188,22 @@ export const getPendingWithdrawal = async (): Promise<InitiateWithdrawalResponse
     throw error;
   }
 };
+
+/**
+ * Allows the app to stop charging first, then wait before creating a withdrawal session.
+ * POST /api/booths/stop-charging
+ */
+export const stopCharging = async (): Promise<StopChargingResponse> => {
+  try {
+    const response = await apiClient.post<StopChargingResponse>('/booths/stop-charging');
+    return response.data;
+  } catch (error) {
+    console.error('Failed to stop charging:', error);
+    // Re-throw for component-level error handling.
+    throw error;
+  }
+};
+
 
 /**
  * Triggers the M-Pesa STK push for a pre-calculated withdrawal session.

@@ -16,7 +16,7 @@ interface UserDashboardProps {
 }
 
 // Removed 'select_type' from ViewState
-type ViewState = 'loading' | 'home' | 'map_view' | 'scan_qr' | 'assigning_slot' | 'deposit_guide' | 'status' | 'billing' | 'collect_guide' | 'scan_to_release';
+type ViewState = 'loading' | 'home' | 'map_view' | 'scan_qr' | 'assigning_slot' | 'deposit_guide' | 'status' | 'stopping_charge' | 'waiting_for_withdrawal' | 'billing' | 'collect_guide' | 'scan_to_release';
 
 const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
   const [view, setView] = useState<ViewState>('loading');
@@ -30,6 +30,9 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
   const [checkoutRequestId, setCheckoutRequestId] = useState<string>('');
   const [withdrawalCost, setWithdrawalCost] = useState<number>(0);
   const [withdrawalDuration, setWithdrawalDuration] = useState<number>(0);
+  const [socAtStopRequest, setSocAtStopRequest] = useState<number | null>(null);
+  const [relayAlreadyOff, setRelayAlreadyOff] = useState(false);
+  const [recommendedWaitSeconds, setRecommendedWaitSeconds] = useState(0);
   const [withdrawalEnergy, setWithdrawalEnergy] = useState<number>(0);
   const [manualBoothId, setManualBoothId] = useState('');
   const [booths, setBooths] = useState<boothService.PublicBooth[]>([]);
@@ -241,6 +244,30 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
     return () => { isCancelled = true; clearInterval(pollForPayment); };
   }, [view, paymentStatus, checkoutRequestId]);
 
+  // This effect handles the countdown for the "waiting for withdrawal" screen
+  useEffect(() => {
+    if (view === 'waiting_for_withdrawal') {
+      if (recommendedWaitSeconds > 0) {
+        setCountdown(recommendedWaitSeconds); // Initialize countdown here
+        const timer = setInterval(() => {
+          setCountdown(prev => {
+            if (prev <= 1) {
+              clearInterval(timer);
+              initiateCollection(); // Proceed after countdown
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+        return () => clearInterval(timer); // Cleanup on component unmount or view change
+      } else {
+        // If no wait is recommended (relay already off), proceed immediately
+        initiateCollection();
+      }
+    }
+  }, [view, recommendedWaitSeconds, initiateCollection]);
+  const [countdown, setCountdown] = useState(0); // Add countdown state here
+
   // 1. Start Deposit
   const startDeposit = () => {
     setView('scan_qr');
@@ -334,7 +361,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
   }, []); // No dependencies, this function is stable.
 
   // 5. Initiate Collection - calls initiateWithdrawal API
-  const initiateCollection = async () => {
+  async function initiateCollection() {
     setError(null); // Clear previous errors
     setLoading(true);
     try {
@@ -344,7 +371,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
       setWithdrawalCost(response.amount);
       setWithdrawalDuration(response.durationMinutes);
       setWithdrawalEnergy(response.soc);
-      setView('billing');
+      setView('billing'); // Continue to the billing flow
       setPaymentStatus('idle');
     } catch (err) {
       const error = err as any;
@@ -363,6 +390,10 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
     } finally {
       setLoading(false);
     }
+  }
+
+  const handleStopCharging = async () => {
+    await initiateCollection();
   };
 
   // 6. Handle STK Push - calls getWithdrawalStatus API
@@ -389,7 +420,10 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
     setWithdrawalSessionId(null);
     setCheckoutRequestId('');
     setWithdrawalCost(0);
+    setSocAtStopRequest(null);
+    setRelayAlreadyOff(false);
     setWithdrawalDuration(0);
+    setRecommendedWaitSeconds(0);
     setView('scan_qr');
   };
 
@@ -619,8 +653,17 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
             isAnalyzing={isAnalyzing}
             loading={loading}
             runAiAnalysis={runAiAnalysis}
-            initiateCollection={initiateCollection}
+            initiateCollection={handleStopCharging} // Change this button to trigger stop charging
           />
+        )}
+
+        {/* VIEW: STOPPING CHARGE (Intermediate loading state) */}
+        {view === 'stopping_charge' && (
+          <div className="flex flex-col items-center justify-center h-[70vh] animate-fade-in">
+            <div className="w-16 h-16 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin mb-6"></div>
+            <h3 className="text-xl font-semibold">Stopping charge...</h3>
+            <p className="text-gray-400 mt-2">Please wait while we finalize your withdrawal.</p>
+          </div>
         )}
 
         {/* Display error message if it exists */}
