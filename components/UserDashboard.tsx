@@ -118,8 +118,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
       setSocAtStopRequest(response.socAtStopRequest);
       setRelayAlreadyOff(response.relayAlreadyOff);
       
-      // Default to 50 seconds as requested, or use server's recommended time
-      const waitTime = response.recommendedWaitSeconds || 50;
+      // Default to 25 seconds as requested, or use server's recommended time
+      const waitTime = response.recommendedWaitSeconds || 25;
       setRecommendedWaitSeconds(waitTime);
       setCountdown(waitTime);
       
