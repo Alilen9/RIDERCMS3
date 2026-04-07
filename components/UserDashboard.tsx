@@ -36,6 +36,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
   const [withdrawalEnergy, setWithdrawalEnergy] = useState<number>(0);
   const [manualBoothId, setManualBoothId] = useState('');
   const [booths, setBooths] = useState<boothService.PublicBooth[]>([]);
+  const [countdown, setCountdown] = useState(0);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,6 +75,63 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
   }, [booths, userLocation]);
 
   const nearestStation = sortedStations[0];
+
+  // 5. Initiate Collection - calls initiateWithdrawal API
+  // Wrapped in useCallback and moved here to fix "used before declaration" error in useEffect
+  const initiateCollection = useCallback(async (isRetry = false) => {
+    setError(null);
+    if (!isRetry) setLoading(true);
+    
+    try {
+      const response = await boothService.initiateWithdrawal();
+      console.log('Withdrawal initiated:', response);
+      setWithdrawalSessionId(response.sessionId);
+      setWithdrawalCost(response.amount);
+      setWithdrawalDuration(response.durationMinutes);
+      setWithdrawalEnergy(response.soc);
+      setView('billing');
+      setPaymentStatus('idle');
+    } catch (err: any) {
+      const serverCode = err.response?.data?.error; // or however your backend sends error codes
+      const serverMessage = err.response?.data?.message || 'Failed to start collection.';
+
+      // Handle 409 CHARGING_STILL_ACTIVE by retrying
+      if (err.response?.status === 409) {
+        toast.error("Battery is still finalizing charge. Retrying in 5 seconds...", { id: 'retry-toast' });
+        setTimeout(() => initiateCollection(true), 5000);
+        return;
+      }
+
+      setError(serverMessage);
+      toast.error(serverMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // 4. Handle Stop Charging - calls stop-charging API then waits
+  const handleStopCharging = useCallback(async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const response = await boothService.stopCharging();
+      setSocAtStopRequest(response.socAtStopRequest);
+      setRelayAlreadyOff(response.relayAlreadyOff);
+      
+      // Default to 50 seconds as requested, or use server's recommended time
+      const waitTime = response.recommendedWaitSeconds || 50;
+      setRecommendedWaitSeconds(waitTime);
+      setCountdown(waitTime);
+      
+      setView('waiting_for_withdrawal');
+    } catch (err: any) {
+      const msg = err.response?.data?.message || "Failed to stop charging.";
+      toast.error(msg);
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, [initiateCollection]);
 
   // Load user's current battery status on mount
   useEffect(() => {
@@ -247,12 +305,11 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
   // This effect handles the countdown for the "waiting for withdrawal" screen
   useEffect(() => {
     if (view === 'waiting_for_withdrawal') {
-      if (recommendedWaitSeconds > 0) {
-        setCountdown(recommendedWaitSeconds); // Initialize countdown here
+      if (countdown > 0) {
         const timer = setInterval(() => {
           setCountdown(prev => {
             if (prev <= 1) {
-              clearInterval(timer);
+              clearInterval(timer); 
               initiateCollection(); // Proceed after countdown
               return 0;
             }
@@ -265,8 +322,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
         initiateCollection();
       }
     }
-  }, [view, recommendedWaitSeconds, initiateCollection]);
-  const [countdown, setCountdown] = useState(0); // Add countdown state here
+  }, [view, initiateCollection]);
 
   // 1. Start Deposit
   const startDeposit = () => {
@@ -359,42 +415,6 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
     console.warn("QR Scanner failed to start, allowing manual input:", error);
     toast.error("Camera not available. Please use manual input below.");
   }, []); // No dependencies, this function is stable.
-
-  // 5. Initiate Collection - calls initiateWithdrawal API
-  async function initiateCollection() {
-    setError(null); // Clear previous errors
-    setLoading(true);
-    try {
-      const response = await boothService.initiateWithdrawal();
-      console.log('Withdrawal initiated:', response);
-      setWithdrawalSessionId(response.sessionId);
-      setWithdrawalCost(response.amount);
-      setWithdrawalDuration(response.durationMinutes);
-      setWithdrawalEnergy(response.soc);
-      setView('billing'); // Continue to the billing flow
-      setPaymentStatus('idle');
-    } catch (err) {
-      const error = err as any;
-      console.error('Full error object on withdrawal failure:', error);
-
-      // Default error message
-      let errorMessage = 'Failed to start collection. Please try again.';
-
-      // Check for a specific API error message
-      if (error.response && error.response.data && typeof error.response.data.message === 'string') {
-        errorMessage = error.response.data.message;
-      }
-
-      setError(errorMessage);
-
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const handleStopCharging = async () => {
-    await initiateCollection();
-  };
 
   // 6. Handle STK Push - calls getWithdrawalStatus API
   const handleSTKPush = async () => {
@@ -666,8 +686,51 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
           </div>
         )}
 
+        {/* VIEW: WAITING FOR WITHDRAWAL */}
+        {view === 'waiting_for_withdrawal' && (
+          <div className="flex flex-col items-center justify-center h-[70vh] animate-fade-in text-center">
+            {!error ? (
+              <>
+                <div className="relative w-32 h-32 mb-8">
+                  <div className="absolute inset-0 border-4 border-emerald-500/20 rounded-full"></div>
+                  <div className="absolute inset-0 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                  <div className="absolute inset-0 flex items-center justify-center text-3xl font-bold text-emerald-400">{countdown}s</div>
+                </div>
+                <h2 className="text-2xl font-bold mb-2">Processing...</h2>
+                <p className="text-gray-400 max-w-xs mx-auto">Please wait while we process your request. This will take a few moments.</p>
+              </>
+            ) : (
+              <div className="space-y-6 animate-fade-in">
+                <div className="w-20 h-20 bg-red-900/20 rounded-full flex items-center justify-center mx-auto border border-red-500/50">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white mb-2">Withdrawal Failed</h2>
+                  <p className="text-gray-400 max-w-xs mx-auto">{error}</p>
+                </div>
+                <div className="flex flex-col gap-3 w-full max-w-xs mx-auto">
+                  <button 
+                    onClick={() => initiateCollection()} 
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl shadow-lg transition-all active:scale-95"
+                  >
+                    Try Again Now
+                  </button>
+                  <button 
+                    onClick={() => { setError(null); setView('status'); }} 
+                    className="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold py-3 rounded-xl border border-gray-700 transition-colors"
+                  >
+                    Go Back
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Display error message if it exists */}
-        {error && (
+        {error && view !== 'waiting_for_withdrawal' && (
           <div className="mt-4 p-3 bg-red-900/50 border border-red-700 text-red-300 rounded-lg text-sm text-center">
             {error}
           </div>
