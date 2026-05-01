@@ -92,3 +92,89 @@ export interface Booth {
   latitude?: number;
   longitude?: number;
 }
+
+/**
+ * Session status statistics
+ */
+export interface SummaryStats {
+  pending: number;
+  completed: number;
+  failed: number;
+  failure: number; // alias for failed
+}
+
+/**
+ * Additional session counts
+ */
+export interface ExtraStats {
+  total: number;
+  opening: number;
+  inprogress: number;
+  cancelled: number;
+  redeemed: number;
+}
+
+/**
+ * Daily trend data point for status trend chart
+ */
+export interface DailyTrend {
+  date: string;
+  pending: number;
+  completed: number;
+  failed: number;
+  total: number;
+}
+
+/**
+ * Breakdown by status
+ */
+export interface BreakdownByStatus {
+  pending: number;
+  completed: number;
+  failed: number;
+  cancelled: number;
+}
+
+/**
+ * Breakdown by session type
+ */
+export interface BreakdownBySessionType {
+  deposit: number;
+  withdrawal: number;
+}
+
+/**
+ * Complete stats response from /api/stats endpoint
+ */
+export interface StatsResponse {
+  summary: SummaryStats;
+  extra: ExtraStats;
+  charts: {
+    statusTrend: DailyTrend[];
+  };
+  breakdowns: {
+    byStatus: BreakdownByStatus;
+    bySessionType: BreakdownBySessionType;
+  };
+}
+
+/**
+ * Query parameters for /api/stats endpoint
+ */
+export interface StatsQueryParams {
+  scope?: 'all' | string;
+  sessionType?: 'all' | 'deposit' | 'Withdrawal';
+  days?: number; // 1..90, default 7
+}
+
+/**
+ * Summary data for the admin dashboard
+ */
+export interface DashboardSummary {
+  totalRevenue: number;
+  activeStations: number;
+  totalSwaps: number;
+  activeSessions: number;
+  swapVolumeTrend: { time: string; swaps: number }[];
+  batteryUsage: { name: string; value: number }[];
+}

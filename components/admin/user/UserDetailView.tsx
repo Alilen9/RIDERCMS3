@@ -1,5 +1,6 @@
 import React from 'react';
 import { AdminUser, UserAccountStatus } from '../../../services/adminService';
+import { MoveLeftIcon } from 'lucide-react';
 
 interface UserDetailViewProps {
   user: AdminUser;
@@ -19,8 +20,9 @@ const UserDetailView: React.FC<UserDetailViewProps> = ({ user, onBack, onSetUser
   return (
     <div className="animate-fade-in-fast">
       <div className="mb-6">
-        <button onClick={onBack} className="text-sm text-gray-400 hover:text-white mb-4">
-          &larr; Back to All Users
+        <button onClick={onBack} className="flex items-center gap-2 px-4 py-2 rounded-lg border  font-sm back text-gray-400 hover:text-white mb-4">
+          <MoveLeftIcon className="inline-block w-4 h-4 mr-1" />
+          <p>Back</p>
         </button>
         <div className="flex justify-between items-start">
           <div>

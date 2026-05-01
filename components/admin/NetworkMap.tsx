@@ -30,7 +30,7 @@ const NetworkMap: React.FC<NetworkMapProps> = ({ onBoothClick }) => {
       setLoading(true);
       try {
         const response = await getBooths();
-        console.log('NetworkMap: Fetched booth data from API:', response);
+        //console.log('NetworkMap: Fetched booth data from API:', response);
         const allBooths = response.booths;
 
         console.log(`NetworkMap: Retrieved ${allBooths.length} booths from API.`);

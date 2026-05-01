@@ -84,7 +84,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
     
     try {
       const response = await boothService.initiateWithdrawal();
-      console.log('Withdrawal initiated:', response);
+      //console.log('Withdrawal initiated:', response);
       setWithdrawalSessionId(response.sessionId);
       setWithdrawalCost(response.amount);
       setWithdrawalDuration(response.durationMinutes);
@@ -152,7 +152,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
     const loadBatteryStatus = async () => {
       // 1. Check for a pending withdrawal first. This is the most specific state.
       const pendingWithdrawal = await boothService.getPendingWithdrawal();
-      console.log('Pending withdrawal on mount:', pendingWithdrawal);
+      //console.log('Pending withdrawal on mount:', pendingWithdrawal);
       if (pendingWithdrawal) {
         setWithdrawalSessionId(pendingWithdrawal.sessionId);
         setWithdrawalCost(pendingWithdrawal.amount);
@@ -164,7 +164,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
 
       // 2. If no pending withdrawal, check for any other active battery session.
       const batteryStatus = await boothService.getMyBatteryStatus();
-      console.log('Loaded battery status on mount:', batteryStatus);
+      //console.log('Loaded battery status on mount:', batteryStatus);
       if (batteryStatus) {
         setActiveBattery({
           id: batteryStatus.batteryUid,
@@ -247,7 +247,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
     const pollForStatus = setInterval(async () => {
       try {
         const batteryStatus = await boothService.getMyBatteryStatus();
-        console.log('Polled battery status:', batteryStatus);
+        //console.log('Polled battery status:', batteryStatus);
         
         if (batteryStatus && activeBattery) {
           // Update the charge level of the existing active battery
@@ -294,7 +294,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
 
       } catch (err) {
         // Don't show an error on every poll, just log it. The timeout will handle persistent failures.
-        console.error("Payment poll failed:", err);
+        //console.error("Payment poll failed:", err);
       }
     }, 2000); // Poll every 2 seconds
 
@@ -412,7 +412,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
   const handleScanFailure = useCallback((error: string) => {
     // Don't redirect on camera failure. Just log it and allow manual input.
     // The user will see the manual input field as a fallback.
-    console.warn("QR Scanner failed to start, allowing manual input:", error);
+    // console.warn("QR Scanner failed to start, allowing manual input:", error);
     toast.error("Camera not available. Please use manual input below.");
   }, []); // No dependencies, this function is stable.
 
@@ -420,6 +420,10 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
   const handleSTKPush = async () => {
     setLoading(true);
     try {
+      if (!withdrawalSessionId) {
+        throw new Error("No active withdrawal session found.");
+      }
+      
       const payResponse = await boothService.payForWithdrawal(withdrawalSessionId);
       // Set the checkout ID and status to trigger the polling useEffect
       setCheckoutRequestId(payResponse.checkoutRequestId);

@@ -140,11 +140,17 @@ const UserManagement: React.FC = () => {
       return users;
     }
     const lowercasedTerm = searchTerm.toLowerCase();
-    return users.filter(user =>
-      user.displayName.toLowerCase().includes(lowercasedTerm) ||
-      user.email.toLowerCase().includes(lowercasedTerm) ||
-      (user.phoneNumber && user.phoneNumber.includes(searchTerm))
-    );
+    return users.filter(user => {
+      const displayName = user.displayName || '';
+      const email = user.email || '';
+      const phoneNumber = user.phoneNumber || '';
+      
+      return (
+        displayName.toLowerCase().includes(lowercasedTerm) ||
+        email.toLowerCase().includes(lowercasedTerm) ||
+        phoneNumber.includes(searchTerm)
+      );
+    });
   }, [users, searchTerm]);
 
   if (loading) {

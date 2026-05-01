@@ -99,7 +99,7 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
     try {
       const response = await getBooths();
       setBooths(response.booths);
-      console.log('Fetched booths:', response.booths);
+//      console.log('Fetched booths:', response.booths);
     } catch (err) {
       setError('Failed to fetch booths. Please try again.');
     } finally {
@@ -110,7 +110,7 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
   const fetchBoothStatuses = useCallback(async () => {
     try {
       const statuses = await getBoothStatus();
-      console.log('DEBUG: Fetched Booth Statuses:', statuses);
+      //console.log('DEBUG: Fetched Booth Statuses:', statuses);
       setBoothStatuses(statuses);
     } catch (err) {
       console.error('Failed to fetch booth statuses:', err);

@@ -9,6 +9,7 @@ import { UserRole } from './types';
 // --- Your Page/Dashboard Components ---
 import AdminDashboard from './components/AdminDashboard';
 import UserDashboard from './components/UserDashboard';
+import NotFound from './components/NotFound';
 import { useAuth, AuthProvider } from './components/auth/AuthContext';
 
 // This component will handle the logic for the /auth route
@@ -24,7 +25,7 @@ const AuthHandler = () => {
 
     // If a user session exists, redirect them immediately from this page.
     if (user) {
-      console.log("User redirected based on role:", user.role);
+      //console.log("User redirected based on role:", user.role);
       switch (user.role) {
         case UserRole.ADMIN:
           navigate('/admin/dashboard', { replace: true });
@@ -79,6 +80,9 @@ const AppContent: React.FC = () => {
 
       {/* Redirect root path to auth if not logged in */}
       <Route path="/" element={<Navigate to="/auth" replace />} />
+
+      {/* 404 Catch-all Route */}
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 };
