@@ -349,6 +349,29 @@ export const getSettings = async (): Promise<AppSettings> => {
 };
 
 
+export interface SlotDetails {
+  slotIdentifier: string;
+  isCharging: boolean;
+  chargeLevel: number;
+  status: string;
+  userName: string | null;
+}
+
+/**
+ * Fetches detailed status for a specific booth slot.
+ * @param boothUid The UID of the booth.
+ * @param slotIdentifier The identifier of the slot.
+ */
+export const getSlotDetails = async (boothUid: string, slotIdentifier: string): Promise<SlotDetails> => {
+  try {
+    const response = await apiClient.get<SlotDetails>(`/booths/${boothUid}/slots/${slotIdentifier}`);
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to fetch slot details for ${boothUid}/${slotIdentifier}:`, error);
+    throw error;
+  }
+};
+
 /**
  * Updates one or more application settings.
  * @param settings The settings object to update.
@@ -458,6 +481,33 @@ export interface AdminSession {
   batteryUid: string | null;
 }
 
+export interface AdminPayment {
+  id: number;
+  callbackType: string;
+  payload: any;
+  notes: string;
+  createdAt: string;
+  amount: number | null;
+  userName: string | null;
+  userEmail: string | null;
+}
+
+export interface ListPaymentsResponse {
+  payments: AdminPayment[];
+  total: number;
+  totalSuccessfulAmount: number;
+}
+
+export interface PaymentFilters {
+  searchTerm?: string;
+  startDate?: string;
+  endDate?: string;
+  status?: 'success' | 'failure' | '';
+  boothUid?: string;
+  sortBy?: 'amount' | 'date';
+  sortOrder?: 'ASC' | 'DESC';
+}
+
 export interface ListSessionsResponse {
   sessions: AdminSession[];
   total: number;
@@ -467,7 +517,34 @@ export interface SessionFilters {
   searchTerm?: string;
   status?: string;
   sessionType?: string;
+  boothUid?: string;
+  slotIdentifier?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  userId?: string;
 }
+
+/**
+ * Fetches a paginated list of all payments from the admin endpoint.
+ * @param limit The number of payments to fetch.
+ * @param offset The number of payments to skip.
+ * @param filters Optional search and filter criteria.
+ */
+export const getPayments = async (
+  limit: number,
+  offset: number,
+  filters?: PaymentFilters
+): Promise<ListPaymentsResponse> => {
+  try {
+    const response = await apiClient.get<ListPaymentsResponse>('/admin/payments', {
+      params: { limit, offset, ...filters },
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Failed to fetch payments:', error);
+    throw error;
+  }
+};
 
 /**
  * Fetches a paginated list of all sessions from the admin endpoint.

@@ -2,21 +2,34 @@ import React, { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { getSessions, AdminSession, SessionFilters, deleteSession } from '../../services/adminService';
 import ConfirmationModal from './ConfirmationModal';
+import SessionDetailView from './SessionDetailView';
 import { format } from 'date-fns';
 
-const SESSIONS_PER_PAGE = 15;
+const SESSIONS_PER_PAGE = 10;
 
-const SessionManagement: React.FC = () => {
+interface SessionManagementProps {
+  onNavigateToBooth?: (boothUid: string) => void;
+  onNavigateToUser?: (email: string) => void;
+}
+
+const SessionManagement: React.FC<SessionManagementProps> = ({ onNavigateToBooth, onNavigateToUser }) => {
   const [sessions, setSessions] = useState<AdminSession[]>([]);
   const [totalSessions, setTotalSessions] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [filters, setFilters] = useState<SessionFilters>({
     searchTerm: '',
     status: '',
     sessionType: '',
+    boothUid: '',
+    slotIdentifier: '',
+    dateFrom: '',
+    dateTo: '',
   });
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(filters.searchTerm);
+  const [showSessionDetail, setShowSessionDetail] = useState(false);
+  const [sessionForDetails, setSessionForDetails] = useState<AdminSession | null>(null);
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
     title: string;
@@ -66,7 +79,7 @@ const SessionManagement: React.FC = () => {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearchTerm, filters.status, filters.sessionType]);
+  }, [debouncedSearchTerm, filters.status, filters.sessionType, filters.boothUid, filters.slotIdentifier, filters.dateFrom, filters.dateTo]);
 
 
   const handleDeleteSession = (session: AdminSession) => {
@@ -79,18 +92,19 @@ const SessionManagement: React.FC = () => {
   };
 
   const confirmDeleteSession = async (sessionId: number) => {
-    // We need to add `deleteSession` to `adminService.ts`
     closeModal();
-
-    await toast.promise(deleteSession(sessionId), {
-      loading: 'Deleting session...',
-      success: () => {
-        fetchSessionsData(); // Refetch data to update the list
-        
-        return 'Session deleted successfully.';
-      },
-      error: (err: any) => err.response?.data?.message || 'Failed to delete session.',
-    });
+    try {
+      await toast.promise(deleteSession(sessionId), {
+        loading: 'Deleting session...',
+        success: () => {
+          fetchSessionsData();
+          return 'Session deleted successfully.';
+        },
+        error: (err: any) => err.response?.data?.message || 'Failed to delete session.',
+      });
+    } finally {
+      // No cleanup needed
+    }
   };
 
   const totalPages = Math.ceil(totalSessions / SESSIONS_PER_PAGE);
@@ -116,142 +130,210 @@ const SessionManagement: React.FC = () => {
     setModalState({ isOpen: false, title: '', message: '', onConfirm: () => {} });
   };
 
+  const handleViewDetails = (session: AdminSession) => {
+    setSessionForDetails(session);
+    setShowSessionDetail(true);
+  };
+
+  const handleCloseDetail = () => {
+    setShowSessionDetail(false);
+    setSessionForDetails(null);
+  };
+
+  const handleRefresh = useCallback(() => {
+    fetchSessionsData();
+  }, [fetchSessionsData]);
+
   return (
     <div className="animate-fade-in">
-      <ConfirmationModal
-        isOpen={modalState.isOpen}
-        title={modalState.title} message={modalState.message}
-        onConfirm={modalState.onConfirm} onCancel={closeModal}
-        isDestructive />
-      {/* Filter Controls */}
-      <div className="mb-6 p-4 bg-gray-800/50 rounded-xl border border-gray-700 flex flex-col md:flex-row gap-4">
-        <input
-          type="text"
-          placeholder="Search by user email..."
-          value={filters.searchTerm}
-          onChange={(e) => setFilters(f => ({ ...f, searchTerm: e.target.value }))}
-          className="flex-grow bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+      {showSessionDetail && sessionForDetails ? (
+        <SessionDetailView 
+          session={sessionForDetails} 
+          onBack={handleCloseDetail}
+          onDelete={(session) => { handleCloseDetail(); handleDeleteSession(session); }}
+          onRefund={(session) => {
+            toast('Refund functionality coming soon', { icon: '🔧' });
+          }}
+          onNavigateToBooth={onNavigateToBooth}
+          onNavigateToUser={onNavigateToUser}
         />
-        <div className="grid grid-cols-2 md:flex gap-4">
-          <select
-            value={filters.sessionType}
-            onChange={(e) => setFilters(f => ({ ...f, sessionType: e.target.value }))}
-            className="bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-          >
-            <option value="">All Types</option>
-            <option value="deposit">Deposit</option>
-            <option value="withdrawal">Withdrawal</option>
-          </select>
-          <select
-            value={filters.status}
-            onChange={(e) => setFilters(f => ({ ...f, status: e.target.value }))}
-            className="bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-          >
-            <option value="">All Statuses</option>
-            <option value="pending">Pending</option>
-            <option value="in_progress">In Progress</option>
-            <option value="completed">Completed</option>
-            <option value="failed">Failed</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-[1000px]">
-            <thead className="bg-gray-900/70 text-gray-400 text-xs uppercase">
-              <tr>
-                <th className="px-4 py-3">Session ID</th>
-                <th className="px-4 py-3">User</th>
-                <th className="px-4 py-3">Type</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Amount</th>
-                <th className="px-4 py-3">Booth / Slot</th>
-                <th className="px-4 py-3">Battery UID</th>
-                <th className="px-4 py-3">Date Initiated</th>
-                <th className="px-4 py-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-800 text-sm">
-              {isLoading ? (
-                [...Array(SESSIONS_PER_PAGE)].map((_, index) => (
-                  <tr key={index} className="animate-pulse">
-                    <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-1/2"></div></td>
-                    <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-3/4"></div></td>
-                    <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-1/2"></div></td>
-                    <td className="px-4 py-3"><div className="h-6 bg-gray-700 rounded-full w-24"></div></td>
-                    <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-1/3"></div></td>
-                    <td className="px-4 py-3">
-                      <div className="h-3 bg-gray-700 rounded w-1/2 mb-1.5"></div>
-                      <div className="h-3 bg-gray-700 rounded w-1/4"></div>
-                    </td>
-                    <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-3/4"></div></td>
-                    <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-1/2"></div></td>
-                    <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-16"></div></td>
-                  </tr>
-                ))
-              ) : sessions.length > 0 ? (
-                sessions.map(session => (
-                <tr key={session.id} className="hover:bg-gray-800/60">
-                  <td className="px-4 py-3 font-mono text-xs text-gray-500">{session.id}</td>
-                  <td className="px-4 py-3 text-gray-300">{session.userEmail || 'N/A'}</td>
-                  <td className="px-4 py-3 capitalize">{session.sessionType}</td>
-                  <td className="px-4 py-3">{renderStatusBadge(session.status)}</td>
-                  <td className="px-4 py-3 font-mono">{session.amount ? `Ksh ${session.amount}` : 'N/A'}</td>
-                  <td className="px-4 py-3 font-mono text-xs">
-                    {session.boothUid ? (
-                      <>
-                        <div className="text-gray-400">{session.boothUid.substring(0, 8)}...</div>
-                        <div>{session.slotIdentifier}</div>
-                      </>
-                    ) : 'N/A'}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-gray-400">{session.batteryUid ? `${session.batteryUid.substring(0, 12)}...` : 'N/A'}</td>
-                  <td className="px-4 py-3 text-gray-400">{formatDate(session.createdAt)}</td>
-                  <td className="px-4 py-3 flex items-center gap-3">
-                    {session.status === 'completed' && session.sessionType === 'withdrawal' && (
-                      <button onClick={() => toast.error('Refund functionality not yet implemented.')} className="text-yellow-400 hover:text-yellow-300 hover:underline text-xs font-semibold">
-                        Refund
-                      </button>
-                    )}
-                    <button onClick={() => handleDeleteSession(session)} className="text-red-500 hover:text-red-400 hover:underline text-xs font-semibold">
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))
-              ) : (
-                <tr>
-                  <td colSpan={9} className="text-center py-12 text-gray-500">No sessions match the current filters.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        {/* Pagination */}
-        <div className="flex justify-between items-center p-4 bg-gray-900/50 border-t border-gray-800 text-sm">
-          <span className="text-gray-400">
-            Page {currentPage} of {totalPages} ({totalSessions} total sessions)
-          </span>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1 || isLoading}
-              className="px-3 py-1 bg-gray-700 rounded-md hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Previous
-            </button>
-            <button
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages || isLoading}
-              className="px-3 py-1 bg-gray-700 rounded-md hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Next
-            </button>
+      ) : (
+        <>
+          <ConfirmationModal
+            isOpen={modalState.isOpen}
+            title={modalState.title} message={modalState.message}
+            onConfirm={modalState.onConfirm} onCancel={closeModal}
+            isDestructive />
+          {/* Action Buttons */}
+          <div className="mb-6 p-4 bg-gray-800/50 rounded-xl border border-gray-700 flex flex-col md:flex-row gap-4">
+            <div className="flex gap-2">
+              <button
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-500 transition-colors disabled:opacity-50 flex items-center gap-2 shadow-lg shadow-blue-500/20"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {isRefreshing ? "Refreshing..." : "Refresh"}
+              </button>
+            </div>
           </div>
-        </div>
-      </div>
+
+          {/* Filter Controls */}
+          <div className="mb-6 p-4 bg-gray-800/50 rounded-xl border border-gray-700 flex flex-col gap-4">
+            <div className="flex flex-col md:flex-row gap-4">
+              <input
+                type="text"
+                placeholder="Search by user email..."
+                value={filters.searchTerm}
+                onChange={(e) => setFilters(f => ({ ...f, searchTerm: e.target.value }))}
+                className="flex-grow bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              />
+              <div className="grid grid-cols-2 md:flex gap-4">
+                <select
+                  value={filters.sessionType}
+                  onChange={(e) => setFilters(f => ({ ...f, sessionType: e.target.value }))}
+                  className="bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                >
+                  <option value="">All Types</option>
+                  <option value="deposit">Deposit</option>
+                  <option value="withdrawal">Withdrawal</option>
+                </select>
+                <select
+                  value={filters.status}
+                  onChange={(e) => setFilters(f => ({ ...f, status: e.target.value }))}
+                  className="bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="pending">Pending</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="completed">Completed</option>
+                  <option value="failed">Failed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex flex-col md:flex-row gap-4">
+              <input
+                type="text"
+                placeholder="Filter by booth UID..."
+                value={filters.boothUid}
+                onChange={(e) => setFilters(f => ({ ...f, boothUid: e.target.value }))}
+                className="flex-grow bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              />
+              <input
+                type="text"
+                placeholder="Filter by slot identifier..."
+                value={filters.slotIdentifier}
+                onChange={(e) => setFilters(f => ({ ...f, slotIdentifier: e.target.value }))}
+                className="flex-grow bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              />
+              <div className="flex gap-4">
+                <input
+                  type="date"
+                  placeholder="From date"
+                  value={filters.dateFrom}
+                  onChange={(e) => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
+                  className="flex-grow bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+                <input
+                  type="date"
+                  placeholder="To date"
+                  value={filters.dateTo}
+                  onChange={(e) => setFilters(f => ({ ...f, dateTo: e.target.value }))}
+                  className="flex-grow bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left min-w-[1000px]">
+                <thead className="bg-gray-900/70 text-gray-400 text-xs uppercase">
+                  <tr>
+                    <th className="px-4 py-3">User</th>
+                    <th className="px-4 py-3">Type</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Slot</th>
+                    <th className="px-4 py-3">Date</th>
+                    <th className="px-4 py-3">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-800 text-sm">
+                  {isLoading ? (
+                    [...Array(SESSIONS_PER_PAGE)].map((_, index) => (
+                      <tr key={index} className="animate-pulse">
+                        <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-3/4"></div></td>
+                        <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-1/2"></div></td>
+                        <td className="px-4 py-3"><div className="h-6 bg-gray-700 rounded-full w-24"></div></td>
+                        <td className="px-4 py-3">
+                          <div className="h-3 bg-gray-700 rounded w-1/2 mb-1.5"></div>
+                        </td>
+                        <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-3/4"></div></td>
+                        <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-16"></div></td>
+                      </tr>
+                    ))
+                  ) : sessions.length > 0 ? (
+                    sessions.map(session => (
+                    <tr key={session.id} className="hover:bg-gray-800/60">
+                      <td className="px-4 py-3 text-gray-300">{session.userEmail || 'N/A'}</td>
+                      <td className="px-4 py-3 capitalize">{session.sessionType}</td>
+                      <td className="px-4 py-3">{renderStatusBadge(session.status)}</td>
+                      <td className="px-4 py-3 font-mono text-xs">
+                        {session.slotIdentifier || <span className="text-gray-500">N/A</span>}
+                      </td>
+                      <td className="px-4 py-3 text-gray-400 text-sm">{formatDate(session.createdAt)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleViewDetails(session)}
+                            className="text-blue-400 hover:text-blue-300 text-xs font-semibold hover:underline"
+                          >
+                            View
+                          </button>
+                          <span className="text-gray-600">|</span>
+                          <button onClick={() => handleDeleteSession(session)} className="text-red-500 hover:text-red-400 text-xs font-semibold hover:underline">
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="text-center py-12 text-gray-500">No sessions match the current filters.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {/* Pagination */}
+            <div className="flex justify-between items-center p-4 bg-gray-900/50 border-t border-gray-800 text-sm">
+              <span className="text-gray-400">
+                Page {currentPage} of {totalPages} ({totalSessions} total sessions)
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1 || isLoading}
+                  className="px-3 py-1 bg-gray-700 rounded-md hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages || isLoading}
+                  className="px-3 py-1 bg-gray-700 rounded-md hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };
