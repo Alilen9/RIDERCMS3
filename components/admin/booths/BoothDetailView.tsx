@@ -159,9 +159,15 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                                   Enable Slot
                                 </button>
                               ) :
-                              <button onClick={() => onSendCommand(slot.slotIdentifier, { startCharging: true })} className="col-span-2 bg-blue-800 hover:bg-blue-700 py-2 rounded text-xs font-bold text-white">
-                                Start Charging
-                              </button>
+                                <button
+                                  onClick={() => {
+                                    onSendCommand(slot.slotIdentifier, { startCharging: true });
+                                    setTimeout(onRefreshStatus, 1500);
+                                  }}
+                                  className="col-span-2 bg-blue-800 hover:bg-blue-700 py-2 rounded text-xs font-bold text-white"
+                                >
+                                  Start Charging
+                                </button>
                             )}
                             <button
                               onClick={() => onResetSlot(slot.slotIdentifier)}
