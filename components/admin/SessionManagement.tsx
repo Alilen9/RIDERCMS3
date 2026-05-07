@@ -39,7 +39,7 @@ const SessionManagement: React.FC<SessionManagementProps> = ({ onNavigateToBooth
     isOpen: false,
     title: '',
     message: '',
-    onConfirm: () => {},
+    onConfirm: () => { },
   });
 
   // Debounce search term
@@ -127,7 +127,7 @@ const SessionManagement: React.FC<SessionManagementProps> = ({ onNavigateToBooth
   };
 
   const closeModal = () => {
-    setModalState({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+    setModalState({ isOpen: false, title: '', message: '', onConfirm: () => { } });
   };
 
   const handleViewDetails = (session: AdminSession) => {
@@ -147,15 +147,18 @@ const SessionManagement: React.FC<SessionManagementProps> = ({ onNavigateToBooth
   return (
     <div className="animate-fade-in">
       {showSessionDetail && sessionForDetails ? (
-        <SessionDetailView 
-          session={sessionForDetails} 
+        <SessionDetailView
+          session={sessionForDetails}
           onBack={handleCloseDetail}
-          onDelete={(session) => { handleCloseDetail(); handleDeleteSession(session); }}
-          onRefund={(session) => {
-            toast('Refund functionality coming soon', { icon: '🔧' });
+          onDelete={(session) => {
+            handleCloseDetail();
+            handleDeleteSession(session);
           }}
-          onNavigateToBooth={onNavigateToBooth}
-          onNavigateToUser={onNavigateToUser}
+          onRefund={() => {
+            toast('Refund functionality coming soon', {
+              icon: '🔧',
+            });
+          }}
         />
       ) : (
         <>
@@ -277,30 +280,30 @@ const SessionManagement: React.FC<SessionManagementProps> = ({ onNavigateToBooth
                     ))
                   ) : sessions.length > 0 ? (
                     sessions.map(session => (
-                    <tr key={session.id} className="hover:bg-gray-800/60">
-                      <td className="px-4 py-3 text-gray-300">{session.userEmail || 'N/A'}</td>
-                      <td className="px-4 py-3 capitalize">{session.sessionType}</td>
-                      <td className="px-4 py-3">{renderStatusBadge(session.status)}</td>
-                      <td className="px-4 py-3 font-mono text-xs">
-                        {session.slotIdentifier || <span className="text-gray-500">N/A</span>}
-                      </td>
-                      <td className="px-4 py-3 text-gray-400 text-sm">{formatDate(session.createdAt)}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleViewDetails(session)}
-                            className="text-blue-400 hover:text-blue-300 text-xs font-semibold hover:underline"
-                          >
-                            View
-                          </button>
-                          <span className="text-gray-600">|</span>
-                          <button onClick={() => handleDeleteSession(session)} className="text-red-500 hover:text-red-400 text-xs font-semibold hover:underline">
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                      <tr key={session.id} className="hover:bg-gray-800/60">
+                        <td className="px-4 py-3 text-gray-300">{session.userEmail || 'N/A'}</td>
+                        <td className="px-4 py-3 capitalize">{session.sessionType}</td>
+                        <td className="px-4 py-3">{renderStatusBadge(session.status)}</td>
+                        <td className="px-4 py-3 font-mono text-xs">
+                          {session.slotIdentifier || <span className="text-gray-500">N/A</span>}
+                        </td>
+                        <td className="px-4 py-3 text-gray-400 text-sm">{formatDate(session.createdAt)}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleViewDetails(session)}
+                              className="text-blue-400 hover:text-blue-300 text-xs font-semibold hover:underline"
+                            >
+                              View
+                            </button>
+                            <span className="text-gray-600">|</span>
+                            <button onClick={() => handleDeleteSession(session)} className="text-red-500 hover:text-red-400 text-xs font-semibold hover:underline">
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
                   ) : (
                     <tr>
                       <td colSpan={6} className="text-center py-12 text-gray-500">No sessions match the current filters.</td>

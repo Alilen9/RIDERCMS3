@@ -1,31 +1,37 @@
-
 import React, { useEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+} from 'react-router-dom';
+
 import Auth from './components/auth/Auth';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import { UserRole } from './types';
 
-// --- Your Page/Dashboard Components ---
 import AdminDashboard from './components/AdminDashboard';
 import UserDashboard from './components/UserDashboard';
 import NotFound from './components/NotFound';
+
+import BoothDetailsPage from './components/admin/BoothDetailsPage';
+import SlotDetailsPage from './components/admin/SlotDetailsPage';
+
 import { useAuth, AuthProvider } from './components/auth/AuthContext';
 
-// This component will handle the logic for the /auth route
+/**
+ * Handles redirect logic after login
+ */
 const AuthHandler = () => {
   const { user, login, isLoading } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Don't do anything while the session is being checked
-    if (isLoading) {
-      return;
-    }
+    if (isLoading) return;
 
-    // If a user session exists, redirect them immediately from this page.
     if (user) {
-      //console.log("User redirected based on role:", user.role);
       switch (user.role) {
         case UserRole.ADMIN:
           navigate('/admin/dashboard', { replace: true });
@@ -39,23 +45,23 @@ const AuthHandler = () => {
           break;
       }
     }
-    // If no user, this effect does nothing, and the Auth form is shown.
   }, [user, isLoading, navigate]);
 
-
-  // Otherwise, show the login/register form.
-  // The onLogin prop is now wired to the context's login function.
   return <Auth onLogin={login} />;
 };
 
+/**
+ * All app routes
+ */
 const AppContent: React.FC = () => {
-  const { user, logout } = useAuth(); // Get user and logout from context
+  const { user, logout } = useAuth();
 
   return (
     <Routes>
+      {/* Auth */}
       <Route path="/auth" element={<AuthHandler />} />
 
-      {/* Admin Route */}
+      {/* Admin Dashboard */}
       <Route
         path="/admin/dashboard"
         element={
@@ -65,38 +71,61 @@ const AppContent: React.FC = () => {
         }
       />
 
-      {/* User Route */}
+      {/* 🔥 NEW: Booth Details Page */}
       <Route
-        path="/dashboard"
+        path="/admin/booths/:boothId"
         element={
-          <ProtectedRoute allowedRoles={[UserRole.USER, UserRole.OPERATOR]}>
-            <UserDashboard
-              user={user!} 
-              onLogout={logout}
-            />
+          <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
+            <BoothDetailsPage />
           </ProtectedRoute>
         }
       />
 
-      {/* Redirect root path to auth if not logged in */}
+      {/* 🔥 NEW: Slot Details Page */}
+      <Route
+        path="/admin/slots/:slotId"
+        element={
+          <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
+            <SlotDetailsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* User Dashboard */}
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute allowedRoles={[UserRole.USER, UserRole.OPERATOR]}>
+            <UserDashboard user={user!} onLogout={logout} />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Root redirect */}
       <Route path="/" element={<Navigate to="/auth" replace />} />
 
-      {/* 404 Catch-all Route */}
+      {/* 404 */}
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
 };
 
+/**
+ * Main App wrapper
+ */
 const App: React.FC = () => (
   <Router>
     <AuthProvider>
-      <Toaster position="top-right" toastOptions={{
-        style: {
-          background: '#1F2937', // bg-gray-800
-          color: '#F9FAFB', // text-gray-50
-          border: '1px solid #374151', // border-gray-700
-        },
-      }} />
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          style: {
+            background: '#1F2937',
+            color: '#F9FAFB',
+            border: '1px solid #374151',
+          },
+        }}
+      />
       <AppContent />
     </AuthProvider>
   </Router>
