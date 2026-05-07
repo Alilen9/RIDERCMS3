@@ -186,21 +186,14 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
   const handleDeleteSlot = (booth: Booth, slotIdentifier: string) => {
     const promise = deleteBoothSlot(booth.booth_uid, slotIdentifier);
 
-    handleShowConfirmation(
-      () => {
-        toast.promise(promise, {
-          loading: `Deleting slot ${slotIdentifier}...`,
-          success: () => {
-            fetchBoothStatuses();
-            return `Slot ${slotIdentifier} deleted successfully!`;
-          },
-          error: (err: any) => err.response?.data?.error || 'Failed to delete slot.',
-        });
+    toast.promise(promise, {
+      loading: `Deleting slot ${slotIdentifier}...`,
+      success: () => {
+        fetchBoothStatuses();
+        return `Slot ${slotIdentifier} deleted successfully!`;
       },
-      'Delete Slot',
-      `Are you sure you want to permanently delete slot "${slotIdentifier}" from booth "${booth.name}"? This action is irreversible and will remove all associated data.`,
-      true
-    );
+      error: (err: any) => err.response?.data?.error || 'Failed to delete slot.',
+    });
   };
 
   const handleUpdateSlotStatus = async (boothUid: string, slotIdentifier: string, status: 'available' | 'disabled') => {
@@ -384,19 +377,9 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
           formatTimeAgo={formatTimeAgo}
           getSlotStatusDisplay={getSlotStatusDisplay}
           onRefreshStatus={fetchBoothStatuses}
-          onResetSlots={() => handleShowConfirmation(
-            () => handleResetSlots(boothForDetails),
-            'Reset All Slots',
-            `Are you sure you want to reset all slots for "${boothForDetails.name}"? This will set all slots to 'available', clear any battery links, and can resolve synchronization issues. This action is irreversible.`,
-            true
-          )}
+          onResetSlots={() => handleResetSlots(boothForDetails)}
           onDeleteSlot={(slotIdentifier) => handleDeleteSlot(boothForDetails, slotIdentifier)}
-          onResetSlot={(slotIdentifier) => handleShowConfirmation(
-            () => handleResetSlot(boothForDetails, slotIdentifier),
-            'Reset Slot',
-            `Are you sure you want to reset slot "${slotIdentifier}" in booth "${boothForDetails.name}"? This will set the slot to 'available' and clear any linked battery data.`,
-            true
-          )}
+          onResetSlot={(slotIdentifier) => handleResetSlot(boothForDetails, slotIdentifier)}
           pendingCommands={pendingCommands}
           onShowConfirmation={handleShowConfirmation}
           onUpdateSlotStatus={(slotIdentifier, status) => handleUpdateSlotStatus(boothForDetails.booth_uid, slotIdentifier, status)}

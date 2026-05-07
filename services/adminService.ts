@@ -31,6 +31,7 @@ export type UserAccountStatus = 'active' | 'disabled';
  */
 export interface AdminBoothStatus {
   boothUid: string;
+  name: string;
   location: string;
   status: string;
   lastHeartbeatAt: string;
@@ -38,12 +39,12 @@ export interface AdminBoothStatus {
     slotIdentifier: string;
     status: 'booting' | 'available' | 'occupied' | 'disabled' | 'error';
     doorStatus: 'locked' | 'unlocked' | 'ajar' | 'unknown';
+    userName: string | null;
     battery: {
-      batteryUid: string | null;
-      chargeLevel: number;
-      ownerEmail: string | null;
       isOccupied: boolean;
-      isCharging: boolean;
+      chargeLevel: number;
+      voltage?: number;
+      temperature?: number;
     } | null;
     telemetry?: {
       batteryInserted: boolean;

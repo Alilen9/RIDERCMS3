@@ -34,16 +34,23 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
   pendingCommands,
 }) => {
 
-  // Merge administrative slot data (from `booth`) with live telemetry data (from `boothStatus`).
-  // This ensures the administrative status (like 'disabled') is respected over the live status.
+  // Merge administrative slot data (from `booth.slots`) with live telemetry data (from `boothStatus.slots`).
+  // We use `booth.slots` as the base so the UI renders immediately using DB records while telemetry loads.
   const mergedSlots = React.useMemo(() => {
-    if (!boothStatus?.slots) {
-      return [];
-    }
-    return boothStatus.slots.map(liveSlot => {
-      const adminSlot = booth.slots.find(s => s.identifier === liveSlot.slotIdentifier);
-      // Combine live data with admin data, giving precedence to the admin status.
-      return { ...liveSlot, status: adminSlot?.status || liveSlot.status };
+    return (booth.slots || []).map(adminSlot => {
+      const liveSlot = boothStatus?.slots?.find(s => s.slotIdentifier === adminSlot.identifier);
+      
+      return {
+        slotIdentifier: adminSlot.identifier,
+        // Prioritize administrative status (e.g. 'disabled') over live status
+        status: adminSlot.status !== 'available' ? adminSlot.status : (liveSlot?.status || adminSlot.status),
+        doorStatus: liveSlot?.doorStatus || adminSlot.doorStatus,
+        // Combine battery info: live telemetry takes precedence
+        battery: liveSlot?.battery || (adminSlot.chargeLevel !== null ? { chargeLevel: adminSlot.chargeLevel } : null),
+        // "Rented By" comes from the DB (adminSlot)
+        userName: adminSlot.userName || liveSlot?.userName,
+        telemetry: liveSlot?.telemetry,
+      };
     });
   }, [booth, boothStatus]);
 
@@ -67,7 +74,12 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
             </div>
           </div>
           <button
-            onClick={onResetSlots}
+            onClick={() => onShowConfirmation(
+              onResetSlots,
+              'Reset All Slots',
+              `Are you sure you want to reset all slots for "${booth.name}"? This will set all slots to 'available', clear any battery links, and can resolve synchronization issues. This action is irreversible.`,
+              true
+            )}
             className="bg-red-800 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
@@ -78,7 +90,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
 
       {/* Slot Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
-        {boothStatus ? (
+        {booth ? (
           mergedSlots.length > 0 ? (
             mergedSlots.map(slot => (
               <div key={slot.slotIdentifier} className={`relative bg-gray-800 border ${slot.status === 'booting' ? 'border-red-500' : 'border-gray-700'} rounded-xl overflow-hidden`}>
@@ -117,32 +129,47 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                         </div>
                         <div className="flex justify-between text-sm items-center">
                           <span className="text-gray-500">Rented By</span>
-                          {slot.battery?.ownerEmail ? (
-                            <span className="text-cyan-400 font-semibold truncate" title={slot.battery.ownerEmail}>{slot.battery.ownerEmail}</span>
+                          {slot.userName ? (
+                            <span className="text-cyan-400 font-semibold truncate" title={slot.userName}>{slot.userName}</span>
                           ) : (<span className="text-gray-600">None</span>)}
 
                         </div>
                         <div className="border-t border-gray-700/50 pt-3 mt-3">
                           <p className="text-xs font-bold text-gray-400 mb-2">Commands</p>
                           <div className="grid grid-cols-2 gap-2">
-                            <button onClick={() => {
-                              onSendCommand(slot.slotIdentifier, { forceUnlock: true });
-                              setTimeout(onRefreshStatus, 1500); // Refresh after a delay
-                            }}
+                            <button onClick={() => onShowConfirmation(
+                              () => {
+                                onSendCommand(slot.slotIdentifier, { forceUnlock: true });
+                                setTimeout(onRefreshStatus, 1500); // Refresh after a delay
+                              },
+                              'Unlock Slot?',
+                              `Are you sure you want to unlock slot ${slot.slotIdentifier}?`,
+                              false
+                            )}
                               className="bg-gray-700 hover:bg-gray-600 py-2 rounded text-xs font-bold text-gray-300"
                             >
                               Unlock
                             </button>
-                            <button onClick={() => {
-                              onSendCommand(slot.slotIdentifier, { forceLock: true });
-                              setTimeout(onRefreshStatus, 1500); // Refresh after a delay
-                            }}
+                            <button onClick={() => onShowConfirmation(
+                              () => {
+                                onSendCommand(slot.slotIdentifier, { forceLock: true });
+                                setTimeout(onRefreshStatus, 1500); // Refresh after a delay
+                              },
+                              'Lock Slot?',
+                              `Are you sure you want to lock slot ${slot.slotIdentifier}?`,
+                              false
+                            )}
                               className="bg-gray-700 hover:bg-gray-600 py-2 rounded text-xs font-bold text-gray-300"
                             >
                               Lock
                             </button>
                             {slot.telemetry?.relayOn === true ? (
-                              <button onClick={() => onSendCommand(slot.slotIdentifier, { stopCharging: true })} className="col-span-2 bg-red-800 hover:bg-red-700 py-2 rounded text-xs font-bold text-white">
+                              <button onClick={() => onShowConfirmation(
+                                () => onSendCommand(slot.slotIdentifier, { stopCharging: true }),
+                                'Stop Charging?',
+                                `Are you sure you want to stop charging on slot ${slot.slotIdentifier}?`,
+                                true
+                              )} className="col-span-2 bg-red-800 hover:bg-red-700 py-2 rounded text-xs font-bold text-white">
                                 Stop Charging
                               </button>
                             ) : (
@@ -160,17 +187,27 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                                 </button>
                               ) :
                                 <button
-                                  onClick={() => {
-                                    onSendCommand(slot.slotIdentifier, { startCharging: true });
-                                    setTimeout(onRefreshStatus, 1500);
-                                  }}
+                                  onClick={() => onShowConfirmation(
+                                    () => {
+                                      onSendCommand(slot.slotIdentifier, { startCharging: true });
+                                      setTimeout(onRefreshStatus, 1500);
+                                    },
+                                    'Start Charging?',
+                                    `Are you sure you want to start charging for slot ${slot.slotIdentifier}?`,
+                                    false
+                                  )}
                                   className="col-span-2 bg-blue-800 hover:bg-blue-700 py-2 rounded text-xs font-bold text-white"
                                 >
                                   Start Charging
                                 </button>
                             )}
                             <button
-                              onClick={() => onResetSlot(slot.slotIdentifier)}
+                              onClick={() => onShowConfirmation(
+                                () => onResetSlot(slot.slotIdentifier),
+                                'Reset Slot?',
+                                `Are you sure you want to reset slot ${slot.slotIdentifier}? This will set it to available and clear any linked battery data.`,
+                                true
+                              )}
                               className="col-span-2 mt-2 bg-yellow-900/50 hover:bg-yellow-900/80 text-yellow-300 py-2 rounded text-xs font-bold border border-yellow-700/50"
                             >
                               Reset Slot
@@ -189,7 +226,12 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                               </button>
                             )}
                             <button
-                              onClick={() => onDeleteSlot(slot.slotIdentifier)}
+                              onClick={() => onShowConfirmation(
+                                () => onDeleteSlot(slot.slotIdentifier),
+                                'Delete Slot?',
+                                `Are you sure you want to permanently delete slot ${slot.slotIdentifier}? This action cannot be undone.`,
+                                true
+                              )}
                               className="col-span-2 mt-2 bg-red-900/50 hover:bg-red-900/80 text-red-300 py-2 rounded text-xs font-bold border border-red-700/50"
                             >
                               Delete Slot

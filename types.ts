@@ -43,6 +43,7 @@ export interface Battery {
 }
 
 export interface Slot {
+  userName: any;
   identifier: string;
   status: string;
   doorStatus: string;
@@ -83,15 +84,24 @@ export interface Booth {
   booth_uid: string;
   name: string;
   location_address: string;
-  status: 'online' | 'maintenance' | 'offline';
+  status: string;
   created_at: string;
   updated_at: string;
-  slotCount: number;
-  slots: Slot[];
-  // Optional fields that might come from other endpoints or be added on the client
   latitude?: number;
   longitude?: number;
+  slots: BoothSlot[];
+  slotCount: number;
 }
+
+export interface BoothSlot {
+  identifier: string;
+  status: string;
+  doorStatus: string;
+  chargeLevel: number | null;
+  batteryUid: string | null;
+  userName: string | null; // Added to match the joined user name from the DB
+}
+
 
 /**
  * Session status statistics
