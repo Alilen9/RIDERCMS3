@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 
 interface QrScannerProps {
@@ -9,6 +9,30 @@ interface QrScannerProps {
 const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess, onScanFailure }) => {
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerId = "qr-reader";
+  const lastScannedRef = useRef<string>('');
+  const lastScannedTimeRef = useRef<number>(0);
+  const onScanSuccessRef = useRef(onScanSuccess);
+  const onScanFailureRef = useRef(onScanFailure);
+
+  // Keep refs updated
+  useEffect(() => {
+    onScanSuccessRef.current = onScanSuccess;
+    onScanFailureRef.current = onScanFailure;
+  }, [onScanSuccess, onScanFailure]);
+
+  const handleScannedResult = useCallback((decodedText: string) => {
+    const now = Date.now();
+    const timeSinceLastScan = now - lastScannedTimeRef.current;
+    
+    // Debounce: ignore if same QR code scanned within 2 seconds
+    if (decodedText === lastScannedRef.current && timeSinceLastScan < 2000) {
+      return;
+    }
+    
+    lastScannedRef.current = decodedText;
+    lastScannedTimeRef.current = now;
+    onScanSuccessRef.current(decodedText);
+  }, []);
 
   useEffect(() => {
     // Ensure this runs only on the client
@@ -27,7 +51,7 @@ const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess, onScanFailure }) =
               fps: 10, // Optional, frames per second to scan
               qrbox: { width: 250, height: 250 }, // Optional, scan box size
             },
-            onScanSuccess,
+            handleScannedResult,
             (errorMessage) => {
               // This callback is called frequently, so we can ignore parse errors.
               // onScanFailure?.(errorMessage);
@@ -58,7 +82,7 @@ const QrScanner: React.FC<QrScannerProps> = ({ onScanSuccess, onScanFailure }) =
         cleanup();
       };
     }
-  }, [onScanSuccess, onScanFailure, scannerContainerId]);
+  }, []);
 
   return <div id={scannerContainerId} className="w-full h-full"></div>;
 };
