@@ -10,6 +10,7 @@ export default defineConfig(({ mode }) => {
     const pollingInterval = Number.isFinite(parsedPollingInterval) && parsedPollingInterval > 0
       ? parsedPollingInterval
       : 300;
+    const proxyTarget = env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:3001';
 
     return {
       server: {
@@ -21,6 +22,13 @@ export default defineConfig(({ mode }) => {
               interval: pollingInterval,
             }
           : undefined,
+        proxy: {
+          '/api': {
+            target: proxyTarget,
+            changeOrigin: true,
+            secure: false,
+          },
+        },
       },
       plugins: [tailwindcss(), react()],
       define: {
