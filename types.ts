@@ -87,8 +87,8 @@ export interface Booth {
   status: string;
   created_at: string;
   updated_at: string;
-  latitude?: number;
-  longitude?: number;
+  latitude?: number | null;
+  longitude?: number | null;
   slots: BoothSlot[];
   slotCount: number;
 }

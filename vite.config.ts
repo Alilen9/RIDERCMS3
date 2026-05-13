@@ -5,10 +5,22 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
+    const usePolling = env.VITE_USE_POLLING === 'true';
+    const parsedPollingInterval = Number(env.VITE_POLLING_INTERVAL);
+    const pollingInterval = Number.isFinite(parsedPollingInterval) && parsedPollingInterval > 0
+      ? parsedPollingInterval
+      : 300;
+
     return {
       server: {
         port: 3000,
         host: '0.0.0.0',
+        watch: usePolling
+          ? {
+              usePolling: true,
+              interval: pollingInterval,
+            }
+          : undefined,
       },
       plugins: [tailwindcss(), react()],
       define: {

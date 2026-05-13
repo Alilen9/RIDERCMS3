@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { updateBooth } from '../../../../services/adminService';
+import { updateBooth, UpdateBoothData } from '../../../../services/adminService';
 import Input from '../../../ui/Input';
 import { Booth } from '@/types';
 
@@ -13,20 +13,27 @@ interface EditBoothsFormProps {
 const EditBoothsForm: React.FC<EditBoothsFormProps> = ({ boothToEdit, onBoothUpdated, onCancel }) => {
   const [formState, setFormState] = useState({
     name: '',
-    location: '',
+    locationAddress: '',
+    latitude: '',
+    longitude: '',
   });
 
   const [errors, setErrors] = useState({
     name: '',
-    location: '',
+    locationAddress: '',
+    latitude: '',
+    longitude: '',
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Pre-populate the form when the component loads or boothToEdit changes
   useEffect(() => {
     if (boothToEdit) {
       setFormState({
         name: boothToEdit.name,
-        location: boothToEdit.location_address,
+        locationAddress: boothToEdit.location_address,
+        latitude: boothToEdit.latitude != null ? String(boothToEdit.latitude) : '',
+        longitude: boothToEdit.longitude != null ? String(boothToEdit.longitude) : '',
       });
     }
   }, [boothToEdit]);
@@ -40,16 +47,36 @@ const EditBoothsForm: React.FC<EditBoothsFormProps> = ({ boothToEdit, onBoothUpd
   };
 
   const validate = (): boolean => {
-    const newErrors = { name: '', location: '' };
+    const newErrors = { name: '', locationAddress: '', latitude: '', longitude: '' };
     let isValid = true;
 
     if (!formState.name.trim()) {
       newErrors.name = 'Booth name is required.';
       isValid = false;
     }
-    if (!formState.location.trim()) {
-      newErrors.location = 'Location name is required.';
+    if (!formState.locationAddress.trim()) {
+      newErrors.locationAddress = 'Location name is required.';
       isValid = false;
+    }
+    if (formState.latitude.trim()) {
+      const parsedLatitude = Number(formState.latitude);
+      if (!Number.isFinite(parsedLatitude)) {
+        newErrors.latitude = 'Latitude must be a valid number.';
+        isValid = false;
+      } else if (parsedLatitude < -90 || parsedLatitude > 90) {
+        newErrors.latitude = 'Latitude must be between -90 and 90.';
+        isValid = false;
+      }
+    }
+    if (formState.longitude.trim()) {
+      const parsedLongitude = Number(formState.longitude);
+      if (!Number.isFinite(parsedLongitude)) {
+        newErrors.longitude = 'Longitude must be a valid number.';
+        isValid = false;
+      } else if (parsedLongitude < -180 || parsedLongitude > 180) {
+        newErrors.longitude = 'Longitude must be between -180 and 180.';
+        isValid = false;
+      }
     }
 
     setErrors(newErrors);
@@ -58,14 +85,41 @@ const EditBoothsForm: React.FC<EditBoothsFormProps> = ({ boothToEdit, onBoothUpd
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!validate()) return;
+    if (!validate() || isSubmitting) return;
+
+    const trimmedName = formState.name.trim();
+    const trimmedLocationAddress = formState.locationAddress.trim();
+    const updatePayload: UpdateBoothData = {};
+
+    if (trimmedName !== boothToEdit.name.trim()) {
+      updatePayload.name = trimmedName;
+    }
+    if (trimmedLocationAddress !== boothToEdit.location_address.trim()) {
+      updatePayload.locationAddress = trimmedLocationAddress;
+    }
+
+    const currentLatitude = boothToEdit.latitude ?? null;
+    const currentLongitude = boothToEdit.longitude ?? null;
+
+    const nextLatitude = formState.latitude.trim() === '' ? null : Number(formState.latitude.trim());
+    const nextLongitude = formState.longitude.trim() === '' ? null : Number(formState.longitude.trim());
+
+    if (nextLatitude !== currentLatitude) {
+      updatePayload.latitude = nextLatitude;
+    }
+    if (nextLongitude !== currentLongitude) {
+      updatePayload.longitude = nextLongitude;
+    }
+
+    if (Object.keys(updatePayload).length === 0) {
+      toast('No changes to save.');
+      return;
+    }
 
     const loadingToast = toast.loading('Updating booth...');
+    setIsSubmitting(true);
     try {
-      const updatedBooth = await updateBooth(boothToEdit.booth_uid, {
-        name: formState.name,
-        locationAddress: formState.location,
-      });
+      const updatedBooth = await updateBooth(boothToEdit.booth_uid, updatePayload);
 
       toast.dismiss(loadingToast);
       toast.success('Booth updated successfully!');
@@ -76,6 +130,8 @@ const EditBoothsForm: React.FC<EditBoothsFormProps> = ({ boothToEdit, onBoothUpd
       const errorMessage = (error as any)?.response?.data?.error || (error as Error).message;
       toast.error(errorMessage);
       console.error("Error updating booth:", error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -99,16 +155,42 @@ const EditBoothsForm: React.FC<EditBoothsFormProps> = ({ boothToEdit, onBoothUpd
             />
             <Input
               label="Location Name"
-              name="location"
+              name="locationAddress"
               type="text"
-              value={formState.location}
+              value={formState.locationAddress}
               onChange={handleChange}
-              error={errors.location}
+              error={errors.locationAddress}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-6">
+            <Input
+              label="Latitude (Optional)"
+              name="latitude"
+              type="number"
+              step="any"
+              value={formState.latitude}
+              onChange={handleChange}
+              placeholder="Leave blank to clear"
+              error={errors.latitude}
+            />
+            <Input
+              label="Longitude (Optional)"
+              name="longitude"
+              type="number"
+              step="any"
+              value={formState.longitude}
+              onChange={handleChange}
+              placeholder="Leave blank to clear"
+              error={errors.longitude}
             />
           </div>
           <div className="pt-4">
-            <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl shadow-lg transition-colors">
-              Save Changes
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl shadow-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         </form>

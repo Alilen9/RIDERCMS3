@@ -71,7 +71,7 @@ Comprehensive endpoint reference for this project.
 | POST | `/api/admin/booths` | - | - | `name`, `locationAddress`, `latitude`, `longitude` |
 | DELETE | `/api/admin/booths/:boothUid` | `boothUid` | - | - |
 | DELETE | `/api/admin/booths/:boothUid/slots/:slotIdentifier` | `boothUid`, `slotIdentifier` | - | - |
-| PATCH | `/api/admin/booths/:boothUid` | `boothUid` | - | `name`, `locationAddress` |
+| PATCH | `/api/admin/booths/:boothUid` | `boothUid` | - | `name`, `locationAddress`, `latitude` (number or `null` to clear), `longitude` (number or `null` to clear) |
 | POST | `/api/admin/booths/:boothUid/status` | `boothUid` | - | `status` |
 | POST | `/api/admin/booths/:boothUid/slots/:slotIdentifier/status` | `boothUid`, `slotIdentifier` | - | `status` |
 | POST | `/api/admin/booths/:boothUid/slots/:slotIdentifier/command` | `boothUid`, `slotIdentifier` | - | Command object keys: `forceLock`, `forceUnlock`, `openForCollection`, `openForDeposit`, `startCharging`, `stopCharging`, `openDoorId` |
@@ -89,4 +89,3 @@ Comprehensive endpoint reference for this project.
 | DELETE | `/api/admin/sessions/:sessionId` | `sessionId` | - | - |
 | POST | `/api/admin/sessions/cleanup` | - | - | - |
 | GET | `/api/admin/payments` | - | `limit`, `offset`, `searchTerm`, `startDate`, `endDate`, `status`, `boothUid`, `sortBy`, `sortOrder` | - |
-

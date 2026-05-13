@@ -107,6 +107,17 @@ export interface CreateBoothData {
 }
 
 /**
+ * The data allowed when updating an existing booth.
+ * PATCH /api/admin/booths/:boothUid
+ */
+export interface UpdateBoothData {
+  name?: string;
+  locationAddress?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+/**
  * The response from creating a new booth.
  */
 export interface CreateBoothResponse {
@@ -147,7 +158,7 @@ export const getBooths = async (): Promise<ListBoothsResponse> => {
  * @param boothData The data to update.
  * @returns A promise that resolves when the update is complete.
  */
-export const updateBooth = async (boothUid: string, boothData: Partial<CreateBoothData>): Promise<Booth> => {
+export const updateBooth = async (boothUid: string, boothData: UpdateBoothData): Promise<Booth> => {
   const response = await apiClient.patch<{ message: string, booth: Booth }>(`/admin/booths/${boothUid}`, boothData);
   return response.data.booth;
 };
