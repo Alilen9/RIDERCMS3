@@ -3,6 +3,8 @@ import toast from 'react-hot-toast';
 import { getSessions, AdminSession, SessionFilters, deleteSession } from '../../services/adminService';
 import ConfirmationModal from './ConfirmationModal';
 import SessionDetailView from './SessionDetailView';
+import SessionFiltersBar from '../ui/filters/SessionFiltersBar';
+import { Phone, MessageCircle } from 'lucide-react';
 import { format } from 'date-fns';
 
 const SESSIONS_PER_PAGE = 10;
@@ -183,73 +185,7 @@ const SessionManagement: React.FC<SessionManagementProps> = ({ onNavigateToBooth
             </div>
           </div>
 
-          {/* Filter Controls */}
-          <div className="mb-6 p-4 bg-gray-800/50 rounded-xl border border-gray-700 flex flex-col gap-4">
-            <div className="flex flex-col md:flex-row gap-4">
-              <input
-                type="text"
-                placeholder="Search by user email..."
-                value={filters.searchTerm}
-                onChange={(e) => setFilters(f => ({ ...f, searchTerm: e.target.value }))}
-                className="flex-grow bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-              />
-              <div className="grid grid-cols-2 md:flex gap-4">
-                <select
-                  value={filters.sessionType}
-                  onChange={(e) => setFilters(f => ({ ...f, sessionType: e.target.value }))}
-                  className="bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                >
-                  <option value="">All Types</option>
-                  <option value="deposit">Deposit</option>
-                  <option value="withdrawal">Withdrawal</option>
-                </select>
-                <select
-                  value={filters.status}
-                  onChange={(e) => setFilters(f => ({ ...f, status: e.target.value }))}
-                  className="bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                >
-                  <option value="">All Statuses</option>
-                  <option value="pending">Pending</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="completed">Completed</option>
-                  <option value="failed">Failed</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
-              </div>
-            </div>
-            <div className="flex flex-col md:flex-row gap-4">
-              <input
-                type="text"
-                placeholder="Filter by booth UID..."
-                value={filters.boothUid}
-                onChange={(e) => setFilters(f => ({ ...f, boothUid: e.target.value }))}
-                className="flex-grow bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-              />
-              <input
-                type="text"
-                placeholder="Filter by slot identifier..."
-                value={filters.slotIdentifier}
-                onChange={(e) => setFilters(f => ({ ...f, slotIdentifier: e.target.value }))}
-                className="flex-grow bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-              />
-              <div className="flex gap-4">
-                <input
-                  type="date"
-                  placeholder="From date"
-                  value={filters.dateFrom}
-                  onChange={(e) => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
-                  className="flex-grow bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                />
-                <input
-                  type="date"
-                  placeholder="To date"
-                  value={filters.dateTo}
-                  onChange={(e) => setFilters(f => ({ ...f, dateTo: e.target.value }))}
-                  className="flex-grow bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                />
-              </div>
-            </div>
-          </div>
+          <SessionFiltersBar filters={filters} onFilterChange={setFilters} />
 
           <div className="bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden">
             <div className="overflow-x-auto">
@@ -257,6 +193,7 @@ const SessionManagement: React.FC<SessionManagementProps> = ({ onNavigateToBooth
                 <thead className="bg-gray-900/70 text-gray-400 text-xs uppercase">
                   <tr>
                     <th className="px-4 py-3">User</th>
+                    <th className="px-4 py-3">Phone</th>
                     <th className="px-4 py-3">Type</th>
                     <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3">Slot</th>
@@ -269,6 +206,7 @@ const SessionManagement: React.FC<SessionManagementProps> = ({ onNavigateToBooth
                     [...Array(SESSIONS_PER_PAGE)].map((_, index) => (
                       <tr key={index} className="animate-pulse">
                         <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-3/4"></div></td>
+                        <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-24"></div></td>
                         <td className="px-4 py-3"><div className="h-4 bg-gray-700 rounded w-1/2"></div></td>
                         <td className="px-4 py-3"><div className="h-6 bg-gray-700 rounded-full w-24"></div></td>
                         <td className="px-4 py-3">
@@ -282,6 +220,33 @@ const SessionManagement: React.FC<SessionManagementProps> = ({ onNavigateToBooth
                     sessions.map(session => (
                       <tr key={session.id} className="hover:bg-gray-800/60">
                         <td className="px-4 py-3 text-gray-300">{session.userEmail || 'N/A'}</td>
+                        <td className="px-4 py-3">
+                          {session.userPhoneNumber ? (
+                            <div className="flex items-center gap-2">
+                              <a
+                                href={`tel:${session.userPhoneNumber}`}
+                                title="Call"
+                                className="text-emerald-400 hover:text-emerald-300 transition-colors"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <Phone size={16} />
+                              </a>
+                              <span className="text-gray-600">|</span>
+                              <a
+                                href={`https://wa.me/${session.userPhoneNumber.replace(/[^0-9]/g, '')}`}
+                                title="WhatsApp"
+                                className="text-green-400 hover:text-green-300 transition-colors"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <MessageCircle size={16} />
+                              </a>
+                            </div>
+                          ) : (
+                            <span className="text-gray-500 text-xs">N/A</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 capitalize">{session.sessionType}</td>
                         <td className="px-4 py-3">{renderStatusBadge(session.status)}</td>
                         <td className="px-4 py-3 font-mono text-xs">
@@ -306,7 +271,7 @@ const SessionManagement: React.FC<SessionManagementProps> = ({ onNavigateToBooth
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={6} className="text-center py-12 text-gray-500">No sessions match the current filters.</td>
+                      <td colSpan={7} className="text-center py-12 text-gray-500">No sessions match the current filters.</td>
                     </tr>
                   )}
                 </tbody>

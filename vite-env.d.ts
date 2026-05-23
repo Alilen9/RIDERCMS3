@@ -1,4 +1,3 @@
-import { GreCAPTCHA } from './node_modules/@firebase/app-check/dist/src/recaptcha.d';
 /// <reference types="vite/client" />
 
 import { RecaptchaVerifier, GreCAPTCHA as Grecaptcha } from 'firebase/auth';

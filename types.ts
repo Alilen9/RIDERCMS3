@@ -180,6 +180,12 @@ export interface StatsQueryParams {
 /**
  * Summary data for the admin dashboard
  */
+export interface ActiveBatteryEntry {
+  battery: Battery;
+  slot: Slot;
+  sessionId: number;
+}
+
 export interface DashboardSummary {
   totalRevenue: number;
   activeStations: number;

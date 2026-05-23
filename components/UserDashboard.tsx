@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Battery, Slot, User, BatteryType } from '../types';
-import { analyzeBatteryHealth } from '../services/geminiService';
-import * as boothService from '../services/boothService'; // Imports getBooths
-import QrScanner from './user/QrScanner'; // Import the new component
+import { Battery, Slot, User, BatteryType, ActiveBatteryEntry } from '../types';
+import * as boothService from '../services/boothService';
+import QrScanner from './user/QrScanner';
 import ChargingStatusView from './user/ChargingStatusView';
+import MultiBatteryStatus from './user/MultiBatteryStatus';
 import SessionSummary from './user/SessionSummary';
 import toast from 'react-hot-toast';
 import ConfirmationModal from './admin/ConfirmationModal';
@@ -15,18 +15,14 @@ interface UserDashboardProps {
   onLogout: () => void;
 }
 
-// Removed 'select_type' from ViewState
-type ViewState = 'loading' | 'home' | 'map_view' | 'scan_qr' | 'assigning_slot' | 'deposit_guide' | 'status' | 'stopping_charge' | 'waiting_for_withdrawal' | 'billing' | 'collect_guide' | 'scan_to_release';
+type ViewState = 'loading' | 'home' | 'map_view' | 'scan_qr' | 'assigning_slot' | 'deposit_guide' | 'multi_status' | 'status' | 'stopping_charge' | 'waiting_for_withdrawal' | 'billing' | 'collect_guide' | 'scan_to_release';
 
 const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
   const [view, setView] = useState<ViewState>('loading');
-  const [assignedSlot, setAssignedSlot] = useState<Slot | null>(null);
-  const [activeBattery, setActiveBattery] = useState<Battery | null>(null);
-  const [aiAnalysis, setAiAnalysis] = useState<string>('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [activeBatteries, setActiveBatteries] = useState<ActiveBatteryEntry[]>([]);
+  const [activeBatteryIndex, setActiveBatteryIndex] = useState(-1);
   const [paymentStatus, setPaymentStatus] = useState<'idle' | 'push_sent' | 'success'>('idle');
   const [loading, setLoading] = useState(false);
-  const [withdrawalSessionId, setWithdrawalSessionId] = useState<number | null>(null);
   const [checkoutRequestId, setCheckoutRequestId] = useState<string>('');
   const [withdrawalCost, setWithdrawalCost] = useState<number>(0);
   const [withdrawalDuration, setWithdrawalDuration] = useState<number>(0);
@@ -40,19 +36,21 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showAddMorePrompt, setShowAddMorePrompt] = useState(false);
+
+  const activeEntry = activeBatteryIndex >= 0 && activeBatteryIndex < activeBatteries.length
+    ? activeBatteries[activeBatteryIndex]
+    : null;
 
   const handleMapBoothClick = (booth: boothService.PublicBooth) => {
     setManualBoothId(booth.booth_uid);
     setView('home');
   };
 
-  // --- Map Logic: Calculate Nearest ---
   const sortedStations = useMemo(() => {
     if (!userLocation) return [];
-
     return booths.map(booth => {
-      // Haversine formula for distance between two lat/lng points
-      const R = 6371; // Radius of Earth in km
+      const R = 6371;
       const dLat = (booth.latitude - userLocation.lat) * (Math.PI / 180);
       const dLng = (booth.longitude - userLocation.lng) * (Math.PI / 180);
       const a =
@@ -60,8 +58,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
         Math.cos(userLocation.lat * (Math.PI / 180)) * Math.cos(booth.latitude * (Math.PI / 180)) *
         Math.sin(dLng / 2) * Math.sin(dLng / 2);
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      const dist = R * c; // Calculate distance using Haversine result
-
+      const dist = R * c;
       return {
         id: booth.booth_uid,
         name: booth.name,
@@ -76,53 +73,50 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
 
   const nearestStation = sortedStations[0];
 
-  // 5. Initiate Collection - calls initiateWithdrawal API
-  // Wrapped in useCallback and moved here to fix "used before declaration" error in useEffect
+  const removeBatteryEntry = useCallback((entryToRemove: ActiveBatteryEntry) => {
+    setActiveBatteries(prev => prev.filter(e => e.sessionId !== entryToRemove.sessionId));
+  }, []);
+
   const initiateCollection = useCallback(async (isRetry = false) => {
     setError(null);
     if (!isRetry) setLoading(true);
-    
     try {
-      const response = await boothService.initiateWithdrawal();
-      //console.log('Withdrawal initiated:', response);
-      setWithdrawalSessionId(response.sessionId);
+      const target = activeBatteries[activeBatteryIndex];
+      if (!target) throw new Error('No battery selected for collection');
+      const response = await boothService.initiateWithdrawal(target.sessionId);
       setWithdrawalCost(response.amount);
       setWithdrawalDuration(response.durationMinutes);
       setWithdrawalEnergy(response.soc);
       setView('billing');
       setPaymentStatus('idle');
     } catch (err: any) {
-      const serverCode = err.response?.data?.error; // or however your backend sends error codes
       const serverMessage = err.response?.data?.message || 'Failed to start collection.';
-
-      // Handle 409 CHARGING_STILL_ACTIVE by retrying
       if (err.response?.status === 409) {
         toast.error("Battery is still finalizing charge. Retrying in 5 seconds...", { id: 'retry-toast' });
         setTimeout(() => initiateCollection(true), 5000);
         return;
       }
-
       setError(serverMessage);
       toast.error(serverMessage);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeBatteries, activeBatteryIndex]);
 
-  // 4. Handle Stop Charging - calls stop-charging API then waits
-  const handleStopCharging = useCallback(async () => {
+  const handleStopCharging = useCallback(async (index?: number) => {
+    const idx = index ?? activeBatteryIndex;
+    const target = activeBatteries[idx];
+    if (!target) return;
+    setActiveBatteryIndex(idx);
     setError(null);
     setLoading(true);
     try {
-      const response = await boothService.stopCharging();
+      const response = await boothService.stopCharging(target.sessionId);
       setSocAtStopRequest(response.socAtStopRequest);
       setRelayAlreadyOff(response.relayAlreadyOff);
-      
-      // Default to 25 seconds as requested, or use server's recommended time
       const waitTime = response.recommendedWaitSeconds || 25;
       setRecommendedWaitSeconds(waitTime);
       setCountdown(waitTime);
-      
       setView('waiting_for_withdrawal');
     } catch (err: any) {
       const msg = err.response?.data?.message || "Failed to stop charging.";
@@ -131,11 +125,9 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
     } finally {
       setLoading(false);
     }
-  }, [initiateCollection]);
+  }, [activeBatteries, activeBatteryIndex]);
 
-  // Load user's current battery status on mount
   useEffect(() => {
-    // Get user's location
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setUserLocation({
@@ -144,52 +136,58 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
         });
       },
       () => {
-        // Fallback location if user denies permission
-        setUserLocation({ lat: -1.2921, lng: 36.8219 }); // Default to Nairobi
+        setUserLocation({ lat: -1.2921, lng: 36.8219 });
       }
     );
 
     const loadBatteryStatus = async () => {
-      // 1. Check for a pending withdrawal first. This is the most specific state.
-      const pendingWithdrawal = await boothService.getPendingWithdrawal();
-      //console.log('Pending withdrawal on mount:', pendingWithdrawal);
-      if (pendingWithdrawal) {
-        setWithdrawalSessionId(pendingWithdrawal.sessionId);
-        setWithdrawalCost(pendingWithdrawal.amount);
-        setWithdrawalDuration(pendingWithdrawal.durationMinutes);
-        setWithdrawalEnergy(pendingWithdrawal.soc);
-        setView('billing');
-        return; // Session restored, stop here.
-      }
-
-      // 2. If no pending withdrawal, check for any other active battery session.
-      const batteryStatus = await boothService.getMyBatteryStatus();
-      //console.log('Loaded battery status on mount:', batteryStatus);
-      if (batteryStatus) {
-        setActiveBattery({
-          id: batteryStatus.batteryUid,
-          type: BatteryType.E_BIKE,
-          chargeLevel: batteryStatus.telemetry?.soc ?? batteryStatus.chargeLevel,
-          temperature: batteryStatus.telemetry?.temperatureC ?? 0,
-          voltage: batteryStatus.telemetry?.voltage ?? 0,
-          health: 95,
-          cycles: 150,
-          ownerId: user.id
-        });
-        setAssignedSlot({
-          identifier: batteryStatus.slotIdentifier,
-          status: 'occupied', doorStatus: 'locked',
-          batteryUid: batteryStatus.batteryUid, chargeLevel: batteryStatus.chargeLevel,
-        });
-        
-
-        if (batteryStatus.sessionStatus === 'pending') {
-          setView('deposit_guide');
-        } else {
-          setView('status');
+      try {
+        const pendingWithdrawals = await boothService.getPendingWithdrawal();
+        if (pendingWithdrawals) {
+          const pw = Array.isArray(pendingWithdrawals) ? pendingWithdrawals : [pendingWithdrawals];
+          if (pw.length > 0) {
+            setActiveBatteryIndex(0);
+            setWithdrawalCost(pw[0].amount);
+            setWithdrawalDuration(pw[0].durationMinutes);
+            setWithdrawalEnergy(pw[0].soc);
+            setView('billing');
+            return;
+          }
         }
-      } else {
-        // 3. If no sessions of any kind, go to the initial screen.
+
+        const batteryStatuses = await boothService.getMyBatteryStatuses();
+        if (batteryStatuses && batteryStatuses.length > 0) {
+          const entries: ActiveBatteryEntry[] = batteryStatuses.map(s => ({
+            battery: {
+              id: s.batteryUid,
+              type: BatteryType.E_BIKE,
+              chargeLevel: s.telemetry?.soc ?? s.chargeLevel,
+              temperature: s.telemetry?.temperatureC ?? 0,
+              voltage: s.telemetry?.voltage ?? 0,
+              health: 95,
+              cycles: 150,
+              ownerId: user.id
+            },
+            slot: {
+              identifier: s.slotIdentifier,
+              status: 'occupied',
+              doorStatus: 'locked',
+              batteryUid: s.batteryUid,
+              chargeLevel: s.chargeLevel,
+            },
+            sessionId: s.sessionId,
+          }));
+          setActiveBatteries(entries);
+
+          if (batteryStatuses.length === 1 && batteryStatuses[0].sessionStatus === 'pending') {
+            setView('deposit_guide');
+          } else {
+            setView(entries.length > 1 ? 'multi_status' : 'status');
+          }
+        } else {
+          setView('home');
+        }
+      } catch {
         setView('home');
       }
     };
@@ -199,151 +197,124 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
       try {
         const publicBooths = await boothService.getBooths();
         setBooths(publicBooths);
-      } catch (err) {
+      } catch {
         toast.error('Could not load nearby stations.');
       }
     };
     loadBooths();
   }, [user.id]);
 
-  // This effect handles polling for deposit confirmation
   useEffect(() => {
-    if (view !== 'deposit_guide') {
-      return; // Only run when in the deposit guide view
-    }
-
+    if (view !== 'deposit_guide') return;
     const pollForDeposit = setInterval(async () => {
       try {
-        const batteryStatus = await boothService.getMyBatteryStatus();
-        if (batteryStatus && batteryStatus.sessionStatus !== 'pending') {
-          // Success! The backend has confirmed the deposit.
-          clearInterval(pollForDeposit);
-          setActiveBattery({ // Correctly set the 'id' property
-            id: batteryStatus.batteryUid,
-            type: BatteryType.E_BIKE, // This might need to come from the backend eventually
-            chargeLevel: batteryStatus.telemetry?.soc ?? batteryStatus.chargeLevel,
-            health: 95, // This data is not in the response, keeping mock for now
-            temperature: batteryStatus.telemetry?.temperatureC ?? 0,
-            voltage: batteryStatus.telemetry?.restVoltage ?? 0,
-            cycles: 150, // This data is not in the response, keeping mock for now
-            ownerId: user.id
-          });
-          setView('status');
+        const statuses = await boothService.getMyBatteryStatuses();
+        if (statuses && statuses.length > 0) {
+          const pendingEntry = statuses.find(s => s.sessionStatus === 'pending');
+          if (!pendingEntry) {
+            clearInterval(pollForDeposit);
+            setActiveBatteries(prev => prev.map(e => {
+              const updated = statuses.find(s => s.sessionId === e.sessionId);
+              if (!updated) return e;
+              return {
+                ...e,
+                battery: {
+                  ...e.battery,
+                  chargeLevel: updated.telemetry?.soc ?? updated.chargeLevel,
+                  temperature: updated.telemetry?.temperatureC ?? e.battery.temperature,
+                  voltage: updated.telemetry?.voltage ?? e.battery.voltage,
+                },
+              };
+            }));
+            setShowAddMorePrompt(true);
+          }
         }
+      } catch { /* ignore */ }
+    }, 600);
+    return () => clearInterval(pollForDeposit);
+  }, [view]);
 
-        
-      } catch (err) { /* Ignore errors, just keep polling */ }
-    }, 600); // Poll every 6 miliseconds
-
-    return () => clearInterval(pollForDeposit); // Cleanup on component unmount or view change
-  }, [view, user.id]);
-
-  // This effect polls for live battery status updates while on the status screen
   useEffect(() => {
-    if (view !== 'status') {
-      return; // Only run when in the status view
-    }
-
+    if (view !== 'status' && view !== 'multi_status') return;
     const pollForStatus = setInterval(async () => {
       try {
-        const batteryStatus = await boothService.getMyBatteryStatus();
-        //console.log('Polled battery status:', batteryStatus);
-        
-        if (batteryStatus && activeBattery) {
-          // Update the charge level of the existing active battery
-          setActiveBattery(prev => prev ? { ...prev, chargeLevel: batteryStatus.telemetry?.soc ?? batteryStatus.chargeLevel, temperature: batteryStatus.telemetry?.temperatureC ?? prev.temperature, voltage: batteryStatus.telemetry?.voltage ?? prev.voltage } : null);
-          
-          // Update assigned slot door status from telemetry
-          if (batteryStatus.telemetry) {
-            setAssignedSlot(prev => prev ? {
-              ...prev,
-              doorStatus: batteryStatus.telemetry!.doorLocked ? 'locked' : 'open'
-            } : null);
-          }
-        } else if (!batteryStatus) {
-          // The battery was collected, end the session.
+        const statuses = await boothService.getMyBatteryStatuses();
+        if (statuses && statuses.length > 0) {
+          setActiveBatteries(prev => prev.map(e => {
+            const updated = statuses.find(s => s.sessionId === e.sessionId);
+            if (!updated) return e;
+            return {
+              ...e,
+              battery: {
+                ...e.battery,
+                chargeLevel: updated.telemetry?.soc ?? updated.chargeLevel,
+                temperature: updated.telemetry?.temperatureC ?? e.battery.temperature,
+                voltage: updated.telemetry?.voltage ?? e.battery.voltage,
+              },
+              slot: {
+                ...e.slot,
+                doorStatus: updated.telemetry?.doorLocked ? 'locked' : 'open',
+                chargeLevel: updated.chargeLevel,
+              },
+            };
+          }));
+        } else {
+          setActiveBatteries([]);
           finishSession();
         }
-      } catch (err) { /* Ignore errors, just keep polling */ }
-    }, 2000); // Poll every 2 seconds
+      } catch { /* ignore */ }
+    }, 2000);
+    return () => clearInterval(pollForStatus);
+  }, [view]);
 
-    return () => clearInterval(pollForStatus); // Cleanup on view change
-  }, [view, activeBattery]);
-
-  // This effect polls for payment confirmation after an STK push
   useEffect(() => {
-    if (view !== 'billing' || paymentStatus !== 'push_sent' || !checkoutRequestId) {
-      return; // Only run when waiting for payment
-    }
-
+    if (view !== 'billing' || paymentStatus !== 'push_sent' || !checkoutRequestId) return;
     let isCancelled = false;
     const pollForPayment = setInterval(async () => {
       if (isCancelled) return;
-
       try {
         const statusResponse = await boothService.getWithdrawalStatus(checkoutRequestId);
-
         if (statusResponse.paymentStatus === "paid") {
           clearInterval(pollForPayment);
           setPaymentStatus("success");
-          // After payment, user must scan the booth QR to physically release the battery
           setView("scan_to_release");
         }
-        // If status is 'pending' or something else, we just let the interval run again.
-        // If it's 'failed', the backend should handle it, but we could add a check here.
-
-      } catch (err) {
-        // Don't show an error on every poll, just log it. The timeout will handle persistent failures.
-        //console.error("Payment poll failed:", err);
-      }
-    }, 2000); // Poll every 2 seconds
-
-    // Cleanup function
+      } catch { /* ignore */ }
+    }, 2000);
     return () => { isCancelled = true; clearInterval(pollForPayment); };
   }, [view, paymentStatus, checkoutRequestId]);
 
-  // This effect handles the countdown for the "waiting for withdrawal" screen
   useEffect(() => {
     if (view === 'waiting_for_withdrawal') {
       if (countdown > 0) {
         const timer = setInterval(() => {
           setCountdown(prev => {
             if (prev <= 1) {
-              clearInterval(timer); 
-              initiateCollection(); // Proceed after countdown
+              clearInterval(timer);
+              initiateCollection();
               return 0;
             }
             return prev - 1;
           });
         }, 1000);
-        return () => clearInterval(timer); // Cleanup on component unmount or view change
+        return () => clearInterval(timer);
       } else {
-        // If no wait is recommended (relay already off), proceed immediately
         initiateCollection();
       }
     }
   }, [view, initiateCollection]);
 
-  // 1. Start Deposit
   const startDeposit = () => {
+    setShowAddMorePrompt(false);
     setView('scan_qr');
   };
 
-  // Handle verification scan after payment to release the battery
   const handleReleaseScan = useCallback(async (decodedText: string) => {
     setLoading(true);
+    const target = activeBatteries[activeBatteryIndex];
     try {
-      const result = await boothService.releaseBattery(decodedText);
+      const result = await boothService.releaseBattery(decodedText, target?.sessionId);
       toast.success(result.message || "Booth verified! Slot opening...");
-      
-      // Update assigned slot info to ensure the collection guide displays the correct slot
-      if (result.slotIdentifier) {
-        setAssignedSlot(prev => prev ? {
-          ...prev,
-          identifier: result.slotIdentifier
-        } : { identifier: result.slotIdentifier, status: 'occupied', doorStatus: 'open' } as Slot);
-      }
-
       setView('collect_guide');
     } catch (err: any) {
       const serverMessage = err.response?.data?.error || "Verification failed. Please scan the booth QR code.";
@@ -351,43 +322,49 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeBatteries, activeBatteryIndex]);
 
-  // 3. Handle QR Scan Success - calls initiateDeposit API
   const handleScanSuccess = useCallback(async (decodedText: string) => {
     setLoading(true);
     try {
-      const assignedSlotFromApi = await boothService.initiateDeposit(decodedText);
-      setAssignedSlot(assignedSlotFromApi);
+      const response = await boothService.initiateDeposit(decodedText);
+      const newEntry: ActiveBatteryEntry = {
+        battery: {
+          id: '',
+          type: BatteryType.E_BIKE,
+          chargeLevel: 0,
+          temperature: 0,
+          voltage: 0,
+          health: 95,
+          cycles: 150,
+          ownerId: user.id,
+        },
+        slot: response.slot,
+        sessionId: response.sessionId,
+      };
+      setActiveBatteries(prev => [...prev, newEntry]);
       setView('deposit_guide');
     } catch (err: any) {
-      // 1. Extract the specific message from the nested response object
       const serverMessage = err.response?.data?.message;
       const statusCode = err.response?.status;
-
       if (!err.response) {
         toast.error("Network error: Cannot connect to the station.");
-      }
-      else if (statusCode === 409) {
-        // 2. Handle the 'Booth Full' scenario specifically
+      } else if (statusCode === 409) {
         if (serverMessage?.includes("occupied")) {
           toast.error(serverMessage || "This station is currently full.", { duration: 5000 });
           setView('map_view');
         } else {
-          // Handle other 409 conflicts (like active sessions)
           toast.error("You already have an active session.");
           setView('status');
         }
-      }
-      else {
-        // Generic fallback for 400, 500, etc.
+      } else {
         toast.error(serverMessage || "An unexpected error occurred.");
         setView('home');
       }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user.id]);
 
   const handleCancelDeposit = () => {
     setIsCancelModalOpen(true);
@@ -397,10 +374,20 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
     setIsCancelModalOpen(false);
     const loadingToast = toast.loading("Cancelling session...");
     try {
-      await boothService.cancelActiveSession();
+      const lastEntry = activeBatteries[activeBatteries.length - 1];
+      if (lastEntry) {
+        await boothService.cancelActiveSessionById(lastEntry.sessionId);
+        removeBatteryEntry(lastEntry);
+      } else {
+        await boothService.cancelActiveSession();
+      }
       toast.dismiss(loadingToast);
       toast.success("Session cancelled.");
-      finishSession(); // Resets state and returns to home
+      if (activeBatteries.length <= 1) {
+        finishSession();
+      } else {
+        setView('multi_status');
+      }
     } catch (err) {
       toast.dismiss(loadingToast);
       const errorMessage = (err as any)?.response?.data?.message || (err instanceof Error ? err.message : "Failed to cancel session.");
@@ -408,24 +395,16 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
     }
   };
 
-  // 4. Handle Physical Door Close (User Interaction)
   const handleScanFailure = useCallback((error: string) => {
-    // Don't redirect on camera failure. Just log it and allow manual input.
-    // The user will see the manual input field as a fallback.
-    // console.warn("QR Scanner failed to start, allowing manual input:", error);
     toast.error("Camera not available. Please use manual input below.");
-  }, []); // No dependencies, this function is stable.
+  }, []);
 
-  // 6. Handle STK Push - calls getWithdrawalStatus API
   const handleSTKPush = async () => {
     setLoading(true);
+    const target = activeBatteries[activeBatteryIndex];
     try {
-      if (!withdrawalSessionId) {
-        throw new Error("No active withdrawal session found.");
-      }
-      
-      const payResponse = await boothService.payForWithdrawal(withdrawalSessionId);
-      // Set the checkout ID and status to trigger the polling useEffect
+      if (!target) throw new Error("No active withdrawal session found.");
+      const payResponse = await boothService.payForWithdrawal(target.sessionId);
       setCheckoutRequestId(payResponse.checkoutRequestId);
       setPaymentStatus('push_sent');
     } catch (err) {
@@ -436,28 +415,47 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
       setLoading(false);
     }
   };
-  // 7. Finish Session - resets all state
+
   const finishSession = () => {
-    setAssignedSlot(null);
-    setActiveBattery(null);
-    setAiAnalysis('');
-    setWithdrawalSessionId(null);
+    setActiveBatteries([]);
+    setActiveBatteryIndex(-1);
     setCheckoutRequestId('');
     setWithdrawalCost(0);
     setSocAtStopRequest(null);
     setRelayAlreadyOff(false);
     setWithdrawalDuration(0);
     setRecommendedWaitSeconds(0);
-    setView('scan_qr');
+    setShowAddMorePrompt(false);
+    setView('home');
   };
 
-  // Gemini AI
-  const runAiAnalysis = async () => {
-    if (!activeBattery) return;
-    setIsAnalyzing(true);
-    const result = await analyzeBatteryHealth(activeBattery);
-    setAiAnalysis(result);
-    setIsAnalyzing(false);
+  const finishCurrentBattery = () => {
+    if (activeEntry) {
+      removeBatteryEntry(activeEntry);
+    }
+    setActiveBatteryIndex(-1);
+    setCheckoutRequestId('');
+    setWithdrawalCost(0);
+    setSocAtStopRequest(null);
+    setRelayAlreadyOff(false);
+    setWithdrawalDuration(0);
+    setRecommendedWaitSeconds(0);
+    setPaymentStatus('idle');
+    if (activeBatteries.length <= 1) {
+      finishSession();
+    } else {
+      setView('multi_status');
+    }
+  };
+
+  const handleCollectBattery = (index: number) => {
+    setActiveBatteryIndex(index);
+    handleStopCharging(index);
+  };
+
+  const handleAddMoreBattery = () => {
+    setShowAddMorePrompt(false);
+    setView('scan_qr');
   };
 
   return (
@@ -469,11 +467,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
           <span className="font-bold text-lg tracking-tight cursor-pointer">RIDERCMS</span>
         </div>
         <div className="flex items-center gap-4">
-
           <button onClick={onLogout} className="p-2 bg-gray-700 rounded-full hover:bg-gray-600 transition-colors">
-            {/* <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 2.062-2.062a.75.75 0 0 0 0-1.061L15.75 12" />
-            </svg> */}
             <span className='p-8 m-8'>Logout</span>
           </button>
         </div>
@@ -559,18 +553,15 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
         {view === 'scan_qr' && (
           <div className="fixed inset-0 bg-[#0B1E4B] z-50 flex flex-col items-center justify-center animate-fade-in p-4">
             <div className="relative w-full max-w-sm aspect-[3/4] bg-gray-900 rounded-2xl overflow-hidden border border-gray-700 shadow-2xl">
-              {/* The QrScanner component will render the camera feed here */}
               <QrScanner
                 onScanSuccess={handleScanSuccess}
                 onScanFailure={handleScanFailure}
               />
-              {/* Camera Overlay */}
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 border-2 border-emerald-500 rounded-3xl shadow-[0_0_20px_rgba(16,185,129,0.3)] pointer-events-none">
                 <div className="absolute top-0 w-full h-1 bg-emerald-400 shadow-[0_0_10px_#34d399] animate-[scan_2s_ease-in-out_infinite]"></div>
               </div>
             </div>
 
-            {/* Manual Input for Laptops */}
             <div className="mt-6 w-full max-w-sm text-center">
               <p className="text-gray-400 text-sm mb-2">Or enter Booth UID manually:</p>
               <div className="flex gap-2">
@@ -587,11 +578,11 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
               </div>
             </div>
 
-            <button onClick={() => { setView('home'); }} className="mt-8 text-gray-400 hover:text-white">Cancel</button>
+            <button onClick={() => { setShowAddMorePrompt(false); setView(activeBatteries.length > 0 ? 'multi_status' : 'home'); }} className="mt-8 text-gray-400 hover:text-white">Cancel</button>
           </div>
         )}
 
-        {/* VIEW: SCAN TO RELEASE (Verification after payment) */}
+        {/* VIEW: SCAN TO RELEASE */}
         {view === 'scan_to_release' && (
           <div className="fixed inset-0 bg-[#0B1E4B] z-50 flex flex-col items-center justify-center animate-fade-in p-4">
             <div className="text-center mb-6">
@@ -603,13 +594,10 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
                 onScanSuccess={handleReleaseScan}
                 onScanFailure={handleScanFailure}
               />
-              {/* Camera Overlay */}
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 border-2 border-emerald-500 rounded-3xl shadow-[0_0_20px_rgba(16,185,129,0.3)] pointer-events-none">
                 <div className="absolute top-0 w-full h-1 bg-emerald-400 shadow-[0_0_10px_#34d399] animate-[scan_2s_ease-in-out_infinite]"></div>
               </div>
             </div>
-
-            {/* Manual Input Fallback */}
             <div className="mt-6 w-full max-w-sm text-center">
               <p className="text-gray-400 text-sm mb-2">Or enter Booth UID manually:</p>
               <div className="flex gap-2">
@@ -638,50 +626,84 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
           </div>
         )}
 
-        {/* VIEW: DEPOSIT GUIDE (WITH DOOR LOGIC) */}
-        {view === 'deposit_guide' && assignedSlot && (
+        {/* VIEW: DEPOSIT GUIDE */}
+        {view === 'deposit_guide' && activeBatteries.length > 0 && (
           <div className="animate-fade-in pt-6 text-center">
-            <div className="inline-block bg-emerald-500/10 text-emerald-400 px-4 py-1 rounded-full text-sm font-bold mb-6 border border-emerald-500/20">
-              SLOT ALLOCATED
-            </div>
+            {!showAddMorePrompt ? (
+              <>
+                <div className="inline-block bg-emerald-500/10 text-emerald-400 px-4 py-1 rounded-full text-sm font-bold mb-6 border border-emerald-500/20">
+                  SLOT ALLOCATED
+                </div>
 
-            <div className="relative w-48 h-48 mx-auto bg-gray-800 rounded-2xl border-4 border-emerald-500 flex items-center justify-center mb-8 shadow-xl">
-              <span className="text-8xl font-bold text-white">{assignedSlot.identifier.replace('slot', '')}</span>
-              <div className="absolute -bottom-3 bg-gray-900 px-4 text-emerald-400 text-sm font-bold border border-emerald-500 rounded-full">DOOR OPEN</div>
-            </div>
+                <div className="relative w-48 h-48 mx-auto bg-gray-800 rounded-2xl border-4 border-emerald-500 flex items-center justify-center mb-8 shadow-xl">
+                  <span className="text-8xl font-bold text-white">{activeBatteries[activeBatteries.length - 1].slot.identifier.replace('slot', '')}</span>
+                  <div className="absolute -bottom-3 bg-gray-900 px-4 text-emerald-400 text-sm font-bold border border-emerald-500 rounded-full">DOOR OPEN</div>
+                </div>
 
-            <h3 className="text-xl font-bold mb-2">Insert Battery in Slot {assignedSlot.identifier}</h3>
-            <p className="text-gray-400 text-sm mb-8 px-8">Place your battery inside and firmly close the door. The system will automatically detect it and begin charging.</p>
+                <h3 className="text-xl font-bold mb-2">Insert Battery in Slot {activeBatteries[activeBatteries.length - 1].slot.identifier}</h3>
+                <p className="text-gray-400 text-sm mb-8 px-8">Place your battery inside and firmly close the door. The system will automatically detect it and begin charging.</p>
 
-            <div className="flex flex-col items-center justify-center text-center p-4 bg-gray-800/50 rounded-xl border border-gray-700">
-              <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mb-4"></div>
-              <h4 className="font-semibold text-blue-300">Waiting for Confirmation...</h4>
-              <p className="text-xs text-gray-400 mt-1">This may take a few seconds after the door is closed.</p>
-            </div>
+                <div className="flex flex-col items-center justify-center text-center p-4 bg-gray-800/50 rounded-xl border border-gray-700">
+                  <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mb-4"></div>
+                  <h4 className="font-semibold text-blue-300">Waiting for Confirmation...</h4>
+                  <p className="text-xs text-gray-400 mt-1">This may take a few seconds after the door is closed.</p>
+                </div>
 
-            <button
-              onClick={handleCancelDeposit}
-              className="mt-6 w-full bg-red-900/50 hover:bg-red-900/80 text-red-300 font-semibold py-3 rounded-xl border border-red-800 transition-colors"
-            >
-              Cancel Session
-            </button>
+                <button
+                  onClick={handleCancelDeposit}
+                  className="mt-6 w-full bg-red-900/50 hover:bg-red-900/80 text-red-300 font-semibold py-3 rounded-xl border border-red-800 transition-colors"
+                >
+                  Cancel Session
+                </button>
+              </>
+            ) : (
+              <div className="animate-fade-in pt-10 text-center">
+                <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-emerald-500/30">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h3 className="text-2xl font-bold mb-2">Battery Deposited!</h3>
+                <p className="text-gray-400 mb-8">Battery in slot {activeBatteries[activeBatteries.length - 1].slot.identifier} is charging.</p>
+                <div className="space-y-3">
+                  <button
+                    onClick={handleAddMoreBattery}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl transition-colors"
+                  >
+                    Add Another Battery
+                  </button>
+                  <button
+                    onClick={() => setView(activeBatteries.length > 1 ? 'multi_status' : 'status')}
+                    className="w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 rounded-xl border border-gray-600 transition-colors"
+                  >
+                    {activeBatteries.length > 1 ? 'View All Batteries' : 'View Battery Status'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* VIEW: CHARGING STATUS */}
-        {view === 'status' && activeBattery && (
-          <ChargingStatusView
-            activeBattery={activeBattery}
-            assignedSlot={assignedSlot}
-            aiAnalysis={aiAnalysis}
-            isAnalyzing={isAnalyzing}
-            loading={loading}
-            runAiAnalysis={runAiAnalysis}
-            initiateCollection={handleStopCharging} // Change this button to trigger stop charging
+        {/* VIEW: MULTI STATUS */}
+        {view === 'multi_status' && activeBatteries.length > 0 && (
+          <MultiBatteryStatus
+            batteries={activeBatteries}
+            onCollect={handleCollectBattery}
+            onAddBattery={startDeposit}
           />
         )}
 
-        {/* VIEW: STOPPING CHARGE (Intermediate loading state) */}
+        {/* VIEW: SINGLE BATTERY STATUS */}
+        {view === 'status' && activeEntry && (
+          <ChargingStatusView
+            activeBattery={activeEntry.battery}
+            assignedSlot={activeEntry.slot}
+            loading={loading}
+            initiateCollection={() => handleStopCharging(activeBatteryIndex)}
+          />
+        )}
+
+        {/* VIEW: STOPPING CHARGE */}
         {view === 'stopping_charge' && (
           <div className="flex flex-col items-center justify-center h-[70vh] animate-fade-in">
             <div className="w-16 h-16 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin mb-6"></div>
@@ -722,7 +744,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
                     Try Again Now
                   </button>
                   <button 
-                    onClick={() => { setError(null); setView('status'); }} 
+                    onClick={() => { setError(null); setView('multi_status'); }} 
                     className="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold py-3 rounded-xl border border-gray-700 transition-colors"
                   >
                     Go Back
@@ -733,14 +755,13 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
           </div>
         )}
 
-        {/* Display error message if it exists */}
         {error && view !== 'waiting_for_withdrawal' && (
           <div className="mt-4 p-3 bg-red-900/50 border border-red-700 text-red-300 rounded-lg text-sm text-center">
             {error}
           </div>
         )}
 
-        {/* VIEW: BILLING & PAYMENT */}
+        {/* VIEW: BILLING */}
         {view === 'billing' && (
           <div className="animate-fade-in pt-10">
             <SessionSummary
@@ -784,7 +805,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
           </div>
         )}
 
-        {/* VIEW: COLLECT GUIDE (WITH DOOR LOGIC) */}
+        {/* VIEW: COLLECT GUIDE */}
         {view === 'collect_guide' && (
           <div className="flex flex-col items-center justify-center h-[70vh] animate-fade-in text-center">
             <div className="w-24 h-24 bg-gray-800 rounded-full border-4 border-emerald-500 flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(16,185,129,0.3)] animate-bounce">
@@ -792,13 +813,13 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
               </svg>
             </div>
-            <h2 className="text-3xl font-bold text-white mb-2">Slot {assignedSlot?.identifier} Open</h2>
-            <p className="text-gray-400 max-w-xs mx-auto mb-8">Your battery is released. Please retrieve it and close the door to finish the session.</p>
+            <h2 className="text-3xl font-bold text-white mb-2">Slot {activeEntry?.slot.identifier} Open</h2>
+            <p className="text-gray-400 max-w-xs mx-auto mb-8">Your battery is released. Please retrieve it and close the door to finish.</p>
             <button
-              onClick={finishSession}
+              onClick={finishCurrentBattery}
               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-4 rounded-xl transition-colors"
             >
-              Finish Session
+              {activeBatteries.length > 1 ? 'Battery Collected — View Remaining' : 'Finish Session'}
             </button>
           </div>
         )}
@@ -832,20 +853,10 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
             animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         }
         @keyframes bubble-rise {
-          from {
-            bottom: -30px;
-            opacity: 0;
-          }
-          25% {
-            opacity: 0.7;
-          }
-          95% {
-            opacity: 0.4;
-          }
-          to {
-            bottom: 105%;
-            opacity: 0;
-          }
+          from { bottom: -30px; opacity: 0; }
+          25% { opacity: 0.7; }
+          95% { opacity: 0.4; }
+          to { bottom: 105%; opacity: 0; }
         }
         .bubble {
           position: absolute;

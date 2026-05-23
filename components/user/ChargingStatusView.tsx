@@ -4,20 +4,14 @@ import { Battery, Slot } from '../../types';
 interface ChargingStatusViewProps {
   activeBattery: Battery;
   assignedSlot: Slot | null;
-  aiAnalysis: string;
-  isAnalyzing: boolean;
   loading: boolean;
-  runAiAnalysis: () => void;
   initiateCollection: () => void;
 }
 
 const ChargingStatusView: React.FC<ChargingStatusViewProps> = ({
   activeBattery,
   assignedSlot,
-  aiAnalysis,
-  isAnalyzing,
   loading,
-  runAiAnalysis,
   initiateCollection,
 }) => {
   return (
@@ -76,27 +70,6 @@ const ChargingStatusView: React.FC<ChargingStatusViewProps> = ({
             <p className="font-mono text-blue-400">{activeBattery.voltage.toFixed(1)}V</p>
           </div>
         </div>
-      </div>
-
-      {/* Gemini AI Card */}
-      <div className="bg-gradient-to-br from-indigo-900/80 to-purple-900/80 p-6 rounded-2xl border border-indigo-500/30 shadow-lg">
-        <div className="flex items-center gap-2 mb-3">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-          </svg>
-          <h3 className="font-bold text-indigo-100">AI Battery Doctor</h3>
-        </div>
-        {aiAnalysis ? (
-          <p className="text-sm text-indigo-200 italic leading-relaxed">"{aiAnalysis}"</p>
-        ) : (
-          <button
-            onClick={runAiAnalysis}
-            disabled={isAnalyzing}
-            className="text-xs bg-indigo-500/20 hover:bg-indigo-500/40 text-indigo-300 px-3 py-2 rounded-lg border border-indigo-500/30 transition-colors w-full disabled:opacity-50"
-          >
-            {isAnalyzing ? "Running Diagnostics..." : "Analyze Battery Health"}
-          </button>
-        )}
       </div>
 
       {/* Collect Button */}

@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { SlotStatus, BatteryType, Transaction, SystemLog, Battery, Booth, Station, DashboardSummary } from '../types';
-import { generateSystemInsight } from '../services/geminiService';
 import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, getDashboardSummary } from '../services/adminService';
 import { useSummaryStats, useStatusTrend, useBreakdowns } from '../hooks/useStats';
 import UserManagement from './admin/user/UserManagement';

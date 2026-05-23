@@ -29,10 +29,4 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-/**
- * NOTE: The previous response interceptor that handled 401/403 errors
- * has been removed. The `AuthContext` now handles logout logic when fetching
- * a user profile fails, which is a more robust pattern for token-based auth.
- */
-
 export default apiClient;

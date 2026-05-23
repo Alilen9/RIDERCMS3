@@ -488,6 +488,7 @@ export interface AdminSession {
   amount: number | null;
   createdAt: string;
   userEmail: string | null;
+  userPhoneNumber: string | null;
   boothUid: string | null;
   slotIdentifier: string | null;
   batteryUid: string | null;
