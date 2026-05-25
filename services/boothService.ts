@@ -22,30 +22,32 @@ export interface PublicBooth {
 /**
  * Response from checking the logged-in user's deposited battery status.
  * GET /api/booths/my-battery-status
- *  res.status(200).json({
-      boothUid, slotIdentifier, chargeLevel: realTimeCharge, lastChargeLevel: lastChargeLevelSoc, sessionStatus, telemetry: realTimeTelemetry
-    });
  */
 export interface MyBatteryStatusResponse {
-  batteryUid: string;
-  chargeLevel: number;
-  lastChargeLevel: number;
   boothUid: string;
   slotIdentifier: string;
+  chargeLevel: number;
+  lastChargeLevel: number;
   sessionId: number;
   sessionStatus: 'pending' | 'in_progress' | 'completed' | 'cancelled' | 'failed';
   telemetry: {
     batteryInserted: boolean;
+    devicePresent: boolean;
     doorClosed: boolean;
     doorLocked: boolean;
     plugConnected: boolean;
     relayOn: boolean;
+    relayStateForCalibration: string;
     soc: number;
     temperature: number;
     temperatureC: number;
     timestamp: number;
     restVoltage: number;
     voltage: number;
+    voltageRaw: number;
+    uptimeSec: number;
+    status: string;
+    qr: string;
   } | null;
 }
 
@@ -172,10 +174,9 @@ export const getMyBatteryStatuses = async (): Promise<MyBatteryStatusResponse[]>
  * Initiates the withdrawal process, triggering an M-Pesa STK push for payment.
  * @returns A promise that resolves with the checkout request details.
  */
-export const initiateWithdrawal = async (sessionId?: number): Promise<InitiateWithdrawalResponse> => {
+export const initiateWithdrawal = async (sessionId: number): Promise<InitiateWithdrawalResponse> => {
   try {
-    const body = sessionId ? { sessionId } : {};
-    const response = await apiClient.post<InitiateWithdrawalResponse>('/booths/initiate-withdrawal', body);
+    const response = await apiClient.post<InitiateWithdrawalResponse>('/booths/initiate-withdrawal', { sessionId });
     return response.data;
   } catch (error) {
     throw error;
@@ -201,10 +202,9 @@ export const getPendingWithdrawal = async (): Promise<InitiateWithdrawalResponse
  * Allows the app to stop charging first, then wait before creating a withdrawal session.
  * POST /api/booths/stop-charging
  */
-export const stopCharging = async (sessionId?: number): Promise<StopChargingResponse> => {
+export const stopCharging = async (sessionId: number): Promise<StopChargingResponse> => {
   try {
-    const body = sessionId ? { sessionId } : {};
-    const response = await apiClient.post<StopChargingResponse>('/booths/stop-charging', body);
+    const response = await apiClient.post<StopChargingResponse>('/booths/stop-charging', { sessionId });
     return response.data;
   } catch (error) {
     console.error('Failed to stop charging:', error);
@@ -258,11 +258,9 @@ export const openForCollection = async (checkoutRequestId: string): Promise<void
  * Triggers the release of a battery after physical QR scan verification.
  * @param boothUid - The UID of the booth being scanned.
  */
-export const releaseBattery = async (boothUid: string, sessionId?: number): Promise<{ message: string; slotIdentifier: string }> => {
+export const releaseBattery = async (boothUid: string, sessionId: number): Promise<{ message: string; slotIdentifier: string }> => {
   try {
-    const body: any = { boothUid };
-    if (sessionId) body.sessionId = sessionId;
-    const response = await apiClient.post<{ message: string; slotIdentifier: string }>('/booths/release-battery', body);
+    const response = await apiClient.post<{ message: string; slotIdentifier: string }>('/booths/release-battery', { boothUid, sessionId });
     return response.data;
   } catch (error) {
     console.error('Failed to release battery:', error);

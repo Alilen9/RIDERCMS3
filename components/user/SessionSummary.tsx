@@ -4,16 +4,24 @@ interface SessionSummaryProps {
   durationMinutes: number;
   energyDelivered: number;
   totalCost: number;
+  slotIdentifier?: string;
 }
 
 const SessionSummary: React.FC<SessionSummaryProps> = ({
   durationMinutes,
   energyDelivered,
   totalCost,
+  slotIdentifier,
 }) => {
   return (
     <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700 mb-6">
       <h2 className="text-xl font-bold mb-4 border-b border-gray-700 pb-2">Session Summary</h2>
+      {slotIdentifier && (
+        <div className="flex justify-between mb-2">
+          <span className="text-gray-400">Slot</span>
+          <span className="font-mono text-emerald-400">{slotIdentifier}</span>
+        </div>
+      )}
       <div className="flex justify-between mb-2">
         <span className="text-gray-400">Energy Delivered</span>
         <span>{energyDelivered} SOC</span>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Battery, Slot, User, BatteryType, ActiveBatteryEntry } from '../types';
 import * as boothService from '../services/boothService';
 import QrScanner from './user/QrScanner';
@@ -23,6 +23,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
   const [activeBatteryIndex, setActiveBatteryIndex] = useState(-1);
   const [paymentStatus, setPaymentStatus] = useState<'idle' | 'push_sent' | 'success'>('idle');
   const [loading, setLoading] = useState(false);
+  const [withdrawalSessionId, setWithdrawalSessionId] = useState<number | null>(null);
   const [checkoutRequestId, setCheckoutRequestId] = useState<string>('');
   const [withdrawalCost, setWithdrawalCost] = useState<number>(0);
   const [withdrawalDuration, setWithdrawalDuration] = useState<number>(0);
@@ -37,6 +38,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAddMorePrompt, setShowAddMorePrompt] = useState(false);
+  const depositingSessionIdRef = useRef<number | null>(null);
+  const depositingSlotRef = useRef<string | null>(null);
 
   const activeEntry = activeBatteryIndex >= 0 && activeBatteryIndex < activeBatteries.length
     ? activeBatteries[activeBatteryIndex]
@@ -84,6 +87,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
       const target = activeBatteries[activeBatteryIndex];
       if (!target) throw new Error('No battery selected for collection');
       const response = await boothService.initiateWithdrawal(target.sessionId);
+      console.log("Initiate withdrawal response:", response);
+      setWithdrawalSessionId(response.sessionId);
       setWithdrawalCost(response.amount);
       setWithdrawalDuration(response.durationMinutes);
       setWithdrawalEnergy(response.soc);
@@ -91,11 +96,6 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
       setPaymentStatus('idle');
     } catch (err: any) {
       const serverMessage = err.response?.data?.message || 'Failed to start collection.';
-      if (err.response?.status === 409) {
-        toast.error("Battery is still finalizing charge. Retrying in 5 seconds...", { id: 'retry-toast' });
-        setTimeout(() => initiateCollection(true), 5000);
-        return;
-      }
       setError(serverMessage);
       toast.error(serverMessage);
     } finally {
@@ -143,10 +143,12 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
     const loadBatteryStatus = async () => {
       try {
         const pendingWithdrawals = await boothService.getPendingWithdrawal();
+        console.log("Pending withdrawals on load:", pendingWithdrawals);
         if (pendingWithdrawals) {
           const pw = Array.isArray(pendingWithdrawals) ? pendingWithdrawals : [pendingWithdrawals];
           if (pw.length > 0) {
             setActiveBatteryIndex(0);
+            setWithdrawalSessionId(pw[0].sessionId);
             setWithdrawalCost(pw[0].amount);
             setWithdrawalDuration(pw[0].durationMinutes);
             setWithdrawalEnergy(pw[0].soc);
@@ -156,12 +158,13 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
         }
 
         const batteryStatuses = await boothService.getMyBatteryStatuses();
+        console.log("Loaded battery statuses:", batteryStatuses);
         if (batteryStatuses && batteryStatuses.length > 0) {
           const entries: ActiveBatteryEntry[] = batteryStatuses.map(s => ({
             battery: {
-              id: s.batteryUid,
+              id: s.slotIdentifier,
               type: BatteryType.E_BIKE,
-              chargeLevel: s.telemetry?.soc ?? s.chargeLevel,
+              chargeLevel: s.chargeLevel ?? s.telemetry?.soc,
               temperature: s.telemetry?.temperatureC ?? 0,
               voltage: s.telemetry?.voltage ?? 0,
               health: 95,
@@ -172,12 +175,14 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
               identifier: s.slotIdentifier,
               status: 'occupied',
               doorStatus: 'locked',
-              batteryUid: s.batteryUid,
+              userName: user.name,
+              batteryUid: s.slotIdentifier,
               chargeLevel: s.chargeLevel,
             },
             sessionId: s.sessionId,
           }));
           setActiveBatteries(entries);
+          setActiveBatteryIndex(0);
 
           if (batteryStatuses.length === 1 && batteryStatuses[0].sessionStatus === 'pending') {
             setView('deposit_guide');
@@ -208,19 +213,30 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
     if (view !== 'deposit_guide') return;
     const pollForDeposit = setInterval(async () => {
       try {
+        const targetId = depositingSessionIdRef.current;
+        const targetSlot = depositingSlotRef.current;
+        if (!targetId && !targetSlot) return;
         const statuses = await boothService.getMyBatteryStatuses();
         if (statuses && statuses.length > 0) {
-          const pendingEntry = statuses.find(s => s.sessionStatus === 'pending');
-          if (!pendingEntry) {
+          const updatedTarget = targetId
+            ? statuses.find(s => s.sessionId === targetId)
+            : statuses.find(s => s.slotIdentifier === targetSlot);
+          if (updatedTarget && updatedTarget.sessionStatus !== 'pending') {
             clearInterval(pollForDeposit);
+            depositingSessionIdRef.current = null;
+            depositingSlotRef.current = null;
             setActiveBatteries(prev => prev.map(e => {
-              const updated = statuses.find(s => s.sessionId === e.sessionId);
+              const updated = statuses.find(s =>
+                (e.sessionId != null && s.sessionId === e.sessionId) ||
+                s.slotIdentifier === e.slot.identifier
+              );
               if (!updated) return e;
               return {
                 ...e,
+                sessionId: e.sessionId ?? updated.sessionId,
                 battery: {
                   ...e.battery,
-                  chargeLevel: updated.telemetry?.soc ?? updated.chargeLevel,
+                  chargeLevel: updated.chargeLevel ?? updated.telemetry?.soc,
                   temperature: updated.telemetry?.temperatureC ?? e.battery.temperature,
                   voltage: updated.telemetry?.voltage ?? e.battery.voltage,
                 },
@@ -241,13 +257,17 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
         const statuses = await boothService.getMyBatteryStatuses();
         if (statuses && statuses.length > 0) {
           setActiveBatteries(prev => prev.map(e => {
-            const updated = statuses.find(s => s.sessionId === e.sessionId);
+            const updated = statuses.find(s =>
+              (e.sessionId != null && s.sessionId === e.sessionId) ||
+              s.slotIdentifier === e.slot.identifier
+            );
             if (!updated) return e;
             return {
               ...e,
+              sessionId: e.sessionId ?? updated.sessionId,
               battery: {
                 ...e.battery,
-                chargeLevel: updated.telemetry?.soc ?? updated.chargeLevel,
+                chargeLevel: updated.chargeLevel ?? updated.telemetry?.soc,
                 temperature: updated.telemetry?.temperatureC ?? e.battery.temperature,
                 voltage: updated.telemetry?.voltage ?? e.battery.voltage,
               },
@@ -311,18 +331,18 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
 
   const handleReleaseScan = useCallback(async (decodedText: string) => {
     setLoading(true);
-    const target = activeBatteries[activeBatteryIndex];
     try {
-      const result = await boothService.releaseBattery(decodedText, target?.sessionId);
+      if (!withdrawalSessionId) throw new Error("No active withdrawal session.");
+      const result = await boothService.releaseBattery(decodedText, withdrawalSessionId);
       toast.success(result.message || "Booth verified! Slot opening...");
       setView('collect_guide');
     } catch (err: any) {
-      const serverMessage = err.response?.data?.error || "Verification failed. Please scan the booth QR code.";
+      const serverMessage = err.response?.data?.error || err.message || "Verification failed. Please scan the booth QR code.";
       toast.error(serverMessage);
     } finally {
       setLoading(false);
     }
-  }, [activeBatteries, activeBatteryIndex]);
+  }, [withdrawalSessionId]);
 
   const handleScanSuccess = useCallback(async (decodedText: string) => {
     setLoading(true);
@@ -343,6 +363,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
         sessionId: response.sessionId,
       };
       setActiveBatteries(prev => [...prev, newEntry]);
+      depositingSessionIdRef.current = response.sessionId;
+      depositingSlotRef.current = response.slot.identifier;
       setView('deposit_guide');
     } catch (err: any) {
       const serverMessage = err.response?.data?.message;
@@ -352,7 +374,6 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
       } else if (statusCode === 409) {
         if (serverMessage?.includes("occupied")) {
           toast.error(serverMessage || "This station is currently full.", { duration: 5000 });
-          setView('map_view');
         } else {
           toast.error("You already have an active session.");
           setView('status');
@@ -401,10 +422,9 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
 
   const handleSTKPush = async () => {
     setLoading(true);
-    const target = activeBatteries[activeBatteryIndex];
     try {
-      if (!target) throw new Error("No active withdrawal session found.");
-      const payResponse = await boothService.payForWithdrawal(target.sessionId);
+      if (!withdrawalSessionId) throw new Error("No active withdrawal session found.");
+      const payResponse = await boothService.payForWithdrawal(withdrawalSessionId);
       setCheckoutRequestId(payResponse.checkoutRequestId);
       setPaymentStatus('push_sent');
     } catch (err) {
@@ -419,6 +439,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
   const finishSession = () => {
     setActiveBatteries([]);
     setActiveBatteryIndex(-1);
+    setWithdrawalSessionId(null);
     setCheckoutRequestId('');
     setWithdrawalCost(0);
     setSocAtStopRequest(null);
@@ -434,6 +455,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
       removeBatteryEntry(activeEntry);
     }
     setActiveBatteryIndex(-1);
+    setWithdrawalSessionId(null);
     setCheckoutRequestId('');
     setWithdrawalCost(0);
     setSocAtStopRequest(null);
@@ -572,7 +594,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
                   onChange={(e) => setManualBoothId(e.target.value)}
                   className="flex-grow bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                 />
-                <button onClick={() => handleScanSuccess(manualBoothId)} disabled={!manualBoothId} className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-white font-bold px-4 py-2 rounded-lg">
+                <button onClick={() => handleScanSuccess(manualBoothId)} disabled={!manualBoothId || loading} className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-white font-bold px-4 py-2 rounded-lg">
                   Go
                 </button>
               </div>
@@ -673,7 +695,10 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
                     Add Another Battery
                   </button>
                   <button
-                    onClick={() => setView(activeBatteries.length > 1 ? 'multi_status' : 'status')}
+                    onClick={() => {
+                      if (activeBatteries.length === 1) setActiveBatteryIndex(0);
+                      setView(activeBatteries.length > 1 ? 'multi_status' : 'status');
+                    }}
                     className="w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 rounded-xl border border-gray-600 transition-colors"
                   >
                     {activeBatteries.length > 1 ? 'View All Batteries' : 'View Battery Status'}
@@ -695,12 +720,20 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
 
         {/* VIEW: SINGLE BATTERY STATUS */}
         {view === 'status' && activeEntry && (
-          <ChargingStatusView
-            activeBattery={activeEntry.battery}
-            assignedSlot={activeEntry.slot}
-            loading={loading}
-            initiateCollection={() => handleStopCharging(activeBatteryIndex)}
-          />
+          <>
+            <ChargingStatusView
+              activeBattery={activeEntry.battery}
+              assignedSlot={activeEntry.slot}
+              loading={loading}
+              initiateCollection={() => handleStopCharging(activeBatteryIndex)}
+            />
+            <button
+              onClick={startDeposit}
+              className="mt-4 w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold py-4 rounded-xl border border-gray-600 transition-colors"
+            >
+              + Add Another Battery
+            </button>
+          </>
         )}
 
         {/* VIEW: STOPPING CHARGE */}
@@ -768,6 +801,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
               durationMinutes={withdrawalDuration}
               energyDelivered={withdrawalEnergy}
               totalCost={withdrawalCost}
+              slotIdentifier={activeEntry?.slot.identifier}
             />
 
             {paymentStatus === 'idle' && (

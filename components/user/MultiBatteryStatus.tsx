@@ -26,7 +26,7 @@ const MultiBatteryStatus: React.FC<MultiBatteryStatusProps> = ({ batteries, onCo
 
         return (
           <div
-            key={entry.sessionId}
+            key={entry.sessionId ?? `battery-${index}`}
             className="bg-gray-800 rounded-2xl p-5 border border-gray-700 relative overflow-hidden"
           >
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-blue-500"></div>
