@@ -89,6 +89,7 @@ export interface Booth {
   updated_at: string;
   latitude?: number | null;
   longitude?: number | null;
+  phoneNumber?: string | null;
   slots: BoothSlot[];
   slotCount: number;
 }
