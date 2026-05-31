@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { QRCodeCanvas } from 'qrcode.react';
 import { Booth } from '@/types';
-import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, sendSlotCommand, SlotCommand, resetBoothSlots, deleteBoothSlot, updateSlotStatus } from '../../../services/adminService';
+import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, sendSlotCommand, SlotCommand, resetBoothSlots, deleteBoothSlot, updateSlotStatus, manualWithdrawSlot } from '../../../services/adminService';
 import ConfirmationModal from '../ConfirmationModal';
 import BoothListView from './BoothListView';
 import BoothDetailView from './BoothDetailView';
@@ -215,6 +215,22 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
     }
   };
 
+  const handleManualWithdraw = async (slotIdentifier: string) => {
+    if (!boothForDetails) return;
+
+    const loadingToast = toast.loading('Processing manual withdraw...');
+    try {
+      const result = await manualWithdrawSlot(boothForDetails.booth_uid, slotIdentifier);
+      toast.dismiss(loadingToast);
+      toast.success(`Manual withdraw completed! Session #${result.sessionId}, Amount: ${result.amount}`);
+      fetchBoothStatuses();
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      const errorMessage = (error as any)?.response?.data?.error || (error as Error).message;
+      toast.error(`Manual withdraw failed: ${errorMessage}`);
+    }
+  };
+
   const handleShowConfirmation = (action: () => void, title: string, message: string, isDestructive = false) => {
     setModalState({
       isOpen: true,
@@ -376,6 +392,7 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
             onDetailViewClose?.();
           }}
           onSendCommand={handleSendCommand}
+          onManualWithdraw={handleManualWithdraw}
           formatTimeAgo={formatTimeAgo}
           getSlotStatusDisplay={getSlotStatusDisplay}
           onRefreshStatus={fetchBoothStatuses}

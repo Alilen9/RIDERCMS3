@@ -10,6 +10,7 @@ interface BoothDetailViewProps {
   onUpdateSlotStatus: (slotIdentifier: string, status: 'available' | 'disabled') => void;
   onShowConfirmation: (action: () => void, title: string, message: string, isDestructive?: boolean) => void;
   onSendCommand: (slotIdentifier: string, command: SlotCommand) => void;
+  onManualWithdraw: (slotIdentifier: string) => void;
   formatTimeAgo: (timestamp: string | undefined | null) => string;
   getSlotStatusDisplay: (status: string | null | undefined) => { classes: string; text: string };
   onRefreshStatus: () => void;
@@ -27,6 +28,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
   onUpdateSlotStatus,
   onShowConfirmation,
   onSendCommand,
+  onManualWithdraw,
   formatTimeAgo,
   getSlotStatusDisplay,
   onRefreshStatus,
@@ -226,6 +228,19 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                                 >
                                   Start Charging
                                 </button>
+                            )}
+                            {slot.userName && (
+                              <button
+                                onClick={() => onShowConfirmation(
+                                  () => onManualWithdraw(slot.slotIdentifier),
+                                  'Manual Withdraw?',
+                                  `Manually withdraw battery from slot ${slot.slotIdentifier}? The customer's deposit will be redeemed, cost calculated, and slot released.`,
+                                  true
+                                )}
+                                className="col-span-2 bg-orange-800 hover:bg-orange-700 py-2 rounded text-xs font-bold text-white"
+                              >
+                                Manual Withdraw
+                              </button>
                             )}
                             <button
                               onClick={() => onShowConfirmation(
