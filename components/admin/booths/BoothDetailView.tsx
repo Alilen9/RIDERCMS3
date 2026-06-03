@@ -39,7 +39,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
   const mergedSlots = React.useMemo(() => {
     return (booth.slots || []).map(adminSlot => {
       const liveSlot = boothStatus?.slots?.find(s => s.slotIdentifier === adminSlot.identifier);
-      
+
       return {
         slotIdentifier: adminSlot.identifier,
         // Prioritize administrative status (e.g. 'disabled') over live status
@@ -73,18 +73,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
               </button>
             </div>
           </div>
-          <button
-            onClick={() => onShowConfirmation(
-              onResetSlots,
-              'Reset All Slots',
-              `Are you sure you want to reset all slots for "${booth.name}"? This will set all slots to 'available', clear any battery links, and can resolve synchronization issues. This action is irreversible.`,
-              true
-            )}
-            className="bg-red-800 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-            Reset All Slots
-          </button>
+
         </div>
       </div>
 
