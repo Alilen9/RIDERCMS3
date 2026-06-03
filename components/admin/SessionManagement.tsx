@@ -261,10 +261,8 @@ const SessionManagement: React.FC<SessionManagementProps> = ({ onNavigateToBooth
                             >
                               View
                             </button>
-                            <span className="text-gray-600">|</span>
-                            <button onClick={() => handleDeleteSession(session)} className="text-red-500 hover:text-red-400 text-xs font-semibold hover:underline">
-                              Delete
-                            </button>
+
+
                           </div>
                         </td>
                       </tr>
