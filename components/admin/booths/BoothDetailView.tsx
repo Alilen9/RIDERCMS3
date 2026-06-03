@@ -1,6 +1,7 @@
 import React from 'react';
 import { Booth } from '@/types';
 import { AdminBoothStatus, SlotCommand } from '../../../services/adminService';
+import { Phone, MessageCircle } from 'lucide-react';
 
 interface BoothDetailViewProps {
   booth: Booth;
@@ -9,6 +10,7 @@ interface BoothDetailViewProps {
   onUpdateSlotStatus: (slotIdentifier: string, status: 'available' | 'disabled') => void;
   onShowConfirmation: (action: () => void, title: string, message: string, isDestructive?: boolean) => void;
   onSendCommand: (slotIdentifier: string, command: SlotCommand) => void;
+  onManualWithdraw: (slotIdentifier: string) => void;
   formatTimeAgo: (timestamp: string | undefined | null) => string;
   getSlotStatusDisplay: (status: string | null | undefined) => { classes: string; text: string };
   onRefreshStatus: () => void;
@@ -16,6 +18,7 @@ interface BoothDetailViewProps {
   onDeleteSlot: (slotIdentifier: string) => void;
   onResetSlot: (slotIdentifier: string) => void;
   pendingCommands: Record<string, string | null>;
+  lastFetchedAt?: Date | null;
 }
 
 const BoothDetailView: React.FC<BoothDetailViewProps> = ({
@@ -25,6 +28,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
   onUpdateSlotStatus,
   onShowConfirmation,
   onSendCommand,
+  onManualWithdraw,
   formatTimeAgo,
   getSlotStatusDisplay,
   onRefreshStatus,
@@ -32,6 +36,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
   onDeleteSlot,
   onResetSlot,
   pendingCommands,
+  lastFetchedAt,
 }) => {
 
   // Merge administrative slot data (from `booth.slots`) with live telemetry data (from `boothStatus.slots`).
@@ -66,8 +71,31 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
               {booth.name}
               <span className="text-gray-500 text-lg font-normal">({booth.booth_uid.substring(0, 8)}...)</span>
             </h2>
-            <div className="flex items-center gap-2">
-              <p className="text-xs text-gray-400 mt-1">Last Heartbeat: {formatTimeAgo(boothStatus?.lastHeartbeatAt)}</p>
+            <div className="flex items-center gap-3 mt-1">
+              <p className="text-xs text-gray-400">Last updated: {formatTimeAgo(lastFetchedAt?.toISOString() ?? null)}</p>
+              {booth.phoneNumber && (
+                <>
+                  <span className="text-gray-600">|</span>
+                  <a
+                    href={`tel:${booth.phoneNumber}`}
+                    title="Call"
+                    className="text-emerald-400 hover:text-emerald-300 transition-colors"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Phone size={14} />
+                  </a>
+                  <a
+                    href={`https://wa.me/${booth.phoneNumber.replace(/[^0-9]/g, '')}`}
+                    title="WhatsApp"
+                    className="text-green-400 hover:text-green-300 transition-colors"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <MessageCircle size={14} />
+                  </a>
+                </>
+              )}
               <button onClick={onRefreshStatus} className="text-cyan-400 hover:text-cyan-300 p-1 rounded-full" title="Refresh Status">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M20 4h-5v5M4 20h5v-5" /></svg>
               </button>
@@ -78,7 +106,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
       </div>
 
       {/* Slot Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
         {booth ? (
           mergedSlots.length > 0 ? (
             mergedSlots.map(slot => (
@@ -189,6 +217,19 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                                 >
                                   Start Charging
                                 </button>
+                            )}
+                            {slot.userName && (
+                              <button
+                                onClick={() => onShowConfirmation(
+                                  () => onManualWithdraw(slot.slotIdentifier),
+                                  'Manual Withdraw?',
+                                  `Manually withdraw battery from slot ${slot.slotIdentifier}? The customer's deposit will be redeemed, cost calculated, and slot released.`,
+                                  true
+                                )}
+                                className="col-span-2 bg-orange-800 hover:bg-orange-700 py-2 rounded text-xs font-bold text-white"
+                              >
+                                Manual Withdraw
+                              </button>
                             )}
                             <button
                               onClick={() => onShowConfirmation(

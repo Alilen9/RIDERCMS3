@@ -229,6 +229,23 @@ export const sendSlotCommand = async (boothUid: string, slotIdentifier: string, 
   await apiClient.post(`/admin/booths/${boothUid}/slots/${slotIdentifier}/command`, command);
 };
 
+export interface ManualWithdrawResponse {
+  sessionId: number;
+  amount: number;
+  userName: string;
+  slotIdentifier: string;
+}
+
+export const manualWithdrawSlot = async (
+  boothUid: string,
+  slotIdentifier: string
+): Promise<ManualWithdrawResponse> => {
+  const response = await apiClient.post<ManualWithdrawResponse>(
+    `/admin/booths/${boothUid}/slots/${slotIdentifier}/manual-withdraw`
+  );
+  return response.data;
+};
+
 /**
  * Fetches a paginated list of all users from the admin endpoint.
  * @param pageToken - The token for fetching the next page of results.

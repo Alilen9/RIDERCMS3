@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { QRCodeCanvas } from 'qrcode.react';
 import { Booth } from '@/types';
-import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, sendSlotCommand, SlotCommand, resetBoothSlots, deleteBoothSlot, updateSlotStatus } from '../../../services/adminService';
+import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, sendSlotCommand, SlotCommand, resetBoothSlots, deleteBoothSlot, updateSlotStatus, manualWithdrawSlot } from '../../../services/adminService';
 import ConfirmationModal from '../ConfirmationModal';
 import BoothListView from './BoothListView';
 import BoothDetailView from './BoothDetailView';
@@ -14,9 +14,9 @@ interface BoothManagementProps {
 }
 
 // Helper function to format time ago
-const formatTimeAgo = (timestamp: string | undefined | null): string => {
+const formatTimeAgo = (timestamp: string | Date | undefined | null): string => {
   if (!timestamp) return 'N/A';
-  const date = new Date(timestamp);
+  const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
   const now = new Date();
   const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
@@ -62,6 +62,7 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [pendingCommands, setPendingCommands] = useState<Record<string, string | null>>({});
+  const [lastStatusFetchAt, setLastStatusFetchAt] = useState<Date | null>(null);
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
     title: string;
@@ -112,6 +113,7 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
       const statuses = await getBoothStatus();
       //console.log('DEBUG: Fetched Booth Statuses:', statuses);
       setBoothStatuses(statuses);
+      setLastStatusFetchAt(new Date());
     } catch (err) {
       console.error('Failed to fetch booth statuses:', err);
       toast.error('Could not retrieve live station statuses. Displaying cached data only.', { duration: 5000 });
@@ -210,6 +212,22 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
       const errorMessage = (err as any)?.response?.data?.error || `Failed to update slot status.`;
       toast.error(errorMessage, { id: loadingToast });
       console.error("Error updating slot status:", err);
+    }
+  };
+
+  const handleManualWithdraw = async (slotIdentifier: string) => {
+    if (!boothForDetails) return;
+
+    const loadingToast = toast.loading('Processing manual withdraw...');
+    try {
+      const result = await manualWithdrawSlot(boothForDetails.booth_uid, slotIdentifier);
+      toast.dismiss(loadingToast);
+      toast.success(`Manual withdraw completed! Session #${result.sessionId}, Amount: ${result.amount}`);
+      fetchBoothStatuses();
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      const errorMessage = (error as any)?.response?.data?.error || (error as Error).message;
+      toast.error(`Manual withdraw failed: ${errorMessage}`);
     }
   };
 
@@ -374,6 +392,7 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
             onDetailViewClose?.();
           }}
           onSendCommand={handleSendCommand}
+          onManualWithdraw={handleManualWithdraw}
           formatTimeAgo={formatTimeAgo}
           getSlotStatusDisplay={getSlotStatusDisplay}
           onRefreshStatus={fetchBoothStatuses}
@@ -383,6 +402,7 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
           pendingCommands={pendingCommands}
           onShowConfirmation={handleShowConfirmation}
           onUpdateSlotStatus={(slotIdentifier, status) => handleUpdateSlotStatus(boothForDetails.booth_uid, slotIdentifier, status)}
+          lastFetchedAt={lastStatusFetchAt}
         />
       ) : (
         <BoothListView
