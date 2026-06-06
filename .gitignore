@@ -25,3 +25,9 @@ dist-ssr
 package-lock.json
 boothform.txt
 AGENTS.md
+
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local

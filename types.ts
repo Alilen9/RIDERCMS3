@@ -3,7 +3,8 @@
 export enum UserRole {
   USER = 'user',
   ADMIN = 'admin',
-  OPERATOR = 'OPERATOR'
+  OPERATOR = 'OPERATOR',
+  DEVELOPER = 'developer'
 }
 
 export enum BatteryType {
