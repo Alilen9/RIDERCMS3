@@ -40,6 +40,11 @@ const AuthHandler = () => {
           navigate('/operator/scan', { replace: true });
           break;
         case UserRole.USER:
+          navigate('/dashboard', { replace: true });
+          break;
+        case UserRole.DEVELOPER:
+          navigate('/dashboard', { replace: true });
+          break;
         default:
           navigate('/dashboard', { replace: true });
           break;
@@ -95,7 +100,7 @@ const AppContent: React.FC = () => {
       <Route
         path="/dashboard"
         element={
-          <ProtectedRoute allowedRoles={[UserRole.USER, UserRole.OPERATOR]}>
+          <ProtectedRoute allowedRoles={[UserRole.USER, UserRole.OPERATOR, UserRole.DEVELOPER]}>
             <UserDashboard user={user!} onLogout={logout} />
           </ProtectedRoute>
         }
