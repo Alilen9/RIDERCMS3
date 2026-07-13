@@ -101,7 +101,8 @@ export interface BoothSlot {
   doorStatus: string;
   chargeLevel: number | null;
   batteryUid: string | null;
-  userName: string | null; // Added to match the joined user name from the DB
+  userName: string | null;
+  batteryOwner: string | null; // Added to match the joined user name from the DB
 }
 
 

@@ -11,6 +11,7 @@ import {
   PhoneCall
 } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
+import { UserRole } from '@/types';
 
 interface UserListViewProps {
   users: AdminUser[];
@@ -41,26 +42,37 @@ const UserCard: React.FC<
 }) => {
     const [isMenuOpen, setIsMenuOpen] = React.useState(false);
 
-    const roleDisplay = {
-      admin: {
+    const roleDisplay: Record<UserRole, {
+      text: string;
+      icon: React.ReactNode;
+      classes: string;
+    }> = {
+      [UserRole.ADMIN]: {
         text: 'Admin',
         icon: <Shield size={14} />,
-        classes: 'bg-purple-900 text-purple-400'
+        classes: 'bg-purple-900 text-purple-400',
       },
-      operator: {
+
+      [UserRole.OPERATOR]: {
         text: 'Operator',
         icon: <User size={14} />,
-        classes: 'bg-blue-900 text-blue-400'
+        classes: 'bg-blue-900 text-blue-400',
       },
-      user: {
+
+      [UserRole.USER]: {
         text: 'User',
         icon: <User size={14} />,
-        classes: 'bg-gray-700 text-gray-300'
+        classes: 'bg-gray-700 text-gray-300',
+      },
+
+      [UserRole.DEVELOPER]: {
+        text: 'Developer',
+        icon: <Shield size={14} />,
+        classes: 'bg-emerald-900 text-emerald-400',
       },
     };
 
-    const currentRole = roleDisplay[user.role] || roleDisplay.user;
-
+    const currentRole = roleDisplay[user.role];
     return (
       <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 flex flex-col justify-between hover:border-indigo-500/50 transition">
 

@@ -10,7 +10,7 @@ export interface AdminUser {
   email: string;
   displayName: string;
   phoneNumber?: string;
-  role: string;
+  role: UserRole;
   disabled: boolean;
   creationTime: string;
   lastSignInTime: string;
@@ -40,6 +40,7 @@ export interface AdminBoothStatus {
     status: 'booting' | 'available' | 'occupied' | 'disabled' | 'error';
     doorStatus: 'locked' | 'unlocked' | 'ajar' | 'unknown';
     userName: string | null;
+    batteryOwner: string | null; // Added to match the joined user name from the DB
     battery: {
       isOccupied: boolean;
       chargeLevel: number;

@@ -53,7 +53,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
         // Combine battery info: live telemetry takes precedence
         battery: liveSlot?.battery || (adminSlot.chargeLevel !== null ? { chargeLevel: adminSlot.chargeLevel } : null),
         // "Rented By" comes from the DB (adminSlot)
-        userName: adminSlot.userName || liveSlot?.userName,
+        userName: adminSlot.userName || liveSlot?.userName || liveSlot?.batteryOwner,
         telemetry: liveSlot?.telemetry,
       };
     });
