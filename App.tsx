@@ -34,6 +34,7 @@ const AuthHandler = () => {
     if (user) {
       switch (user.role) {
         case UserRole.ADMIN:
+        case UserRole.DEVELOPER:
           navigate('/admin/dashboard', { replace: true });
           break;
         case UserRole.OPERATOR:
@@ -65,7 +66,7 @@ const AppContent: React.FC = () => {
       <Route
         path="/admin/dashboard"
         element={
-          <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
+          <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.DEVELOPER]}>
             <AdminDashboard onLogout={logout} />
           </ProtectedRoute>
         }
@@ -75,7 +76,7 @@ const AppContent: React.FC = () => {
       <Route
         path="/admin/booths/:boothId"
         element={
-          <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
+          <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.DEVELOPER]}>
             <BoothDetailsPage />
           </ProtectedRoute>
         }
@@ -85,7 +86,7 @@ const AppContent: React.FC = () => {
       <Route
         path="/admin/slots/:slotId"
         element={
-          <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
+          <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.DEVELOPER]}>
             <SlotDetailsPage />
           </ProtectedRoute>
         }
@@ -95,14 +96,16 @@ const AppContent: React.FC = () => {
       <Route
         path="/dashboard"
         element={
-          <UserDashboard
-            user={{
-              id: "1",
-              name: "Test User",
-              role: UserRole.USER,
-            } as any}
-            onLogout={() => { }}
-          />
+          <ProtectedRoute allowedRoles={[UserRole.USER, UserRole.DEVELOPER]}>
+            <UserDashboard
+              user={{
+                id: "1",
+                name: "Test User",
+                role: UserRole.USER,
+              } as any}
+              onLogout={() => { }}
+            />
+          </ProtectedRoute>
         }
       />
 
