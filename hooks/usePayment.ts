@@ -1,86 +1,68 @@
-"use client";
-
-import { useState } from "react";
-
+import { useState, useRef, useCallback } from 'react';
 import {
-  requestWithdrawPrompt,
-  checkPaymentStatus
-} from "@/services/paymentService";
-
-import {
-  PaymentStatus,
-  WithdrawalRequest
-} from "@/components/admin/payment/types/payment";
-
+  manualWithdraw,
+  getManualWithdrawStatus,
+  ManualWithdrawRequest,
+  ManualWithdrawResponse,
+  PaymentStatusResponse,
+} from '@/services/paymentService';
 
 export function usePayment() {
+  const [status, setStatus] = useState<'IDLE' | 'PENDING' | 'SUCCESS' | 'FAILED'>('IDLE');
+  const [loading, setLoading] = useState(false);
+  const [lastResponse, setLastResponse] = useState<ManualWithdrawResponse | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const [status, setStatus]
-    = useState<PaymentStatus>("IDLE");
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
 
+  const pollStatus = useCallback((sessionId: number) => {
+    stopPolling();
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await getManualWithdrawStatus(sessionId);
+        if (res.status === 'in_progress' || res.status === 'completed') {
+          setStatus('SUCCESS');
+          stopPolling();
+        } else if (res.status === 'failed' || res.status === 'cancelled') {
+          setStatus('FAILED');
+          stopPolling();
+        }
+      } catch {
+        // keep polling
+      }
+    }, 3000);
+  }, [stopPolling]);
 
-  const [transactionId, setTransactionId]
-    = useState<string>("");
-
-
-  const [loading, setLoading]
-    = useState(false);
-
-
-
-  async function initiatePayment(
-    data: WithdrawalRequest
-  ) {
-
+  const initiatePayment = async (data: ManualWithdrawRequest) => {
     setLoading(true);
-    setStatus("PENDING");
+    setStatus('PENDING');
+    setLastResponse(null);
 
+    try {
+      const response = await manualWithdraw(data);
+      setLastResponse(response);
 
-    const response =
-      await requestWithdrawPrompt(data);
-
-
-    if (response.transactionId) {
-
-      setTransactionId(
-        response.transactionId
-      );
-
+      if (response.transactionId?.startsWith('DEV_')) {
+        setStatus('SUCCESS');
+      } else {
+        pollStatus(response.sessionId);
+      }
+    } catch (err) {
+      setStatus('FAILED');
+    } finally {
+      setLoading(false);
     }
-
-
-    setLoading(false);
-
-  }
-
-
-
-  async function refreshStatus() {
-
-    if (!transactionId) return;
-
-
-    const response =
-      await checkPaymentStatus(
-        transactionId
-      );
-
-
-    if (response.success) {
-
-      setStatus("SUCCESS");
-
-    }
-
-  }
-
+  };
 
   return {
     initiatePayment,
-    refreshStatus,
     status,
     loading,
-    transactionId
+    lastResponse,
   };
-
 }

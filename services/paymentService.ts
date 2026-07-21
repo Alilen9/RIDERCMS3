@@ -1,56 +1,30 @@
-import {
-  WithdrawalRequest,
-  PaymentResponse,
-  Receipt
-} from "@/components/admin/payment/types/payment";
+import apiClient from '../client/apiClient';
 
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
-
-
-export async function requestWithdrawPrompt(
-  data: WithdrawalRequest
-): Promise<PaymentResponse> {
-
-  const response = await fetch(
-    `${API_URL}/payments/withdraw`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(data),
-    }
-  );
-
-
-  return response.json();
+export interface ManualWithdrawRequest {
+  userId: string;
+  phoneNumber: string;
+  amount: number;
 }
 
-
-
-export async function checkPaymentStatus(
-  transactionId: string
-): Promise<PaymentResponse> {
-
-  const response = await fetch(
-    `${API_URL}/payments/status/${transactionId}`
-  );
-
-
-  return response.json();
+export interface ManualWithdrawResponse {
+  success: boolean;
+  message: string;
+  sessionId: number;
+  transactionId: string;
 }
 
+export interface PaymentStatusResponse {
+  success: boolean;
+  status: string;
+  sessionId: number;
+}
 
+export async function manualWithdraw(data: ManualWithdrawRequest): Promise<ManualWithdrawResponse> {
+  const response = await apiClient.post<ManualWithdrawResponse>('/admin/payments/manual-withdraw', data);
+  return response.data;
+}
 
-export async function getReceipt(
-  transactionId: string
-): Promise<Receipt> {
-
-  const response = await fetch(
-    `${API_URL}/payments/receipt/${transactionId}`
-  );
-
-
-  return response.json();
+export async function getManualWithdrawStatus(sessionId: number): Promise<PaymentStatusResponse> {
+  const response = await apiClient.get<PaymentStatusResponse>(`/admin/payments/status/${sessionId}`);
+  return response.data;
 }

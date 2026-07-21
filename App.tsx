@@ -98,12 +98,8 @@ const AppContent: React.FC = () => {
         element={
           <ProtectedRoute allowedRoles={[UserRole.USER, UserRole.DEVELOPER]}>
             <UserDashboard
-              user={{
-                id: "1",
-                name: "Test User",
-                role: UserRole.USER,
-              } as any}
-              onLogout={() => { }}
+              user={user!}
+              onLogout={logout}
             />
           </ProtectedRoute>
         }

@@ -11,6 +11,7 @@ interface BoothManagementProps {
   onNavigate: (section: 'addBooth' | 'editBooth', data?: any) => void;
   initialDetailBooth?: Booth | null;
   onDetailViewClose?: () => void;
+  onManualWithdraw?: (slotIdentifier: string) => void;
 }
 
 // Helper function to format time ago
@@ -50,7 +51,7 @@ const getSlotStatusDisplay = (status: string | null | undefined) => {
   return { classes, text };
 };
 
-const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDetailBooth, onDetailViewClose }) => {
+const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDetailBooth, onDetailViewClose, onManualWithdraw }) => {
   const [booths, setBooths] = useState<Booth[]>([]);
   const [boothStatuses, setBoothStatuses] = useState<AdminBoothStatus[]>([]);
   const [boothForDetails, setBoothForDetails] = useState<Booth | null>(null);
@@ -383,6 +384,7 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
           pendingCommands={pendingCommands}
           onShowConfirmation={handleShowConfirmation}
           onUpdateSlotStatus={(slotIdentifier, status) => handleUpdateSlotStatus(boothForDetails.booth_uid, slotIdentifier, status)}
+          onManualWithdraw={onManualWithdraw}
         />
       ) : (
         <BoothListView

@@ -16,6 +16,7 @@ interface BoothDetailViewProps {
   onDeleteSlot: (slotIdentifier: string) => void;
   onResetSlot: (slotIdentifier: string) => void;
   pendingCommands: Record<string, string | null>;
+  onManualWithdraw?: (slotIdentifier: string) => void;
 }
 
 const BoothDetailView: React.FC<BoothDetailViewProps> = ({
@@ -32,6 +33,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
   onDeleteSlot,
   onResetSlot,
   pendingCommands,
+  onManualWithdraw,
 }) => {
 
   // Merge administrative slot data (from `booth.slots`) with live telemetry data (from `boothStatus.slots`).
@@ -236,6 +238,14 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                             >
                               Delete Slot
                             </button>
+                            {onManualWithdraw && (slot.slotIdentifier === 'A1' || slot.slotIdentifier === 'B1') && (
+                              <button
+                                onClick={() => onManualWithdraw(slot.slotIdentifier)}
+                                className="col-span-2 mt-2 bg-red-800 hover:bg-red-700 text-white py-2 rounded text-xs font-bold"
+                              >
+                                Manual Withdraw
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>

@@ -19,6 +19,7 @@ import SessionManagement from './admin/SessionManagement';
 import SessionCleanup from './admin/SessionCleanup';
 import StatsDashboard from './admin/stats/StatsDashboard';
 import PaymentManagement from './admin/PaymentManagement';
+import ManualWithdrawPage from './admin/payment/ManualWithdrawPage';
 
 
 
@@ -41,7 +42,7 @@ const MOCK_BATTERIES: Battery[] = [
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const navigate = useNavigate();
-  const [activeSection, setActiveSection] = useState<'dashboard' | 'map' | 'intelligence' | 'stations' | 'addBooth' | 'editBooth' | 'users' | 'batteries' | 'sessions' | 'finance' | 'settings' | 'logs' | 'simulation' | 'stats' | 'cleanup' | 'payments'>('dashboard');
+  const [activeSection, setActiveSection] = useState<'dashboard' | 'map' | 'intelligence' | 'stations' | 'addBooth' | 'editBooth' | 'users' | 'batteries' | 'sessions' | 'finance' | 'settings' | 'logs' | 'simulation' | 'stats' | 'cleanup' | 'payments' | 'manualWithdraw'>('dashboard');
   const [batteries, setBatteries] = useState<Battery[]>(MOCK_BATTERIES);
   const [booths, setBooths] = useState<Booth[]>([]);
   const [boothToEdit, setBoothToEdit] = useState<Booth | null>(null);
@@ -133,7 +134,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   // --- Render Functions for Sections ---
 
   const renderStations = () => {
-    return <BoothManagement onNavigate={handleNavigation} initialDetailBooth={initialBoothForDetail} onDetailViewClose={() => setInitialBoothForDetail(null)} />
+    return <BoothManagement onNavigate={handleNavigation} initialDetailBooth={initialBoothForDetail} onDetailViewClose={() => setInitialBoothForDetail(null)} onManualWithdraw={() => setActiveSection('manualWithdraw')} />
   };
 
 
@@ -251,6 +252,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         {activeSection === 'users' && <UserManagement />}
         {activeSection === 'sessions' && <SessionManagement onNavigateToBooth={navigateToBooth} onNavigateToUser={navigateToUser} />}      
         {activeSection === 'payments' && <PaymentManagement />}
+        {activeSection === 'manualWithdraw' && <ManualWithdrawPage />}
         {activeSection === 'cleanup' && <SessionCleanup />}
         {activeSection === 'settings' && <SystemConfig />}
         {activeSection === 'simulation' && <SimulationTools />}
