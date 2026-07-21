@@ -20,6 +20,8 @@ import BoothDetailsPage from './components/admin/BoothDetailsPage';
 import SlotDetailsPage from './components/admin/SlotDetailsPage';
 
 import { useAuth, AuthProvider } from './components/auth/AuthContext';
+import PaymentWaitingPage from "./components/admin/payment/PaymentWaitingPage";
+import ManualWithdrawPage from "./components/admin/payment/ManualWithdrawPage";
 
 /**
  * Handles redirect logic after login
@@ -82,6 +84,7 @@ const AppContent: React.FC = () => {
         }
       />
 
+
       {/* 🔥 NEW: Slot Details Page */}
       <Route
         path="/admin/slots/:slotId"
@@ -108,9 +111,17 @@ const AppContent: React.FC = () => {
       {/* Root redirect */}
       <Route path="/" element={<Navigate to="/auth" replace />} />
 
-      {/* 404 */}
+
+
       <Route path="*" element={<NotFound />} />
+      <Route
+        path="/admin/payment/waiting"
+        element={<PaymentWaitingPage />}
+      />
+
+
     </Routes>
+
   );
 };
 

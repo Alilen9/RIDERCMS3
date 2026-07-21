@@ -20,6 +20,7 @@ import SessionCleanup from './admin/SessionCleanup';
 import StatsDashboard from './admin/stats/StatsDashboard';
 import PaymentManagement from './admin/PaymentManagement';
 import ManualWithdrawPage from './admin/payment/ManualWithdrawPage';
+import PaymentWaitingPage from './admin/payment/PaymentWaitingPage';
 
 
 
@@ -42,7 +43,7 @@ const MOCK_BATTERIES: Battery[] = [
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const navigate = useNavigate();
-  const [activeSection, setActiveSection] = useState<'dashboard' | 'map' | 'intelligence' | 'stations' | 'addBooth' | 'editBooth' | 'users' | 'batteries' | 'sessions' | 'finance' | 'settings' | 'logs' | 'simulation' | 'stats' | 'cleanup' | 'payments' | 'manualWithdraw'>('dashboard');
+  const [activeSection, setActiveSection] = useState<'dashboard' | 'map' | 'intelligence' | 'stations' | 'addBooth' | 'editBooth' | 'users' | 'batteries' | 'sessions' | 'finance' | 'settings' | 'logs' | 'simulation' | 'stats' | 'cleanup' | 'payments' | 'manualWithdraw' | "paymentWaiting">('dashboard');
   const [batteries, setBatteries] = useState<Battery[]>(MOCK_BATTERIES);
   const [booths, setBooths] = useState<Booth[]>([]);
   const [boothToEdit, setBoothToEdit] = useState<Booth | null>(null);
@@ -76,7 +77,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     };
     fetchSummary();
   }, []);
- 
+
 
   const handleBoothAdded = (newBooth: Partial<Booth>) => {
     // This will now be handled by the BoothManagement component refetching
@@ -85,7 +86,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
 
   const handleBoothUpdated = (updatedBooth: Booth) => {
-    setBooths(prevBooths => 
+    setBooths(prevBooths =>
       prevBooths.map(b => b.booth_uid === updatedBooth.booth_uid ? updatedBooth : b)
     );
     setActiveSection('stations');
@@ -170,7 +171,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           ].map(item => (
             <button
               key={item.id}
-              onClick={() => { 
+              onClick={() => {
                 setActiveSection(item.id as any);
                 setIsSidebarOpen(false); // Close sidebar on navigation
               }}
@@ -250,9 +251,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         {activeSection === 'addBooth' && <AddBoothsForm onBoothAdded={handleBoothAdded} onCancel={() => { setActiveSection('stations'); }} />}
         {activeSection === 'editBooth' && boothToEdit && <EditBoothsForm boothToEdit={boothToEdit} onBoothUpdated={handleBoothUpdated} onCancel={() => setActiveSection('stations')} />}
         {activeSection === 'users' && <UserManagement />}
-        {activeSection === 'sessions' && <SessionManagement onNavigateToBooth={navigateToBooth} onNavigateToUser={navigateToUser} />}      
+        {activeSection === 'sessions' && <SessionManagement onNavigateToBooth={navigateToBooth} onNavigateToUser={navigateToUser} />}
         {activeSection === 'payments' && <PaymentManagement />}
-        {activeSection === 'manualWithdraw' && <ManualWithdrawPage />}
+        {activeSection === "manualWithdraw" && (
+          <ManualWithdrawPage
+            onWaiting={() => setActiveSection("paymentWaiting")}
+          />
+        )}
+
+        {activeSection === "paymentWaiting" && (
+          <PaymentWaitingPage
+            onBack={() => setActiveSection("manualWithdraw")}
+          />
+        )}
         {activeSection === 'cleanup' && <SessionCleanup />}
         {activeSection === 'settings' && <SystemConfig />}
         {activeSection === 'simulation' && <SimulationTools />}

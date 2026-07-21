@@ -1,85 +1,30 @@
-"use client";
+import { useEffect } from "react";
+import toast from "react-hot-toast";
 
+useEffect(() => {
+  switch (status) {
+    case "PENDING":
+      toast.loading(
+        "Waiting for the user to enter their M-Pesa PIN...",
+        {
+          id: "payment-status",
+        }
+      );
+      break;
 
-interface Props {
-  status:
-  "IDLE" |
-  "PENDING" |
-  "SUCCESS" |
-  "FAILED";
-}
+    case "SUCCESS":
+      toast.success("Payment completed successfully.", {
+        id: "payment-status",
+      });
+      break;
 
+    case "FAILED":
+      toast.error("Payment failed or was cancelled.", {
+        id: "payment-status",
+      });
+      break;
 
-export default function PaymentStatus({
-  status
-}: Props) {
-
-
-  if (status === "PENDING") {
-
-    return (
-
-      <div className="p-6 text-center">
-
-        <div className="
-animate-spin
-rounded-full
-h-12
-w-12
-border-b-2
-border-blue-600
-mx-auto
-">
-        </div>
-
-
-        <p className="mt-4">
-          Waiting for user to enter PIN...
-        </p>
-
-
-      </div>
-
-    )
-
+    default:
+      toast.dismiss("payment-status");
   }
-
-
-
-  if (status === "SUCCESS") {
-
-    return (
-
-      <div className="p-6 text-center">
-
-        <h2 className="text-green-600 text-xl">
-          Payment Successful ✓
-        </h2>
-
-      </div>
-
-    )
-
-  }
-
-
-  if (status === "FAILED") {
-
-    return (
-
-      <div className="p-6 text-center">
-
-        <h2 className="text-red-600">
-          Payment Failed
-        </h2>
-
-      </div>
-
-    )
-
-  }
-
-
-  return null;
-
-}
+}, [status]);
