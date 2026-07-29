@@ -10,7 +10,7 @@ interface BoothDetailViewProps {
   onUpdateSlotStatus: (slotIdentifier: string, status: 'available' | 'disabled') => void;
   onShowConfirmation: (action: () => void, title: string, message: string, isDestructive?: boolean) => void;
   onSendCommand: (slotIdentifier: string, command: SlotCommand) => void;
-  onManualWithdraw: (slotIdentifier: string) => void;
+  onManualWithdraw?: (slotIdentifier: string, boothUid: string) => void;
   formatTimeAgo: (timestamp: string | undefined | null) => string;
   getSlotStatusDisplay: (status: string | null | undefined) => { classes: string; text: string };
   onRefreshStatus: () => void;
@@ -18,7 +18,6 @@ interface BoothDetailViewProps {
   onDeleteSlot: (slotIdentifier: string) => void;
   onResetSlot: (slotIdentifier: string) => void;
   pendingCommands: Record<string, string | null>;
-  onManualWithdraw?: (slotIdentifier: string, boothUid: string) => void;
 }
 
 const BoothDetailView: React.FC<BoothDetailViewProps> = ({
@@ -36,7 +35,6 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
   onDeleteSlot,
   onResetSlot,
   pendingCommands,
-  onManualWithdraw,
 }) => {
 
   // Merge administrative slot data (from `booth.slots`) with live telemetry data (from `boothStatus.slots`).
@@ -218,10 +216,10 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                                   Start Charging
                                 </button>
                             )}
-                            {slot.userName && (
+                            {onManualWithdraw && slot.userName && (
                               <button
                                 onClick={() => onShowConfirmation(
-                                  () => onManualWithdraw(slot.slotIdentifier),
+                                  () => onManualWithdraw(slot.slotIdentifier, booth.booth_uid),
                                   'Manual Withdraw?',
                                   `Manually withdraw battery from slot ${slot.slotIdentifier}? The customer's deposit will be redeemed, cost calculated, and slot released.`,
                                   true
@@ -266,14 +264,6 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                             >
                               Delete Slot
                             </button>
-                            {onManualWithdraw && (slot.slotIdentifier === 'A1' || slot.slotIdentifier === 'B1') && (
-                              <button
-                                onClick={() => onManualWithdraw(slot.slotIdentifier, booth.booth_uid)}
-                                className="col-span-2 mt-2 bg-red-800 hover:bg-red-700 text-white py-2 rounded text-xs font-bold"
-                              >
-                                Manual Withdraw
-                              </button>
-                            )}
                           </div>
                         </div>
                       </div>
