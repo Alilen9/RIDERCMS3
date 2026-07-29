@@ -67,6 +67,8 @@ const ManualWithdrawPage: React.FC<ManualWithdrawPageProps> = ({
         userId,
         phoneNumber,
         amount: Number(amount),
+        boothUid,
+        slotIdentifier,
       });
 
 
@@ -161,8 +163,7 @@ const ManualWithdrawPage: React.FC<ManualWithdrawPageProps> = ({
               onChange={(e) => setPhoneNumber(e.target.value)}
               placeholder="0712345678"
               required
-              disabled={!!(boothUid && slotIdentifier)}
-              className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2"
             />
 
           </div>

@@ -4,6 +4,8 @@ export interface ManualWithdrawRequest {
   userId: string;
   phoneNumber: string;
   amount: number;
+  boothUid?: string;
+  slotIdentifier?: string;
 }
 
 export interface ManualWithdrawResponse {

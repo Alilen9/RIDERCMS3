@@ -414,7 +414,7 @@ export interface SlotWithdrawalInfo {
 
 export const getSlotWithdrawalInfo = async (boothUid: string, slotIdentifier: string): Promise<SlotWithdrawalInfo> => {
   try {
-    const response = await apiClient.get<SlotWithdrawalInfo>(`/booths/${boothUid}/slots/${slotIdentifier}/withdrawal-info`);
+    const response = await apiClient.get<SlotWithdrawalInfo>(`/admin/booths/${boothUid}/slots/${slotIdentifier}/withdrawal-info`);
     return response.data;
   } catch (error) {
     console.error(`Failed to fetch withdrawal info for ${boothUid}/${slotIdentifier}:`, error);
