@@ -1,6 +1,7 @@
 
 
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { SlotStatus, BatteryType, Transaction, SystemLog, Battery, Booth, Station, DashboardSummary } from '../types';
 import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, getDashboardSummary } from '../services/adminService';
@@ -18,6 +19,8 @@ import SessionManagement from './admin/SessionManagement';
 import SessionCleanup from './admin/SessionCleanup';
 import StatsDashboard from './admin/stats/StatsDashboard';
 import PaymentManagement from './admin/PaymentManagement';
+import ManualWithdrawPage from './admin/payment/ManualWithdrawPage';
+import PaymentWaitingPage from './admin/payment/PaymentWaitingPage';
 
 
 
@@ -39,7 +42,8 @@ const MOCK_BATTERIES: Battery[] = [
 ];
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
-  const [activeSection, setActiveSection] = useState<'dashboard' | 'map' | 'intelligence' | 'stations' | 'addBooth' | 'editBooth' | 'users' | 'batteries' | 'sessions' | 'finance' | 'settings' | 'logs' | 'simulation' | 'stats' | 'cleanup' | 'payments'>('dashboard');
+  const navigate = useNavigate();
+  const [activeSection, setActiveSection] = useState<'dashboard' | 'map' | 'intelligence' | 'stations' | 'addBooth' | 'editBooth' | 'users' | 'batteries' | 'sessions' | 'finance' | 'settings' | 'logs' | 'simulation' | 'stats' | 'cleanup' | 'payments' | 'manualWithdraw' | "paymentWaiting">('dashboard');
   const [batteries, setBatteries] = useState<Battery[]>(MOCK_BATTERIES);
   const [booths, setBooths] = useState<Booth[]>([]);
   const [boothToEdit, setBoothToEdit] = useState<Booth | null>(null);
@@ -49,6 +53,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const { trend: statusTrend } = useStatusTrend(7);
   const { breakdowns } = useBreakdowns();
   const [initialBoothForDetail, setInitialBoothForDetail] = useState<Booth | null>(null);
+  const [manualWithdrawContext, setManualWithdrawContext] = useState<{ boothUid: string; slotIdentifier: string } | null>(null);
   // UI State
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [error, setError] = useState<string>('');
@@ -73,7 +78,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     };
     fetchSummary();
   }, []);
- 
+
 
   const handleBoothAdded = (newBooth: Partial<Booth>) => {
     // This will now be handled by the BoothManagement component refetching
@@ -82,7 +87,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
 
   const handleBoothUpdated = (updatedBooth: Booth) => {
-    setBooths(prevBooths => 
+    setBooths(prevBooths =>
       prevBooths.map(b => b.booth_uid === updatedBooth.booth_uid ? updatedBooth : b)
     );
     setActiveSection('stations');
@@ -131,7 +136,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   // --- Render Functions for Sections ---
 
   const renderStations = () => {
-    return <BoothManagement onNavigate={handleNavigation} initialDetailBooth={initialBoothForDetail} onDetailViewClose={() => setInitialBoothForDetail(null)} />
+    return <BoothManagement onNavigate={handleNavigation} initialDetailBooth={initialBoothForDetail} onDetailViewClose={() => setInitialBoothForDetail(null)} onManualWithdraw={(slotIdentifier, boothUid) => {
+      setManualWithdrawContext({ boothUid, slotIdentifier });
+      setActiveSection('manualWithdraw');
+    }} />
   };
 
 
@@ -167,7 +175,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           ].map(item => (
             <button
               key={item.id}
-              onClick={() => { 
+              onClick={() => {
                 setActiveSection(item.id as any);
                 setIsSidebarOpen(false); // Close sidebar on navigation
               }}
@@ -185,6 +193,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         </nav>
 
         <div className="p-4 border-t border-gray-800">
+          <button onClick={() => navigate('/dashboard')} className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-300 py-2 rounded-lg transition-colors text-sm font-bold mb-2">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+            User View
+          </button>
           <button onClick={onLogout} className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-300 py-2 rounded-lg transition-colors text-sm font-bold">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
             Sign Out
@@ -243,8 +255,23 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         {activeSection === 'addBooth' && <AddBoothsForm onBoothAdded={handleBoothAdded} onCancel={() => { setActiveSection('stations'); }} />}
         {activeSection === 'editBooth' && boothToEdit && <EditBoothsForm boothToEdit={boothToEdit} onBoothUpdated={handleBoothUpdated} onCancel={() => setActiveSection('stations')} />}
         {activeSection === 'users' && <UserManagement />}
-        {activeSection === 'sessions' && <SessionManagement onNavigateToBooth={navigateToBooth} onNavigateToUser={navigateToUser} />}      
+        {activeSection === 'sessions' && <SessionManagement onNavigateToBooth={navigateToBooth} onNavigateToUser={navigateToUser} />}
         {activeSection === 'payments' && <PaymentManagement />}
+        {activeSection === "manualWithdraw" && (
+          <ManualWithdrawPage
+            onWaiting={() => setActiveSection("paymentWaiting")}
+            boothUid={manualWithdrawContext?.boothUid}
+            slotIdentifier={manualWithdrawContext?.slotIdentifier}
+          />
+        )}
+
+        {activeSection === "paymentWaiting" && (
+          <PaymentWaitingPage
+            onBack={() => setActiveSection("manualWithdraw")}
+            boothUid={manualWithdrawContext?.boothUid}
+            slotIdentifier={manualWithdrawContext?.slotIdentifier}
+          />
+        )}
         {activeSection === 'cleanup' && <SessionCleanup />}
         {activeSection === 'settings' && <SystemConfig />}
         {activeSection === 'simulation' && <SimulationTools />}

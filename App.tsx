@@ -20,6 +20,8 @@ import BoothDetailsPage from './components/admin/BoothDetailsPage';
 import SlotDetailsPage from './components/admin/SlotDetailsPage';
 
 import { useAuth, AuthProvider } from './components/auth/AuthContext';
+import PaymentWaitingPage from "./components/admin/payment/PaymentWaitingPage";
+import ManualWithdrawPage from "./components/admin/payment/ManualWithdrawPage";
 
 /**
  * Handles redirect logic after login
@@ -34,6 +36,7 @@ const AuthHandler = () => {
     if (user) {
       switch (user.role) {
         case UserRole.ADMIN:
+        case UserRole.DEVELOPER:
           navigate('/admin/dashboard', { replace: true });
           break;
         case UserRole.OPERATOR:
@@ -70,7 +73,7 @@ const AppContent: React.FC = () => {
       <Route
         path="/admin/dashboard"
         element={
-          <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
+          <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.DEVELOPER]}>
             <AdminDashboard onLogout={logout} />
           </ProtectedRoute>
         }
@@ -80,17 +83,18 @@ const AppContent: React.FC = () => {
       <Route
         path="/admin/booths/:boothId"
         element={
-          <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
+          <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.DEVELOPER]}>
             <BoothDetailsPage />
           </ProtectedRoute>
         }
       />
 
+
       {/* 🔥 NEW: Slot Details Page */}
       <Route
         path="/admin/slots/:slotId"
         element={
-          <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
+          <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.DEVELOPER]}>
             <SlotDetailsPage />
           </ProtectedRoute>
         }
@@ -100,8 +104,11 @@ const AppContent: React.FC = () => {
       <Route
         path="/dashboard"
         element={
-          <ProtectedRoute allowedRoles={[UserRole.USER, UserRole.OPERATOR, UserRole.DEVELOPER]}>
-            <UserDashboard user={user!} onLogout={logout} />
+          <ProtectedRoute allowedRoles={[UserRole.USER, UserRole.DEVELOPER]}>
+            <UserDashboard
+              user={user!}
+              onLogout={logout}
+            />
           </ProtectedRoute>
         }
       />
@@ -109,9 +116,17 @@ const AppContent: React.FC = () => {
       {/* Root redirect */}
       <Route path="/" element={<Navigate to="/auth" replace />} />
 
-      {/* 404 */}
+
+
       <Route path="*" element={<NotFound />} />
+      <Route
+        path="/admin/payment/waiting"
+        element={<PaymentWaitingPage />}
+      />
+
+
     </Routes>
+
   );
 };
 

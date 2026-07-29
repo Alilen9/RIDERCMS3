@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Battery, Slot, User, BatteryType, ActiveBatteryEntry } from '../types';
 import * as boothService from '../services/boothService';
 import QrScanner from './user/QrScanner';
@@ -18,6 +19,7 @@ interface UserDashboardProps {
 type ViewState = 'loading' | 'home' | 'map_view' | 'scan_qr' | 'assigning_slot' | 'deposit_guide' | 'multi_status' | 'status' | 'stopping_charge' | 'waiting_for_withdrawal' | 'billing' | 'collect_guide' | 'scan_to_release';
 
 const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
+  const navigate = useNavigate();
   const [view, setView] = useState<ViewState>('loading');
   const [activeBatteries, setActiveBatteries] = useState<ActiveBatteryEntry[]>([]);
   const [activeBatteryIndex, setActiveBatteryIndex] = useState(-1);
@@ -489,6 +491,9 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
           <span className="font-bold text-lg tracking-tight cursor-pointer">RIDERCMS</span>
         </div>
         <div className="flex items-center gap-4">
+          <button onClick={() => navigate('/admin/dashboard')} className="p-2 bg-gray-700 rounded-full hover:bg-gray-600 transition-colors text-sm">
+            Admin View
+          </button>
           <button onClick={onLogout} className="p-2 bg-gray-700 rounded-full hover:bg-gray-600 transition-colors">
             <span className='p-8 m-8'>Logout</span>
           </button>
