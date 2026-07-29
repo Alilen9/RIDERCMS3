@@ -70,7 +70,6 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
               <span className="text-gray-500 text-lg font-normal">({booth.booth_uid.substring(0, 8)}...)</span>
             </h2>
             <div className="flex items-center gap-3 mt-1">
-              <p className="text-xs text-gray-400">Last updated: {formatTimeAgo(lastFetchedAt?.toISOString() ?? null)}</p>
               {booth.phoneNumber && (
                 <>
                   <span className="text-gray-600">|</span>
