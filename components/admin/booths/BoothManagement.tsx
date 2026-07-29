@@ -11,7 +11,7 @@ interface BoothManagementProps {
   onNavigate: (section: 'addBooth' | 'editBooth', data?: any) => void;
   initialDetailBooth?: Booth | null;
   onDetailViewClose?: () => void;
-  onManualWithdraw?: (slotIdentifier: string) => void;
+  onManualWithdraw?: (slotIdentifier: string, boothUid: string) => void;
 }
 
 // Helper function to format time ago

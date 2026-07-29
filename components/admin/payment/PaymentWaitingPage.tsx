@@ -1,20 +1,26 @@
 import React, { useEffect, useState } from "react";
 import { usePayment } from "@/hooks/usePayment";
+import { sendSlotCommand } from "@/services/adminService";
 import toast from "react-hot-toast";
 
 
 interface PaymentWaitingPageProps {
   onBack?: () => void;
+  boothUid?: string;
+  slotIdentifier?: string;
 }
 
 
 const PaymentWaitingPage: React.FC<PaymentWaitingPageProps> = ({
   onBack,
+  boothUid,
+  slotIdentifier,
 }) => {
 
   const { status } = usePayment();
 
   const [seconds, setSeconds] = useState(5);
+  const [slotOpened, setSlotOpened] = useState(false);
 
 
 
@@ -63,8 +69,6 @@ const PaymentWaitingPage: React.FC<PaymentWaitingPageProps> = ({
 
 
 
-
-
   // Payment status
   useEffect(() => {
 
@@ -75,6 +79,16 @@ const PaymentWaitingPage: React.FC<PaymentWaitingPageProps> = ({
         "Payment completed successfully."
       );
 
+      if (boothUid && slotIdentifier && !slotOpened) {
+        setSlotOpened(true);
+        sendSlotCommand(boothUid, slotIdentifier, { forceUnlock: true })
+          .then(() => {
+            toast.success("Slot unlocked successfully.");
+          })
+          .catch(() => {
+            toast.error("Payment successful but failed to unlock slot. You can unlock it manually from the booth detail view.");
+          });
+      }
 
       const timer = setTimeout(() => {
 
@@ -90,8 +104,6 @@ const PaymentWaitingPage: React.FC<PaymentWaitingPageProps> = ({
 
 
 
-
-
     if (status === "FAILED") {
 
       toast.error(
@@ -104,8 +116,7 @@ const PaymentWaitingPage: React.FC<PaymentWaitingPageProps> = ({
     }
 
 
-  }, [status, onBack]);
-
+  }, [status, onBack, boothUid, slotIdentifier, slotOpened]);
 
 
 
@@ -190,7 +201,6 @@ const PaymentWaitingPage: React.FC<PaymentWaitingPageProps> = ({
               Waiting for customer to enter MPESA PIN...
 
             </p>
-
 
           </>
 

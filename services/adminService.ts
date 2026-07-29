@@ -384,6 +384,26 @@ export const getSlotDetails = async (boothUid: string, slotIdentifier: string): 
   }
 };
 
+export interface SlotWithdrawalInfo {
+  userId: string;
+  userName: string;
+  userPhone: string;
+  calculatedAmount: number;
+  socAtDeposit: number;
+  socCurrent: number;
+  chargeDurationMinutes: number;
+}
+
+export const getSlotWithdrawalInfo = async (boothUid: string, slotIdentifier: string): Promise<SlotWithdrawalInfo> => {
+  try {
+    const response = await apiClient.get<SlotWithdrawalInfo>(`/booths/${boothUid}/slots/${slotIdentifier}/withdrawal-info`);
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to fetch withdrawal info for ${boothUid}/${slotIdentifier}:`, error);
+    throw error;
+  }
+};
+
 /**
  * Updates one or more application settings.
  * @param settings The settings object to update.

@@ -53,6 +53,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const { trend: statusTrend } = useStatusTrend(7);
   const { breakdowns } = useBreakdowns();
   const [initialBoothForDetail, setInitialBoothForDetail] = useState<Booth | null>(null);
+  const [manualWithdrawContext, setManualWithdrawContext] = useState<{ boothUid: string; slotIdentifier: string } | null>(null);
   // UI State
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [error, setError] = useState<string>('');
@@ -135,7 +136,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   // --- Render Functions for Sections ---
 
   const renderStations = () => {
-    return <BoothManagement onNavigate={handleNavigation} initialDetailBooth={initialBoothForDetail} onDetailViewClose={() => setInitialBoothForDetail(null)} onManualWithdraw={() => setActiveSection('manualWithdraw')} />
+    return <BoothManagement onNavigate={handleNavigation} initialDetailBooth={initialBoothForDetail} onDetailViewClose={() => setInitialBoothForDetail(null)} onManualWithdraw={(slotIdentifier, boothUid) => {
+      setManualWithdrawContext({ boothUid, slotIdentifier });
+      setActiveSection('manualWithdraw');
+    }} />
   };
 
 
@@ -256,12 +260,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
         {activeSection === "manualWithdraw" && (
           <ManualWithdrawPage
             onWaiting={() => setActiveSection("paymentWaiting")}
+            boothUid={manualWithdrawContext?.boothUid}
+            slotIdentifier={manualWithdrawContext?.slotIdentifier}
           />
         )}
 
         {activeSection === "paymentWaiting" && (
           <PaymentWaitingPage
             onBack={() => setActiveSection("manualWithdraw")}
+            boothUid={manualWithdrawContext?.boothUid}
+            slotIdentifier={manualWithdrawContext?.slotIdentifier}
           />
         )}
         {activeSection === 'cleanup' && <SessionCleanup />}
