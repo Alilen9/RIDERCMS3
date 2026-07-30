@@ -222,6 +222,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           {activeSection === "paymentWaiting" && (
             <PaymentWaitingPage
               onBack={() => setActiveSection("manualWithdraw")}
+              onSuccess={() => {
+                setManualWithdrawContext(null);
+                setActiveSection("stations");
+              }}
               boothUid={manualWithdrawContext?.boothUid}
               slotIdentifier={manualWithdrawContext?.slotIdentifier}
               paymentStatus={paymentStatus}
