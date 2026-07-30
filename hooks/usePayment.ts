@@ -48,7 +48,7 @@ export function usePayment() {
       setLastResponse(response);
 
       if (response.transactionId?.startsWith('DEV_')) {
-        setStatus('SUCCESS');
+        setTimeout(() => setStatus('SUCCESS'), 2000);
       } else {
         pollStatus(response.sessionId);
       }

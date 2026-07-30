@@ -52,6 +52,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
         battery: liveSlot?.battery || (adminSlot.chargeLevel !== null ? { chargeLevel: adminSlot.chargeLevel } : null),
         // "Rented By" comes from the DB (adminSlot)
         userName: adminSlot.userName || liveSlot?.userName || liveSlot?.batteryOwner,
+        pendingManualUnlock: liveSlot?.pendingManualUnlock || false,
         telemetry: liveSlot?.telemetry,
       };
     });
@@ -148,6 +149,17 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                           ) : (<span className="text-gray-600">None</span>)}
 
                         </div>
+                        {slot.pendingManualUnlock && (
+                          <div className="bg-amber-900/40 border border-amber-600/40 rounded-lg p-3 text-sm">
+                            <p className="text-amber-300 font-semibold flex items-center gap-2">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              Manual withdrawal paid
+                            </p>
+                            <p className="text-amber-400/80 text-xs mt-1">Press <strong>Unlock</strong> to release battery</p>
+                          </div>
+                        )}
                         <div className="border-t border-gray-700/50 pt-3 mt-3">
                           <p className="text-xs font-bold text-gray-400 mb-2">Commands</p>
                           <div className="grid grid-cols-2 gap-2">
@@ -215,7 +227,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                                   Start Charging
                                 </button>
                             )}
-                            {onManualWithdraw && slot.userName && (
+                            {onManualWithdraw && slot.userName && !slot.pendingManualUnlock && (
                               <button
                                 onClick={() => onShowConfirmation(
                                   () => onManualWithdraw(slot.slotIdentifier, booth.booth_uid),

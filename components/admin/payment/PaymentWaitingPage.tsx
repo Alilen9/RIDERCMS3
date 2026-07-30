@@ -19,54 +19,7 @@ const PaymentWaitingPage: React.FC<PaymentWaitingPageProps> = ({
 
   const { status } = usePayment();
 
-  const [seconds, setSeconds] = useState(5);
   const [slotOpened, setSlotOpened] = useState(false);
-
-
-
-  // Countdown
-  useEffect(() => {
-
-    const timer = setInterval(() => {
-
-      setSeconds((prev) => {
-
-        if (prev <= 1) {
-
-          clearInterval(timer);
-
-
-          if (status !== "SUCCESS") {
-
-            toast.error(
-              "Payment timed out. User did not complete payment."
-            );
-
-
-            onBack?.();
-
-          }
-
-
-          return 0;
-
-        }
-
-
-        return prev - 1;
-
-      });
-
-
-    }, 1000);
-
-
-
-    return () => clearInterval(timer);
-
-
-  }, [status, onBack]);
-
 
 
   // Payment status
@@ -186,23 +139,11 @@ const PaymentWaitingPage: React.FC<PaymentWaitingPageProps> = ({
 
         {status !== "SUCCESS" && (
 
-          <>
+          <p className="text-gray-400 mt-4">
 
-            <p className="text-emerald-400 mt-4 text-xl">
+            Waiting for customer to enter MPESA PIN...
 
-              {seconds}s
-
-            </p>
-
-
-
-            <p className="text-gray-400 mt-2">
-
-              Waiting for customer to enter MPESA PIN...
-
-            </p>
-
-          </>
+          </p>
 
         )}
 
