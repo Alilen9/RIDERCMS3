@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { usePayment } from "@/hooks/usePayment";
 import { sendSlotCommand } from "@/services/adminService";
 import toast from "react-hot-toast";
 
@@ -8,6 +7,7 @@ interface PaymentWaitingPageProps {
   onBack?: () => void;
   boothUid?: string;
   slotIdentifier?: string;
+  paymentStatus: 'IDLE' | 'PENDING' | 'SUCCESS' | 'FAILED';
 }
 
 
@@ -15,9 +15,8 @@ const PaymentWaitingPage: React.FC<PaymentWaitingPageProps> = ({
   onBack,
   boothUid,
   slotIdentifier,
+  paymentStatus,
 }) => {
-
-  const { status } = usePayment();
 
   const [slotOpened, setSlotOpened] = useState(false);
 
@@ -26,7 +25,7 @@ const PaymentWaitingPage: React.FC<PaymentWaitingPageProps> = ({
   useEffect(() => {
 
 
-    if (status === "SUCCESS") {
+    if (paymentStatus === "SUCCESS") {
 
       toast.success(
         "Payment completed successfully."
@@ -57,7 +56,7 @@ const PaymentWaitingPage: React.FC<PaymentWaitingPageProps> = ({
 
 
 
-    if (status === "FAILED") {
+    if (paymentStatus === "FAILED") {
 
       toast.error(
         "Payment failed."
@@ -69,7 +68,7 @@ const PaymentWaitingPage: React.FC<PaymentWaitingPageProps> = ({
     }
 
 
-  }, [status, onBack, boothUid, slotIdentifier, slotOpened]);
+  }, [paymentStatus, onBack, boothUid, slotIdentifier, slotOpened]);
 
 
 
@@ -82,7 +81,7 @@ const PaymentWaitingPage: React.FC<PaymentWaitingPageProps> = ({
       <div className="bg-gray-800/50 rounded-xl border border-gray-700 p-8 text-center">
 
 
-        {status !== "SUCCESS" ? (
+        {paymentStatus !== "SUCCESS" ? (
 
           <div
             className="
@@ -127,7 +126,7 @@ const PaymentWaitingPage: React.FC<PaymentWaitingPageProps> = ({
 
         <h1 className="text-2xl font-bold text-white mt-8">
 
-          {status === "SUCCESS"
+          {paymentStatus === "SUCCESS"
             ? "Payment Successful"
             : "Processing Payment"}
 
@@ -137,7 +136,7 @@ const PaymentWaitingPage: React.FC<PaymentWaitingPageProps> = ({
 
 
 
-        {status !== "SUCCESS" && (
+        {paymentStatus !== "SUCCESS" && (
 
           <p className="text-gray-400 mt-4">
 

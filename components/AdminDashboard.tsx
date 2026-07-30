@@ -22,6 +22,7 @@ import StatsDashboard from './admin/stats/StatsDashboard';
 import PaymentManagement from './admin/PaymentManagement';
 import ManualWithdrawPage from './admin/payment/ManualWithdrawPage';
 import PaymentWaitingPage from './admin/payment/PaymentWaitingPage';
+import { usePayment } from '@/hooks/usePayment';
 
 
 
@@ -55,6 +56,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const { breakdowns } = useBreakdowns();
   const [initialBoothForDetail, setInitialBoothForDetail] = useState<Booth | null>(null);
   const [manualWithdrawContext, setManualWithdrawContext] = useState<{ boothUid: string; slotIdentifier: string } | null>(null);
+  const { initiatePayment, status: paymentStatus, loading: paymentLoading } = usePayment();
   // UI State
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [error, setError] = useState<string>('');
@@ -212,6 +214,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
               onWaiting={() => setActiveSection("paymentWaiting")}
               boothUid={manualWithdrawContext?.boothUid}
               slotIdentifier={manualWithdrawContext?.slotIdentifier}
+              initiatePayment={initiatePayment}
+              loading={paymentLoading}
             />
           )}
 
@@ -220,6 +224,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
               onBack={() => setActiveSection("manualWithdraw")}
               boothUid={manualWithdrawContext?.boothUid}
               slotIdentifier={manualWithdrawContext?.slotIdentifier}
+              paymentStatus={paymentStatus}
             />
           )}
           {activeSection === 'cleanup' && <SessionCleanup />}

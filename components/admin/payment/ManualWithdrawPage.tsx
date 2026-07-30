@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { usePayment } from "@/hooks/usePayment";
 import { getSlotWithdrawalInfo } from "@/services/adminService";
+import { ManualWithdrawRequest } from "@/services/paymentService";
 import toast from "react-hot-toast";
 
 
@@ -8,6 +8,8 @@ interface ManualWithdrawPageProps {
   onWaiting?: () => void;
   boothUid?: string;
   slotIdentifier?: string;
+  initiatePayment: (data: ManualWithdrawRequest) => Promise<void>;
+  loading: boolean;
 }
 
 
@@ -15,9 +17,9 @@ const ManualWithdrawPage: React.FC<ManualWithdrawPageProps> = ({
   onWaiting,
   boothUid,
   slotIdentifier,
+  initiatePayment,
+  loading,
 }) => {
-
-  const { initiatePayment, loading } = usePayment();
 
 
   const [userId, setUserId] = useState("");
