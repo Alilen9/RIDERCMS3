@@ -1,6 +1,7 @@
 
 
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { SlotStatus, BatteryType, Transaction, SystemLog, Battery, Booth, Station, DashboardSummary } from '../types';
 import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, getDashboardSummary } from '../services/adminService';
