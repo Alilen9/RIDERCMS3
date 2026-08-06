@@ -1,7 +1,19 @@
 import React from 'react';
 import { Booth } from '@/types';
 import { AdminBoothStatus, SlotCommand } from '../../../services/adminService';
-import { Phone, MessageCircle } from 'lucide-react';
+import { Phone, PhoneCall, MessageCircle } from 'lucide-react';
+import { FaWhatsapp } from 'react-icons/fa';
+
+// Convert phone number to WhatsApp format
+const formatWhatsAppNumber = (phone: string) => {
+  const cleaned = phone.replace(/\D/g, '');
+
+  if (cleaned.startsWith('0')) {
+    return `254${cleaned.slice(1)}`;
+  }
+
+  return cleaned;
+};
 
 interface BoothDetailViewProps {
   booth: Booth;
@@ -52,6 +64,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
         battery: liveSlot?.battery || (adminSlot.chargeLevel !== null ? { chargeLevel: adminSlot.chargeLevel } : null),
         // "Rented By" comes from the DB (adminSlot)
         userName: adminSlot.userName || liveSlot?.userName || liveSlot?.batteryOwner,
+        userPhone: adminSlot.userPhone || liveSlot?.userPhone || null,
         pendingManualUnlock: liveSlot?.pendingManualUnlock || false,
         telemetry: liveSlot?.telemetry,
       };
@@ -142,12 +155,34 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                           <span className="text-gray-500">Battery</span>
                           <span className="text-white">{slot.battery ? `${slot.battery.chargeLevel}%` : 'N/A'}</span>
                         </div>
-                        <div className="flex justify-between text-sm items-center">
-                          <span className="text-gray-500">Rented By</span>
+                        <div className="flex justify-between text-sm items-center gap-2">
+                          <span className="text-gray-500 flex-shrink-0">Rented By</span>
                           {slot.userName ? (
-                            <span className="text-cyan-400 font-semibold truncate" title={slot.userName}>{slot.userName}</span>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-cyan-400 font-semibold truncate" title={slot.userName}>{slot.userName}</span>
+                              {slot.userPhone && (
+                                <div className="flex items-center gap-1.5 flex-shrink-0">
+                                  <a
+                                    href={`tel:${slot.userPhone}`}
+                                    title="Call"
+                                    className="text-gray-400 hover:text-green-400"
+                                  >
+                                    <PhoneCall size={14} className="text-green-500" />
+                                  </a>
+                                  <span className="text-gray-600">|</span>
+                                  <a
+                                    href={`https://wa.me/${formatWhatsAppNumber(slot.userPhone)}`}
+                                    title="WhatsApp"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-gray-400 hover:text-green-400"
+                                  >
+                                    <FaWhatsapp size={16} className="text-green-500" />
+                                  </a>
+                                </div>
+                              )}
+                            </div>
                           ) : (<span className="text-gray-600">None</span>)}
-
                         </div>
                         {slot.pendingManualUnlock && (
                           <div className="bg-amber-900/40 border border-amber-600/40 rounded-lg p-3 text-sm">

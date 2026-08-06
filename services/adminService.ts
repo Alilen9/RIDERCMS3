@@ -40,6 +40,7 @@ export interface AdminBoothStatus {
     status: 'booting' | 'available' | 'occupied' | 'disabled' | 'error';
     doorStatus: 'locked' | 'unlocked' | 'ajar' | 'unknown';
     userName: string | null;
+    userPhone?: string | null;
     batteryOwner: string | null; // Added to match the joined user name from the DB
     battery: {
       isOccupied: boolean;
