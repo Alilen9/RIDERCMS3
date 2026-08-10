@@ -54,26 +54,35 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
 
   const sortedStations = useMemo(() => {
     if (!userLocation) return [];
-    return booths.map(booth => {
-      const R = 6371;
-      const dLat = (booth.latitude - userLocation.lat) * (Math.PI / 180);
-      const dLng = (booth.longitude - userLocation.lng) * (Math.PI / 180);
-      const a =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(userLocation.lat * (Math.PI / 180)) * Math.cos(booth.latitude * (Math.PI / 180)) *
-        Math.sin(dLng / 2) * Math.sin(dLng / 2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      const dist = R * c;
-      return {
-        id: booth.booth_uid,
-        name: booth.name,
-        available: booth.availableSlots,
-        lat: booth.latitude,
-        lng: booth.longitude,
-        rawDist: dist,
-        distanceLabel: `${dist.toFixed(1)} km`
-      };
-    }).sort((a, b) => a.rawDist - b.rawDist);
+    return booths
+      .filter(booth => {
+        const lat = Number(booth.latitude);
+        const lng = Number(booth.longitude);
+        return Number.isFinite(lat) && Number.isFinite(lng);
+      })
+      .map(booth => {
+        const lat = Number(booth.latitude);
+        const lng = Number(booth.longitude);
+        const R = 6371;
+        const dLat = (lat - userLocation.lat) * (Math.PI / 180);
+        const dLng = (lng - userLocation.lng) * (Math.PI / 180);
+        const a =
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos(userLocation.lat * (Math.PI / 180)) * Math.cos(lat * (Math.PI / 180)) *
+          Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const dist = R * c;
+        return {
+          id: booth.booth_uid,
+          name: booth.name,
+          available: booth.availableSlots,
+          lat,
+          lng,
+          rawDist: dist,
+          distanceLabel: `${dist.toFixed(1)} km`
+        };
+      })
+      .sort((a, b) => a.rawDist - b.rawDist);
   }, [booths, userLocation]);
 
   const nearestStation = sortedStations[0];
