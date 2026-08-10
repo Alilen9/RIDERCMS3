@@ -547,6 +547,22 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
               </button>
             </div>
 
+            {nearestStation && (
+              <div className="w-full max-w-sm bg-gray-800/50 p-5 rounded-2xl border border-gray-700">
+                <p className="text-xs uppercase tracking-wide text-gray-500 mb-3">Nearest Station</p>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="font-bold text-sm text-white truncate">{nearestStation.name}</p>
+                    <p className="text-xs text-gray-500 mt-1">{nearestStation.distanceLabel} away</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-2xl font-bold text-emerald-400 leading-none">{nearestStation.available}</p>
+                    <p className="text-xs text-gray-500 mt-1">slots available</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <button
               onClick={() => setView('map_view')}
               className="flex items-center gap-3 bg-gray-800 hover:bg-gray-700 px-6 py-3 rounded-xl border border-gray-700 transition-colors"
