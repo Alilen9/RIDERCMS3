@@ -1,7 +1,7 @@
 import apiClient from '../client/apiClient';
 import { User } from '../types';
 import { auth } from '../firebase';
-import { signOut } from 'firebase/auth';
+import { signOut, sendPasswordResetEmail } from 'firebase/auth';
 
 /**
  * Type for the data required to register a new user.
@@ -71,4 +71,12 @@ export const logout = async (): Promise<void> => {
 export const getUserByPhone = async (phoneNumber: string): Promise<{ email: string }> => {
   const response = await apiClient.post('/auth/user-by-phone', { phoneNumber });
   return response.data;
+};
+
+/**
+ * Sends a password reset email to the given address via Firebase Auth.
+ * @param email - The email address to send the reset link to.
+ */
+export const resetPassword = async (email: string): Promise<void> => {
+  await sendPasswordResetEmail(auth, email);
 };

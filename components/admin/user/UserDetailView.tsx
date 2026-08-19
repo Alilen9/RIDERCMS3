@@ -4,6 +4,7 @@ import {
    UserAccountStatus,
    getSessions,
    getPayments,
+   resetUserPassword,
    AdminSession,
    AdminPayment
 } from '../../../services/adminService';
@@ -105,6 +106,19 @@ const UserDetailView: React.FC<UserDetailViewProps> = ({ user, onBack, onSetUser
                      }`}
                >
                   {disabled ? 'Enable Account' : 'Disable Account'}
+               </button>
+               <button
+                  onClick={async () => {
+                     try {
+                        await resetUserPassword(uid);
+                        toast.success(`Password reset email sent to ${email}`);
+                     } catch {
+                        toast.error('Failed to send password reset email.');
+                     }
+                  }}
+                  className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-bold text-sm transition-all shadow-lg shadow-blue-600/20"
+               >
+                  Reset Password
                </button>
                <button
                   onClick={() => onDeleteUser(uid, displayName)}

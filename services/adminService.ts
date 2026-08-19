@@ -341,6 +341,19 @@ export const deleteUser = async (userId: string): Promise<void> => {
 };
 
 /**
+ * Sends a password reset email to the specified user.
+ * @param userId The UID of the user to reset the password for.
+ */
+export const resetUserPassword = async (userId: string): Promise<void> => {
+  try {
+    await apiClient.post(`/admin/users/${userId}/reset-password`);
+  } catch (error) {
+    console.error(`Failed to reset password for user ${userId}:`, error);
+    throw error;
+  }
+};
+
+/**
  * Fetches a paginated list of all transactions from the admin endpoint.
  * @param limit The number of transactions to fetch.
  * @param offset The number of transactions to skip.

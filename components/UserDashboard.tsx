@@ -75,6 +75,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
         return {
           id: booth.booth_uid,
           name: booth.name,
+          location: booth.location_address,
           available: booth.availableSlots,
           lat,
           lng,
@@ -562,6 +563,9 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
                 <div className="flex items-center justify-between gap-4">
                   <div className="min-w-0">
                     <p className="font-bold text-sm text-white truncate">{nearestStation.name}</p>
+                    {nearestStation.location && (
+                      <p className="text-xs text-gray-500 mt-0.5 truncate">{nearestStation.location}</p>
+                    )}
                     <p className="text-xs text-gray-500 mt-1">{nearestStation.distanceLabel} away</p>
                   </div>
                   <div className="text-right flex-shrink-0">

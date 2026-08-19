@@ -9,6 +9,7 @@ import {
 } from 'react-router-dom';
 
 import Auth from './components/auth/Auth';
+import ForgotPassword from './components/auth/ForgotPassword';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import { UserRole } from './types';
 
@@ -68,6 +69,7 @@ const AppContent: React.FC = () => {
     <Routes>
       {/* Auth */}
       <Route path="/auth" element={<AuthHandler />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
 
       {/* Admin Dashboard */}
       <Route
