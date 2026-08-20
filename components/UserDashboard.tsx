@@ -38,6 +38,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
   const [countdown, setCountdown] = useState(0);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [showReleaseConfirm, setShowReleaseConfirm] = useState(false);
+  const [scannedBoothUid, setScannedBoothUid] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [showAddMorePrompt, setShowAddMorePrompt] = useState(false);
   const depositingSessionIdRef = useRef<number | null>(null);
@@ -342,10 +344,20 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
   };
 
   const handleReleaseScan = useCallback(async (decodedText: string) => {
+    if (!withdrawalSessionId) {
+      toast.error("No active withdrawal session.");
+      return;
+    }
+    setScannedBoothUid(decodedText);
+    setShowReleaseConfirm(true);
+  }, [withdrawalSessionId]);
+
+  const confirmRelease = useCallback(async () => {
+    setShowReleaseConfirm(false);
     setLoading(true);
     try {
       if (!withdrawalSessionId) throw new Error("No active withdrawal session.");
-      const result = await boothService.releaseBattery(decodedText, withdrawalSessionId);
+      const result = await boothService.releaseBattery(scannedBoothUid, withdrawalSessionId);
       toast.success(result.message || "Booth verified! Slot opening...");
       setView('collect_guide');
     } catch (err: any) {
@@ -353,8 +365,9 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
       toast.error(serverMessage);
     } finally {
       setLoading(false);
+      setScannedBoothUid('');
     }
-  }, [withdrawalSessionId]);
+  }, [withdrawalSessionId, scannedBoothUid]);
 
   const handleScanSuccess = useCallback(async (decodedText: string) => {
     setLoading(true);
@@ -904,6 +917,16 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, onLogout }) => {
         onCancel={() => setIsCancelModalOpen(false)}
         confirmButtonText="Yes, Cancel"
         isDestructive={true}
+      />
+
+      <ConfirmationModal
+        isOpen={showReleaseConfirm}
+        title="Confirm Battery Release"
+        message="You are about to open a slot at this booth to collect your battery. Make sure you are physically at the station."
+        onConfirm={confirmRelease}
+        onCancel={() => { setShowReleaseConfirm(false); setScannedBoothUid(''); }}
+        confirmButtonText="Confirm & Open"
+        isDestructive={false}
       />
 
       <style>{`
