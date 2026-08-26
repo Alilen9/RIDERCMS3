@@ -16,7 +16,7 @@ interface BoothDetailViewProps {
   onDeleteSlot: (slotIdentifier: string) => void;
   onResetSlot: (slotIdentifier: string) => void;
   pendingCommands: Record<string, string | null>;
-  onManualWithdraw?: (slotIdentifier: string) => void;
+  onManualWithdraw?: (slotIdentifier: string, boothUid: string) => void;
 }
 
 const BoothDetailView: React.FC<BoothDetailViewProps> = ({
@@ -240,7 +240,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                             </button>
                             {onManualWithdraw && (slot.slotIdentifier === 'A1' || slot.slotIdentifier === 'B1') && (
                               <button
-                                onClick={() => onManualWithdraw(slot.slotIdentifier)}
+                                onClick={() => onManualWithdraw(slot.slotIdentifier, booth.booth_uid)}
                                 className="col-span-2 mt-2 bg-red-800 hover:bg-red-700 text-white py-2 rounded text-xs font-bold"
                               >
                                 Manual Withdraw

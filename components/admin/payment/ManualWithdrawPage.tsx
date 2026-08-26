@@ -1,15 +1,20 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { usePayment } from "@/hooks/usePayment";
+import { getSlotWithdrawalInfo } from "@/services/adminService";
 import toast from "react-hot-toast";
 
 
 interface ManualWithdrawPageProps {
   onWaiting?: () => void;
+  boothUid?: string;
+  slotIdentifier?: string;
 }
 
 
 const ManualWithdrawPage: React.FC<ManualWithdrawPageProps> = ({
   onWaiting,
+  boothUid,
+  slotIdentifier,
 }) => {
 
   const { initiatePayment, loading } = usePayment();
@@ -18,6 +23,27 @@ const ManualWithdrawPage: React.FC<ManualWithdrawPageProps> = ({
   const [userId, setUserId] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [amount, setAmount] = useState("");
+  const [prefillLoading, setPrefillLoading] = useState(false);
+
+  useEffect(() => {
+    if (!boothUid || !slotIdentifier) return;
+
+    const fetchInfo = async () => {
+      setPrefillLoading(true);
+      try {
+        const info = await getSlotWithdrawalInfo(boothUid, slotIdentifier);
+        setUserId(info.userId);
+        setPhoneNumber(info.userPhone);
+        setAmount(String(info.calculatedAmount));
+      } catch (err) {
+        toast.error("Failed to load slot data. You can fill in the fields manually.");
+      } finally {
+        setPrefillLoading(false);
+      }
+    };
+
+    fetchInfo();
+  }, [boothUid, slotIdentifier]);
 
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -85,6 +111,13 @@ const ManualWithdrawPage: React.FC<ManualWithdrawPageProps> = ({
           Send an M-Pesa STK push to a user's phone.
         </p>
 
+        {prefillLoading && (
+          <div className="flex items-center gap-2 text-sm text-cyan-400 mb-4">
+            <span className="animate-spin h-4 w-4 border-2 border-cyan-400 border-t-transparent rounded-full" />
+            Loading slot data...
+          </div>
+        )}
+
 
 
         <form
@@ -106,7 +139,8 @@ const ManualWithdrawPage: React.FC<ManualWithdrawPageProps> = ({
               onChange={(e) => setUserId(e.target.value)}
               placeholder="Firebase UID"
               required
-              className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2"
+              disabled={!!(boothUid && slotIdentifier)}
+              className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 disabled:opacity-60 disabled:cursor-not-allowed"
             />
 
           </div>
@@ -127,7 +161,8 @@ const ManualWithdrawPage: React.FC<ManualWithdrawPageProps> = ({
               onChange={(e) => setPhoneNumber(e.target.value)}
               placeholder="0712345678"
               required
-              className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2"
+              disabled={!!(boothUid && slotIdentifier)}
+              className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 disabled:opacity-60 disabled:cursor-not-allowed"
             />
 
           </div>
