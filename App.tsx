@@ -14,6 +14,7 @@ import { UserRole } from './types';
 
 import AdminDashboard from './components/AdminDashboard';
 import UserDashboard from './components/UserDashboard';
+import RentalPage from './components/user/RentalPage';
 import NotFound from './components/NotFound';
 
 import BoothDetailsPage from './components/admin/BoothDetailsPage';
@@ -80,6 +81,20 @@ const AppContent: React.FC = () => {
         element={
           <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.DEVELOPER]}>
             <BoothDetailsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/rental"
+        element={
+          <ProtectedRoute
+            allowedRoles={[
+              UserRole.USER,
+              UserRole.DEVELOPER,
+            ]}
+          >
+            <RentalPage />
           </ProtectedRoute>
         }
       />
