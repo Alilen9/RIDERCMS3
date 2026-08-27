@@ -19,6 +19,7 @@ export interface AdminUser {
 export interface ListUsersResponse {
   users: AdminUser[];
   nextPageToken?: string;
+  total?: number;
 }
 
 /**
