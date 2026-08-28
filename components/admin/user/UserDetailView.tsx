@@ -14,8 +14,10 @@ import {
    CreditCard,
    User as UserIcon,
    Activity,
-   ArrowRight
+   ArrowRight,
+   PhoneCall
 } from 'lucide-react';
+import { FaWhatsapp } from 'react-icons/fa';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { UserRole } from '@/types';
@@ -75,6 +77,12 @@ const UserDetailView: React.FC<UserDetailViewProps> = ({ user, onBack, onSetUser
    const formatDate = (timestamp: string | undefined) => {
       if (!timestamp) return 'N/A';
       return format(new Date(timestamp), 'MMM d, yyyy HH:mm');
+   };
+
+   const formatWhatsAppNumber = (phone: string) => {
+      const cleaned = phone.replace(/\D/g, '');
+      if (cleaned.startsWith('0')) return `254${cleaned.slice(1)}`;
+      return cleaned;
    };
 
    const renderStatusBadge = (status: string) => {
@@ -150,7 +158,31 @@ const UserDetailView: React.FC<UserDetailViewProps> = ({ user, onBack, onSetUser
                      </div>
                      <div className="p-4 bg-gray-950/50 rounded-2xl border border-gray-800/50">
                         <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Phone Number</div>
-                        <div className="text-sm text-gray-200 font-semibold">{phoneNumber || 'Not Linked'}</div>
+                        {phoneNumber ? (
+                           <>
+                              <div className="text-sm text-gray-200 font-semibold">{phoneNumber}</div>
+                              <div className="flex items-center gap-3 mt-3">
+                                 <a
+                                    href={`tel:${phoneNumber}`}
+                                    className="flex items-center gap-1.5 text-xs font-bold text-green-400 hover:text-green-300 hover:underline"
+                                 >
+                                    <PhoneCall size={14} className="text-green-500" />
+                                    Call
+                                 </a>
+                                 <a
+                                    href={`https://wa.me/${formatWhatsAppNumber(phoneNumber)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-1.5 text-xs font-bold text-green-400 hover:text-green-300 hover:underline"
+                                 >
+                                    <FaWhatsapp size={14} className="text-green-500" />
+                                    WhatsApp
+                                 </a>
+                              </div>
+                           </>
+                        ) : (
+                           <div className="text-sm text-gray-200 font-semibold">Not Linked</div>
+                        )}
                      </div>
                      <div className="grid grid-cols-2 gap-4">
                         <div className="p-4 bg-gray-950/50 rounded-2xl border border-gray-800/50">
