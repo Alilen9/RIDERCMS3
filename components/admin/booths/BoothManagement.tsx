@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { QRCodeCanvas } from 'qrcode.react';
 import { Booth } from '@/types';
-import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, sendSlotCommand, SlotCommand, resetBoothSlots, deleteBoothSlot, updateSlotStatus } from '../../../services/adminService';
+import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, sendSlotCommand, SlotCommand, resetBoothSlots, deleteBoothSlot, updateSlotStatus, reconcileSlotDeposit } from '../../../services/adminService';
 import ConfirmationModal from '../ConfirmationModal';
 import BoothListView from './BoothListView';
 import BoothDetailView from './BoothDetailView';
@@ -295,6 +295,26 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
     }
   };
 
+  const handleReconcileDeposit = async (slotIdentifier: string) => {
+    if (!boothForDetails) return;
+
+    const loadingToast = toast.loading('Re-syncing deposit status...');
+    try {
+      const result = await reconcileSlotDeposit(boothForDetails.booth_uid, slotIdentifier);
+      if (result.reconciled) {
+        toast.success(`Deposit restored to '${result.newStatus}'.`, { id: loadingToast });
+      } else {
+        toast(`No deposit needed re-syncing (${result.reason}).`, { id: loadingToast });
+      }
+      // Refresh both administrative and live data to reflect the corrected state.
+      Promise.all([fetchBooths(), fetchBoothStatuses()]);
+    } catch (error) {
+      const errorMessage = (error as any)?.response?.data?.error || (error as Error).message;
+      toast.error(`Failed to re-sync deposit: ${errorMessage}`, { id: loadingToast });
+      console.error("Error reconciling deposit:", error);
+    }
+  };
+
   const handleDownloadQrCode = () => {
     if (!boothForQrCode) return;
     const canvas = document.getElementById('booth-qr-code') as HTMLCanvasElement;
@@ -378,6 +398,7 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
           }}
           onSendCommand={handleSendCommand}
           onManualWithdraw={onManualWithdraw}
+          onReconcileDeposit={handleReconcileDeposit}
           formatTimeAgo={formatTimeAgo}
           getSlotStatusDisplay={getSlotStatusDisplay}
           onRefreshStatus={fetchBoothStatuses}

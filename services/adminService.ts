@@ -249,6 +249,34 @@ export const manualWithdrawSlot = async (
   return response.data;
 };
 
+export interface ReconcileDepositResponse {
+  boothUid: string;
+  slotIdentifier: string;
+  reconciled: boolean;
+  depositId: number | null;
+  previousStatus: string | null;
+  newStatus: string | null;
+  reason: string;
+}
+
+/**
+ * Re-syncs a slot's deposit status against the physically present battery.
+ * If a deposit was wrongly marked 'failed' while its battery is still in the
+ * slot, the backend restores it to 'completed' so the user's credit is recovered.
+ * @param boothUid The UID of the target booth.
+ * @param slotIdentifier The identifier of the target slot.
+ * @returns A promise that resolves with the reconciliation outcome.
+ */
+export const reconcileSlotDeposit = async (
+  boothUid: string,
+  slotIdentifier: string
+): Promise<ReconcileDepositResponse> => {
+  const response = await apiClient.post<ReconcileDepositResponse>(
+    `/admin/booths/${boothUid}/slots/${slotIdentifier}/reconcile-deposit`
+  );
+  return response.data;
+};
+
 /**
  * Fetches a paginated list of all users from the admin endpoint.
  * @param pageToken - The token for fetching the next page of results.
