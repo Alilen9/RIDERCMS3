@@ -23,6 +23,7 @@ import SlotDetailsPage from './components/admin/SlotDetailsPage';
 import { useAuth, AuthProvider } from './components/auth/AuthContext';
 import PaymentWaitingPage from "./components/admin/payment/PaymentWaitingPage";
 import ManualWithdrawPage from "./components/admin/payment/ManualWithdrawPage";
+import RentalManagement from './components/admin/rental/RentalManagement';
 
 /**
  * Handles redirect logic after login
@@ -73,6 +74,10 @@ const AppContent: React.FC = () => {
             <AdminDashboard onLogout={logout} />
           </ProtectedRoute>
         }
+      />
+      <Route
+        path="/admin/rentals"
+        element={<RentalManagement />}
       />
 
       {/* 🔥 NEW: Booth Details Page */}
