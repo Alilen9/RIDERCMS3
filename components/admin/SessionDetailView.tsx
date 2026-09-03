@@ -15,6 +15,7 @@ import {
   Info,
   Layers,
   ExternalLink,
+  RefreshCw,
 } from 'lucide-react';
 
 interface SessionDetailViewProps {
@@ -22,6 +23,7 @@ interface SessionDetailViewProps {
   onBack: () => void;
   onDelete?: (session: AdminSession) => void;
   onRefund?: (session: AdminSession) => void;
+  onRetryPayment?: (session: AdminSession) => void;
 }
 
 const SessionDetailView: React.FC<SessionDetailViewProps> = ({
@@ -29,6 +31,7 @@ const SessionDetailView: React.FC<SessionDetailViewProps> = ({
   onBack,
   onDelete,
   onRefund,
+  onRetryPayment,
 }) => {
   const navigate = useNavigate();
 
@@ -103,6 +106,18 @@ const SessionDetailView: React.FC<SessionDetailViewProps> = ({
         </button>
 
         <div className="flex gap-3">
+          {session.status === 'failed' &&
+            session.sessionType === 'withdrawal' &&
+            onRetryPayment && (
+              <button
+                onClick={() => onRetryPayment(session)}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600/10 text-emerald-400 border border-emerald-600/20 hover:bg-emerald-600 hover:text-white rounded-xl font-bold text-sm transition-all duration-200"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Retry Payment
+              </button>
+            )}
+
           {session.status === 'completed' &&
             session.sessionType === 'withdrawal' &&
             onRefund && (

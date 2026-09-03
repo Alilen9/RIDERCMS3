@@ -23,6 +23,7 @@ interface BoothDetailViewProps {
   onShowConfirmation: (action: () => void, title: string, message: string, isDestructive?: boolean) => void;
   onSendCommand: (slotIdentifier: string, command: SlotCommand) => void;
   onManualWithdraw?: (slotIdentifier: string, boothUid: string) => void;
+  onReconcileDeposit?: (slotIdentifier: string) => void;
   formatTimeAgo: (timestamp: string | undefined | null) => string;
   getSlotStatusDisplay: (status: string | null | undefined) => { classes: string; text: string };
   onRefreshStatus: () => void;
@@ -40,6 +41,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
   onShowConfirmation,
   onSendCommand,
   onManualWithdraw,
+  onReconcileDeposit,
   formatTimeAgo,
   getSlotStatusDisplay,
   onRefreshStatus,
@@ -273,6 +275,15 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                                 className="col-span-2 bg-orange-800 hover:bg-orange-700 py-2 rounded text-xs font-bold text-white"
                               >
                                 Manual Withdraw
+                              </button>
+                            )}
+                            {onReconcileDeposit && (slot.battery || slot.status === 'occupied' || slot.status === 'charging') && (
+                              <button
+                                onClick={() => onReconcileDeposit(slot.slotIdentifier)}
+                                title="If the battery is still in the slot but the deposit was wrongly marked failed, restore the deposit so the customer's credit and withdrawal path are recovered."
+                                className="col-span-2 mt-2 bg-cyan-900/50 hover:bg-cyan-900/80 text-cyan-300 py-2 rounded text-xs font-bold border border-cyan-700/50"
+                              >
+                                Re-sync Deposit
                               </button>
                             )}
                             <button
