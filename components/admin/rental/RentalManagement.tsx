@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -8,6 +8,8 @@ import {
   CheckCircle2,
   Clock3,
   DollarSign,
+  Loader2,
+  RefreshCw,
   Search,
   Settings,
   UserRound,
@@ -17,10 +19,12 @@ import {
 
 import RentalBatteryCard from './RentalBatteryCard';
 import RentalBatteryDetails from './RentalBatteryDetails';
+import { getRentalFleet } from '../../../services/adminService';
 
 import type {
   RentalBattery,
   RentalSession,
+  CurrentRental,
 } from './types';
 
 const RentalManagement: React.FC = () => {
@@ -33,88 +37,115 @@ const RentalManagement: React.FC = () => {
     'all' | RentalBattery['status']
   >('all');
 
-  /*
-   * ------------------------------------------------------------------
-   * MOCK RENTAL BATTERY DATA
-   * Replace this with your API/service later.
-   * ------------------------------------------------------------------
-   */
-  const batteries: RentalBattery[] = [
-    {
-      id: 'R-1082',
-      soc: 87,
-      slotId: 'SLOT-01',
-      status: 'available',
-      lastUpdated: '2 mins ago',
-
-      lastRental: {
-        renterName: 'Mary',
-        startTime: '2026-08-26T08:30:00',
-        endTime: '2026-08-26T10:15:00',
-        amount: 280,
-      },
-    },
-
-    {
-      id: 'R-1091',
-      soc: 62,
-      slotId: 'SLOT-02',
-      status: 'issued',
-      lastUpdated: '10 mins ago',
-
-      currentRental: {
-        sessionId: 'RS001',
-
-        renter: {
-          id: 'RIDER-001',
-          name: 'John',
-          phone: '0712345678',
-        },
-
-        startTime: '2026-08-27T11:30:00',
-        durationMinutes: 48,
-        startSoc: 94,
-        currentSoc: 62,
-        rentalEnergy: 240,
-        rentalTime: 100,
-        totalAmount: 340,
-      },
-
-      lastRental: {
-        renterName: 'Alice',
-        startTime: '2026-08-25T09:00:00',
-        endTime: '2026-08-25T10:20:00',
-        amount: 300,
-      },
-    },
-
-    {
-      id: 'R-1105',
-      soc: 40,
-      slotId: 'SLOT-03',
-      status: 'charging',
-      lastUpdated: '1 min ago',
-    },
-  ];
+  const [batteries, setBatteries] = useState<RentalBattery[]>([]);
+  const [sessions, setSessions] = useState<RentalSession[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   /*
-   * ------------------------------------------------------------------
-   * MOCK RENTAL SESSIONS
-   * ------------------------------------------------------------------
+   * Format an ISO timestamp into a short human-readable "updated" label.
    */
-  const sessions: RentalSession[] = [
-    {
-      id: 'RS001',
-      riderName: 'John',
-      ownBatteryId: 'OWN-001',
-      rentalBatteryId: 'R-1091',
-      startSoc: 94,
-      currentSoc: 62,
-      durationMinutes: 48,
-      amount: 340,
-      status: 'active',
-    },
-  ];
+  const formatUpdated = useCallback((value?: string) => {
+    if (!value) return 'N/A';
+    const then = new Date(value).getTime();
+    const diffMs = Date.now() - then;
+    if (diffMs < 0) return 'just now';
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins} min ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours / 24)}d ago`;
+  }, []);
+
+  /*
+   * Build the fleet view from GET /admin/rentals/fleet.
+   */
+  const loadFleet = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const fleet = await getRentalFleet();
+
+      const fleetBatteries: RentalBattery[] = [];
+      const fleetSessions: RentalSession[] = [];
+
+      /*
+       * Batteries currently out with a user.
+       */
+      for (const issued of fleet.issued) {
+        const currentRental: CurrentRental = {
+          sessionId: String(issued.sessionId),
+          renter: {
+            id: issued.user.email || issued.user.phone || '',
+            name: issued.user.name || issued.user.email || 'Rider',
+            phone: issued.user.phone || '',
+          },
+          startTime: issued.rentedAt,
+          durationMinutes: 0,
+          startSoc: 0,
+          currentSoc: 0,
+          rentalEnergy: 0,
+          rentalTime: 0,
+          totalAmount: 0,
+        };
+
+        fleetBatteries.push({
+          id: issued.batteryUid,
+          soc: 0,
+          slotId: `${issued.sourceBoothUid} / ${issued.sourceSlotIdentifier}`,
+          status: 'issued',
+          lastUpdated: formatUpdated(issued.rentedAt),
+          currentRental,
+        });
+
+        fleetSessions.push({
+          id: String(issued.sessionId),
+          riderName: issued.user.name || issued.user.email || 'Rider',
+          ownBatteryId: '',
+          rentalBatteryId: issued.batteryUid,
+          startSoc: 0,
+          currentSoc: 0,
+          durationMinutes: 0,
+          amount: 0,
+          status: issued.state === 'RETURNED'
+            ? 'completed'
+            : 'active',
+        });
+      }
+
+      /*
+       * Batteries sitting in a booth slot (rental pool).
+       */
+      for (const inSlot of fleet.inSlots) {
+        fleetBatteries.push({
+          id: inSlot.batteryUid,
+          soc: inSlot.chargeLevel ?? 0,
+          slotId: `${inSlot.boothUid} / ${inSlot.slotIdentifier}`,
+          status: inSlot.chargeLevel !== null && inSlot.chargeLevel < 30
+            ? 'charging'
+            : 'available',
+          lastUpdated: 'Now',
+        });
+      }
+
+      setBatteries(fleetBatteries);
+      setSessions(fleetSessions);
+    } catch (err) {
+      setError(
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+        'Failed to load the rental fleet.'
+      );
+      setBatteries([]);
+      setSessions([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [formatUpdated]);
+
+  useEffect(() => {
+    loadFleet();
+  }, [loadFleet]);
 
   /*
    * ------------------------------------------------------------------
@@ -264,6 +295,16 @@ const RentalManagement: React.FC = () => {
 
             <button
               type="button"
+              onClick={loadFleet}
+              disabled={loading}
+              className="inline-flex items-center gap-2 rounded-xl border border-gray-700 bg-gray-900 px-4 py-2.5 text-sm font-semibold text-gray-200 transition hover:border-gray-600 hover:bg-gray-800 disabled:opacity-50"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+
+            <button
+              type="button"
               className="inline-flex items-center gap-2 rounded-xl border border-gray-700 bg-gray-900 px-4 py-2.5 text-sm font-semibold text-gray-200 transition hover:border-gray-600 hover:bg-gray-800"
             >
               <Settings className="h-4 w-4" />
@@ -273,9 +314,36 @@ const RentalManagement: React.FC = () => {
           </div>
         </div>
 
-        {/* =========================================================
-            BATTERY OVERVIEW
-        ========================================================== */}
+        {/* Loading / Error state */}
+        {loading && !error && (
+          <div className="flex items-center justify-center rounded-2xl border border-gray-800 bg-gray-900 py-16">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="h-8 w-8 animate-spin text-indigo-400" />
+              <p className="text-sm text-gray-500">Loading rental fleet...</p>
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-red-500/30 bg-red-500/5 p-5">
+            <div className="flex items-center gap-3">
+              <XCircle className="h-6 w-6 text-red-400" />
+              <div>
+                <p className="text-sm font-semibold text-red-300">
+                  Could not load the rental fleet
+                </p>
+                <p className="text-sm text-gray-500">{error}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={loadFleet}
+              className="rounded-lg border border-red-500/40 px-3 py-2 text-xs font-semibold text-red-300 transition hover:bg-red-500/10"
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
 
