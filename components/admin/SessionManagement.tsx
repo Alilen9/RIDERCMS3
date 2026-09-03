@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { getSessions, AdminSession, SessionFilters, deleteSession } from '../../services/adminService';
 import ConfirmationModal from './ConfirmationModal';
 import SessionDetailView from './SessionDetailView';
+import RetryPaymentView from './payment/RetryPaymentView';
 import SessionFiltersBar from '../ui/filters/SessionFiltersBar';
 import { Phone, MessageCircle } from 'lucide-react';
 import { format } from 'date-fns';
@@ -32,6 +33,7 @@ const SessionManagement: React.FC<SessionManagementProps> = ({ onNavigateToBooth
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(filters.searchTerm);
   const [showSessionDetail, setShowSessionDetail] = useState(false);
   const [sessionForDetails, setSessionForDetails] = useState<AdminSession | null>(null);
+  const [showRetryPayment, setShowRetryPayment] = useState(false);
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
     title: string;
@@ -148,7 +150,16 @@ const SessionManagement: React.FC<SessionManagementProps> = ({ onNavigateToBooth
 
   return (
     <div className="animate-fade-in">
-      {showSessionDetail && sessionForDetails ? (
+      {showRetryPayment && sessionForDetails ? (
+        <RetryPaymentView
+          session={sessionForDetails}
+          onBack={() => setShowRetryPayment(false)}
+          onDone={() => {
+            setShowRetryPayment(false);
+            handleRefresh();
+          }}
+        />
+      ) : showSessionDetail && sessionForDetails ? (
         <SessionDetailView
           session={sessionForDetails}
           onBack={handleCloseDetail}
@@ -160,6 +171,11 @@ const SessionManagement: React.FC<SessionManagementProps> = ({ onNavigateToBooth
             toast('Refund functionality coming soon', {
               icon: '🔧',
             });
+          }}
+          onRetryPayment={(session) => {
+            setSessionForDetails(session);
+            setShowSessionDetail(false);
+            setShowRetryPayment(true);
           }}
         />
       ) : (
@@ -262,7 +278,18 @@ const SessionManagement: React.FC<SessionManagementProps> = ({ onNavigateToBooth
                               View
                             </button>
 
-
+                            {session.sessionType === 'withdrawal' && session.status === 'failed' && (
+                              <button
+                                onClick={() => {
+                                  setSessionForDetails(session);
+                                  setShowSessionDetail(false);
+                                  setShowRetryPayment(true);
+                                }}
+                                className="text-emerald-400 hover:text-emerald-300 text-xs font-semibold hover:underline"
+                              >
+                                Retry Payment
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
