@@ -600,3 +600,57 @@ export const getSessions = async (
     throw error;
   }
 };
+
+/**
+ * A rental battery that is currently out with a user.
+ * GET /api/admin/rentals/fleet -> `issued`
+ */
+export interface RentalFleetIssued {
+  batteryUid: string;
+  state: 'ISSUED' | 'RETURNED';
+  sessionId: number;
+  rentedAt: string;
+  sourceBoothUid: string;
+  sourceSlotIdentifier: string;
+  user: {
+    name: string;
+    phone: string;
+    email: string;
+  };
+}
+
+/**
+ * A rental-pool battery sitting in a booth slot.
+ * GET /api/admin/rentals/fleet -> `inSlots`
+ */
+export interface RentalFleetInSlot {
+  batteryUid: string;
+  state: 'IN_SLOT';
+  boothUid: string;
+  slotIdentifier: string;
+  chargeLevel: number | null;
+  slotStatus: string;
+}
+
+/**
+ * Response from GET /api/admin/rentals/fleet.
+ */
+export interface RentalFleetResponse {
+  total: number;
+  issued: RentalFleetIssued[];
+  inSlots: RentalFleetInSlot[];
+}
+
+/**
+ * Fetches every rental-pool battery and its current location
+ * (out with a user, or sitting in a booth slot).
+ */
+export const getRentalFleet = async (): Promise<RentalFleetResponse> => {
+  try {
+    const response = await apiClient.get<RentalFleetResponse>('/admin/rentals/fleet');
+    return response.data;
+  } catch (error) {
+    console.error('Failed to fetch rental fleet:', error);
+    throw error;
+  }
+};
