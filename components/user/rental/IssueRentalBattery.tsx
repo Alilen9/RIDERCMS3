@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from "react";
+import { Html5Qrcode } from "html5-qrcode";
 
 interface IssueRentalBatteryProps {
   batteryId: string;
@@ -13,335 +14,328 @@ const IssueRentalBattery: React.FC<IssueRentalBatteryProps> = ({
   onUnlock,
   onBack,
 }) => {
-  return (
-    <div className="min-h-full animate-fade-in px-4 py-6 sm:px-6">
-      <div className="max-w-2xl mx-auto">
+  const scannerRef = useRef<Html5Qrcode | null>(null);
 
-        {/* Back */}
+  const [scanning, setScanning] = useState(false);
+  const [verified, setVerified] = useState(false);
+  const [error, setError] = useState("");
+
+  const stopScanner = async () => {
+    const scanner = scannerRef.current;
+
+    if (!scanner) {
+      setScanning(false);
+      return;
+    }
+
+    try {
+      await scanner.stop();
+    } catch (error) {
+      console.log("Scanner already stopped");
+    }
+
+    try {
+      await scanner.clear();
+    } catch (error) {
+      console.log("Scanner already cleared");
+    }
+
+    scannerRef.current = null;
+    setScanning(false);
+  };
+
+  const startScanner = async () => {
+    setError("");
+    setVerified(false);
+    setScanning(true);
+
+    try {
+      const scanner = new Html5Qrcode("rental-battery-scanner");
+
+      scannerRef.current = scanner;
+
+      await scanner.start(
+        { facingMode: "environment" },
+        {
+          fps: 10,
+          qrbox: {
+            width: 250,
+            height: 250,
+          },
+        },
+        async (decodedText) => {
+          const scannedBatteryId = decodedText.trim();
+
+          console.log("Scanned:", scannedBatteryId);
+          console.log("Expected:", batteryId);
+
+          if (
+            scannedBatteryId.toLowerCase() ===
+            batteryId.trim().toLowerCase()
+          ) {
+            setVerified(true);
+            setError("");
+
+            await stopScanner();
+          } else {
+            setError(
+              `Wrong battery scanned. Expected ${batteryId}, but scanned ${scannedBatteryId}.`
+            );
+          }
+        },
+        () => {
+          // QR code not detected yet.
+        }
+      );
+    } catch (error) {
+      console.error("Camera error:", error);
+
+      setScanning(false);
+      scannerRef.current = null;
+
+      setError(
+        "Could not access the camera. Please allow camera permission and try again."
+      );
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      const scanner = scannerRef.current;
+
+      if (scanner) {
+        scanner
+          .stop()
+          .then(() => scanner.clear())
+          .catch(() => { });
+      }
+    };
+  }, []);
+
+  const handleUnlock = () => {
+    if (!verified) {
+      setError(
+        "You must scan and verify the rental battery before unlocking it."
+      );
+      return;
+    }
+
+    onUnlock();
+  };
+
+  const handleBack = async () => {
+    await stopScanner();
+    onBack();
+  };
+
+  return (
+    <div className="min-h-full px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-2xl">
+
+        {/* Back button */}
         <button
-          onClick={onBack}
-          className="group flex items-center gap-2 text-sm font-medium text-gray-400 hover:text-white transition-colors mb-10"
+          onClick={handleBack}
+          className="mb-8 flex items-center gap-2 text-sm font-medium text-gray-400 transition hover:text-white"
         >
-          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-gray-800 border border-gray-700 group-hover:bg-gray-700 group-hover:border-gray-600 transition-all">
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M15 19l-7-7 7-7"
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-700 bg-gray-800">
+            ←
           </span>
 
           Back
         </button>
 
         {/* Header */}
-        <div className="text-center mb-8">
+        <div className="mb-8 text-center">
 
-          <div className="relative inline-flex mb-6">
-
-            <div className="absolute inset-0 rounded-full bg-indigo-500/20 blur-2xl" />
-
-            <div className="relative w-24 h-24 rounded-full bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center">
-
-              <svg
-                className="w-11 h-11 text-indigo-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <rect
-                  x="3"
-                  y="7"
-                  width="16"
-                  height="10"
-                  rx="2"
-                  strokeWidth={1.8}
-                />
-
-                <path
-                  d="M21 10v4"
-                  strokeWidth={1.8}
-                  strokeLinecap="round"
-                />
-
-                <path
-                  d="M7 10v4M10 10v4M13 10v4"
-                  strokeWidth={1.8}
-                  strokeLinecap="round"
-                />
-              </svg>
-
-            </div>
+          <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full border border-indigo-500/30 bg-indigo-500/10">
+            <span className="text-4xl">
+              🔋
+            </span>
           </div>
 
-          <p className="text-xs uppercase tracking-[0.2em] text-indigo-400 font-semibold mb-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-indigo-400">
             Rental Battery
           </p>
 
-          <h1 className="text-3xl sm:text-4xl font-bold text-white">
-            Battery Ready
+          <h1 className="text-3xl font-bold text-white sm:text-4xl">
+            Verify Battery
           </h1>
 
-          <p className="text-gray-400 mt-3 max-w-md mx-auto leading-relaxed">
-            Your selected battery is ready. Unlock the compartment
-            to collect it and begin your rental session.
+          <p className="mx-auto mt-3 max-w-md text-gray-400">
+            Scan the QR code on the assigned rental battery before unlocking it.
           </p>
-
         </div>
 
-        {/* Battery card */}
-        <div className="relative overflow-hidden rounded-[28px] bg-gray-900/80 border border-gray-800">
+        {/* Main card */}
+        <div className="overflow-hidden rounded-3xl border border-gray-800 bg-gray-900">
 
-          {/* Glow */}
-          <div className="absolute -top-24 -right-24 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl" />
+          <div className="p-6 sm:p-8">
 
-          <div className="relative p-6 sm:p-7">
+            {/* Battery information */}
+            <div className="mb-6 flex items-center justify-between">
 
-            {/* Selected battery */}
-            <div className="flex items-center justify-between mb-7">
+              <div>
+                <p className="text-xs uppercase tracking-wider text-gray-500">
+                  Assigned Battery
+                </p>
 
-              <div className="flex items-center gap-4">
-
-                <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
-
-                  <svg
-                    className="w-7 h-7 text-indigo-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <rect
-                      x="3"
-                      y="7"
-                      width="16"
-                      height="10"
-                      rx="2"
-                      strokeWidth={1.8}
-                    />
-
-                    <path
-                      d="M21 10v4"
-                      strokeWidth={1.8}
-                      strokeLinecap="round"
-                    />
-                  </svg>
-
-                </div>
-
-                <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wider">
-                    Selected battery
-                  </p>
-
-                  <p className="text-lg font-bold text-white mt-1">
-                    {batteryId}
-                  </p>
-                </div>
-
+                <p className="mt-1 text-2xl font-bold text-white">
+                  {batteryId}
+                </p>
               </div>
 
-              <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-xs font-semibold text-emerald-400">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                Ready
-              </span>
-
+              <div
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold ${verified
+                    ? "bg-emerald-500/10 text-emerald-400"
+                    : "bg-yellow-500/10 text-yellow-400"
+                  }`}
+              >
+                {verified ? "✓ Verified" : "Awaiting Scan"}
+              </div>
             </div>
 
-            {/* Battery level */}
-            <div className="rounded-2xl bg-gray-950/60 border border-gray-800 p-5">
+            {/* Battery SOC */}
+            <div className="rounded-2xl border border-gray-800 bg-gray-950/60 p-5">
 
-              <div className="flex items-end justify-between mb-3">
+              <div className="mb-3 flex items-end justify-between">
 
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wider">
-                    State of charge
+                  <p className="text-xs uppercase tracking-wider text-gray-500">
+                    State of Charge
                   </p>
 
-                  <p className="text-3xl font-bold text-emerald-400 mt-1">
+                  <p className="mt-1 text-3xl font-bold text-emerald-400">
                     {soc}%
                   </p>
                 </div>
 
                 <span className="text-xs text-gray-600">
-                  Ready for use
+                  Ready
                 </span>
-
               </div>
 
-              {/* Battery level */}
-              <div className="h-3 rounded-full bg-gray-800 overflow-hidden">
+              <div className="h-3 overflow-hidden rounded-full bg-gray-800">
 
                 <div
-                  className={`
-                    h-full rounded-full transition-all
-                    ${soc >= 70
-                      ? 'bg-emerald-400'
-                      : soc >= 40
-                        ? 'bg-yellow-400'
-                        : 'bg-orange-400'
-                    }
-                  `}
+                  className="h-full rounded-full bg-emerald-400 transition-all"
                   style={{
                     width: `${Math.min(Math.max(soc, 0), 100)}%`,
                   }}
                 />
 
               </div>
-
-              <div className="flex justify-between mt-2">
-                <span className="text-[10px] text-gray-600">
-                  0%
-                </span>
-
-                <span className="text-[10px] text-gray-600">
-                  100%
-                </span>
-              </div>
-
             </div>
 
-            {/* Unlock instruction */}
-            <div className="mt-5 rounded-2xl bg-yellow-500/[0.06] border border-yellow-500/15 p-5">
+            {/* Scanner */}
+            {!verified && (
+              <div className="mt-6 rounded-2xl border border-indigo-500/20 bg-indigo-500/5 p-5">
 
-              <div className="flex items-start gap-4">
+                <div className="text-center">
 
-                <div className="shrink-0 w-10 h-10 rounded-xl bg-yellow-500/10 border border-yellow-500/15 flex items-center justify-center">
-
-                  <svg
-                    className="w-5 h-5 text-yellow-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M7 11V7a5 5 0 0110 0v4"
-                      strokeWidth={1.8}
-                      strokeLinecap="round"
-                    />
-
-                    <rect
-                      x="4"
-                      y="11"
-                      width="16"
-                      height="10"
-                      rx="2"
-                      strokeWidth={1.8}
-                    />
-
-                    <circle
-                      cx="12"
-                      cy="16"
-                      r="1"
-                      fill="currentColor"
-                    />
-                  </svg>
-
-                </div>
-
-                <div>
-
-                  <p className="text-sm font-semibold text-yellow-300">
-                    Ready to unlock
+                  <p className="font-semibold text-indigo-300">
+                    Scan Rental Battery
                   </p>
 
-                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-                    The battery compartment will unlock when you
-                    continue. Remove only the selected battery.
+                  <p className="mt-1 text-xs text-gray-500">
+                    Scan the QR code printed on battery{" "}
+                    <strong>{batteryId}</strong>.
                   </p>
 
-                </div>
+                  {/* Camera */}
+                  {scanning && (
+                    <div className="mt-5 overflow-hidden rounded-2xl border border-gray-700 bg-black">
 
+                      <div
+                        id="rental-battery-scanner"
+                        className="w-full"
+                      />
+
+                    </div>
+                  )}
+
+                  {/* Start scanner */}
+                  {!scanning && (
+                    <button
+                      type="button"
+                      onClick={startScanner}
+                      className="mt-5 w-full rounded-2xl bg-indigo-600 py-4 font-semibold text-white transition hover:bg-indigo-500"
+                    >
+                      📷 Scan Rental Battery
+                    </button>
+                  )}
+
+                  {/* Stop scanner */}
+                  {scanning && (
+                    <button
+                      type="button"
+                      onClick={stopScanner}
+                      className="mt-4 w-full rounded-2xl bg-gray-800 py-3 font-semibold text-gray-300 transition hover:bg-gray-700"
+                    >
+                      Stop Scanner
+                    </button>
+                  )}
+
+                  {/* Error */}
+                  {error && (
+                    <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-left">
+
+                      <p className="text-sm text-red-400">
+                        ⚠️ {error}
+                      </p>
+
+                    </div>
+                  )}
+
+                </div>
               </div>
+            )}
 
-            </div>
+            {/* Successfully verified */}
+            {verified && (
+              <div className="mt-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-5">
+
+                <div className="flex items-center gap-4">
+
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10 text-2xl">
+                    ✓
+                  </div>
+
+                  <div>
+                    <p className="font-semibold text-emerald-300">
+                      Battery Verified
+                    </p>
+
+                    <p className="mt-1 text-xs text-gray-500">
+                      QR code matches assigned battery {batteryId}.
+                    </p>
+                  </div>
+
+                </div>
+              </div>
+            )}
 
             {/* Unlock button */}
             <button
-              onClick={onUnlock}
-              className="group relative w-full mt-6 overflow-hidden rounded-2xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-semibold py-4 transition-all shadow-lg shadow-indigo-600/10 hover:shadow-indigo-600/20"
+              type="button"
+              onClick={handleUnlock}
+              disabled={!verified}
+              className={`mt-6 w-full rounded-2xl py-4 font-bold transition ${verified
+                  ? "bg-indigo-600 text-white hover:bg-indigo-500"
+                  : "cursor-not-allowed bg-gray-800 text-gray-600"
+                }`}
             >
-
-              <span className="relative flex items-center justify-center gap-3">
-
-                <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-white/10">
-
-                  <svg
-                    className="w-4 h-4 group-hover:rotate-[-10deg] transition-transform"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M7 11V7a5 5 0 0110 0v2"
-                      strokeWidth={1.8}
-                      strokeLinecap="round"
-                    />
-
-                    <rect
-                      x="4"
-                      y="11"
-                      width="16"
-                      height="10"
-                      rx="2"
-                      strokeWidth={1.8}
-                    />
-                  </svg>
-
-                </span>
-
-                Unlock & Collect Battery
-
-                <svg
-                  className="w-5 h-5 group-hover:translate-x-1 transition-transform"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    d="M5 12h14M13 6l6 6-6 6"
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-
-              </span>
-
+              {verified
+                ? "🔓 Unlock & Collect Battery"
+                : "🔒 Scan Battery to Unlock"}
             </button>
 
           </div>
-
         </div>
 
-        {/* Security footer */}
-        <div className="flex items-center justify-center gap-2 mt-5">
-
-          <svg
-            className="w-4 h-4 text-gray-600"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7l7-4z"
-              strokeWidth={1.6}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-
-          <p className="text-[11px] text-gray-600">
-            Your own battery remains secured in the charging station.
-          </p>
-
-        </div>
+        {/* Security message */}
+        <p className="mt-5 text-center text-xs text-gray-600">
+          The rental battery cannot be unlocked until its QR code is verified.
+        </p>
 
       </div>
     </div>

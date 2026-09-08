@@ -45,6 +45,12 @@ type ViewState =
   | 'scan_to_release'
   | 'collect_guide';
 
+interface RentalBatteryOption {
+  id: string;
+  soc: number;
+  status?: string;
+}
+
 const UserDashboard: React.FC<UserDashboardProps> = ({
   user,
   onLogout,
@@ -116,11 +122,38 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
   const [showAddMorePrompt, setShowAddMorePrompt] =
     useState(false);
 
+  /*
+   * ============================================================
+   * RENTAL AVAILABILITY
+   * ============================================================
+   */
+
+  const [rentalBatteries, setRentalBatteries] =
+    useState<RentalBatteryOption[]>([]);
+
+  const [checkingRentalAvailability, setCheckingRentalAvailability] =
+    useState(false);
+
+  const [rentalUnavailable, setRentalUnavailable] =
+    useState(false);
+
+  /*
+   * ============================================================
+   * REFS
+   * ============================================================
+   */
+
   const depositingSessionIdRef =
     useRef<number | null>(null);
 
   const depositingSlotRef =
     useRef<string | null>(null);
+
+  /*
+   * ============================================================
+   * ACTIVE BATTERY
+   * ============================================================
+   */
 
   const activeEntry =
     activeBatteryIndex >= 0 &&
@@ -206,6 +239,193 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
     },
     []
   );
+
+  /*
+   * ============================================================
+   * RENTAL AVAILABILITY
+   *
+   * The user NEVER selects a rental battery.
+   *
+   * We automatically select the available battery
+   * with the highest SOC.
+   * ============================================================
+   */
+
+  const loadRentalBatteries = useCallback(
+    async (): Promise<RentalBatteryOption[]> => {
+      try {
+        const response =
+          await boothService.getAvailableRentalBatteries();
+
+        const batteries =
+          Array.isArray(response)
+            ? response
+            : [];
+
+        const available =
+          batteries.filter(
+            (battery: RentalBatteryOption) =>
+              battery.status === undefined ||
+              battery.status === 'available'
+          );
+
+        setRentalBatteries(
+          available
+        );
+
+        setRentalUnavailable(
+          available.length === 0
+        );
+
+        return available;
+      } catch (err) {
+        console.error(
+          'Failed to load rental batteries:',
+          err
+        );
+
+        setRentalBatteries([]);
+        setRentalUnavailable(true);
+
+        return [];
+      }
+    },
+    []
+  );
+
+  /*
+   * ============================================================
+   * OPEN RENTAL
+   *
+   * 1. Check availability
+   * 2. Find highest SOC
+   * 3. Automatically assign it
+   * 4. Open rental flow
+   * ============================================================
+   */
+
+  const openRental = useCallback(
+    async () => {
+      if (checkingRentalAvailability) {
+        return;
+      }
+
+      setCheckingRentalAvailability(true);
+      setRentalUnavailable(false);
+
+      try {
+        const available =
+          await loadRentalBatteries();
+
+        if (
+          !available ||
+          available.length === 0
+        ) {
+          setRentalUnavailable(true);
+
+          toast.error(
+            'No rental batteries are available right now.'
+          );
+
+          return;
+        }
+
+        /*
+         * Automatically select the battery
+         * with the highest SOC.
+         */
+        const highestSocBattery =
+          [...available].sort(
+            (a, b) =>
+              Number(b.soc) -
+              Number(a.soc)
+          )[0];
+
+        if (!highestSocBattery) {
+          setRentalUnavailable(true);
+
+          toast.error(
+            'No rental batteries are available right now.'
+          );
+
+          return;
+        }
+
+        /*
+         * Send the automatically assigned
+         * battery to the rental page.
+         *
+         * The user does not select it.
+         */
+        navigate('/rental', {
+          state: {
+            assignedBattery:
+              highestSocBattery,
+          },
+        });
+      } catch (err) {
+        console.error(
+          'Rental availability check failed:',
+          err
+        );
+
+        setRentalUnavailable(true);
+
+        toast.error(
+          'Unable to check rental battery availability.'
+        );
+      } finally {
+        setCheckingRentalAvailability(
+          false
+        );
+      }
+    },
+    [
+      checkingRentalAvailability,
+      loadRentalBatteries,
+      navigate,
+    ]
+  );
+
+  /*
+   * ============================================================
+   * RENTAL BUTTON
+   *
+   * One reusable button instead of duplicate rental button code.
+   * ============================================================
+   */
+
+  const renderRentalButton = (
+    extraClassName = ''
+  ) => {
+    const isUnavailable =
+      rentalUnavailable;
+
+    const isChecking =
+      checkingRentalAvailability;
+
+    return (
+      <button
+        onClick={openRental}
+        disabled={
+          isUnavailable ||
+          isChecking
+        }
+        className={`w-full text-white font-semibold py-4 rounded-xl transition-colors ${isUnavailable
+            ? 'bg-red-700/70 cursor-not-allowed border border-red-500'
+            : isChecking
+              ? 'bg-gray-600 cursor-wait'
+              : 'bg-indigo-600 hover:bg-indigo-700'
+          } ${extraClassName}`}
+      >
+        {isChecking
+          ? 'Checking Rental Batteries...'
+          : isUnavailable
+            ? 'No Rental Batteries Available'
+            : 'Rent a Battery'}
+      </button>
+    );
+  };
 
   /*
    * ============================================================
@@ -577,9 +797,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                               entry.sessionId
                             ) ||
                             s.slotIdentifier ===
-                            entry
-                              .slot
-                              .identifier
+                            entry.slot.identifier
                         );
 
                       if (!updated) {
@@ -675,9 +893,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                             entry.sessionId
                           ) ||
                           s.slotIdentifier ===
-                          entry
-                            .slot
-                            .identifier
+                          entry.slot.identifier
                       );
 
                     if (!updated) {
@@ -941,7 +1157,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
               'Network error: Cannot connect to the station.'
             );
           } else if (
-            statusCode === 409
+            statusCode ===
+            409
           ) {
             if (
               serverMessage?.includes(
@@ -1305,22 +1522,6 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
 
       setView('scan_qr');
     };
-
-  /*
-   * ============================================================
-   * RENTAL
-   *
-   * IMPORTANT:
-   * The rental process is now OUTSIDE this dashboard.
-   *
-   * APIs are NOT needed yet.
-   * RentalPage will handle the frontend/mock flow.
-   * ============================================================
-   */
-
-  const openRental = () => {
-    navigate('/rental');
-  };
 
   /*
    * ============================================================
@@ -1717,18 +1918,9 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                       Add Another Battery
                     </button>
 
-                    {/* ==========================================
-                        RENTAL ENTRY POINT
-                        ========================================== */}
+                    {/* RENTAL BUTTON */}
 
-                    <button
-                      onClick={
-                        openRental
-                      }
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-4 rounded-xl"
-                    >
-                      🔋 Rent a Battery
-                    </button>
+                    {renderRentalButton()}
 
                     <button
                       onClick={() => {
@@ -1810,18 +2002,11 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                 + Add Another Battery
               </button>
 
-              {/* ================================================
-                  RENTAL ENTRY POINT
-                  ================================================ */}
+              {/* RENTAL BUTTON */}
 
-              <button
-                onClick={
-                  openRental
-                }
-                className="mt-3 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-4 rounded-xl"
-              >
-                🔋 Rent a Battery
-              </button>
+              {renderRentalButton(
+                'mt-3'
+              )}
             </>
           )}
 
