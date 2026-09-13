@@ -3,7 +3,7 @@ export type RentalBatteryStatus =
   | 'issued'
   | 'charging'
   | 'maintenance'
-  | 'disabled';
+  | 'withdrawn';
 
 export interface RentalRenter {
   id: string;

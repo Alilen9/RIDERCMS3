@@ -1,19 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Activity,
   AlertTriangle,
   BatteryCharging,
   BatteryFull,
   BatteryMedium,
   CheckCircle2,
-  Clock3,
-  DollarSign,
   Loader2,
+  Plus,
   RefreshCw,
   Search,
   Settings,
   UserRound,
   Wrench,
+  X,
   XCircle,
 } from 'lucide-react';
 
@@ -23,7 +22,6 @@ import { getRentalFleet } from '../../../services/adminService';
 
 import type {
   RentalBattery,
-  RentalSession,
   CurrentRental,
 } from './types';
 
@@ -34,54 +32,124 @@ const RentalManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
 
   const [statusFilter, setStatusFilter] = useState<
-    'all' | RentalBattery['status']
+    'all' | RentalBattery['status'] | 'withdrawn'
   >('all');
 
   const [batteries, setBatteries] = useState<RentalBattery[]>([]);
-  const [sessions, setSessions] = useState<RentalSession[]>([]);
+
   const [loading, setLoading] = useState(true);
+
   const [error, setError] = useState<string | null>(null);
 
   /*
-   * Format an ISO timestamp into a short human-readable "updated" label.
+   * ============================================================
+   * ADD BATTERY MODAL
+   * ============================================================
    */
+
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  const [addingBattery, setAddingBattery] = useState(false);
+
+  const [addForm, setAddForm] = useState({
+    batteryUid: '',
+    batteryType: 'E-Bike',
+    chargeLevel: '100',
+    boothUid: '',
+    slotIdentifier: '',
+    notes: '',
+  });
+
+  /*
+   * ============================================================
+   * WITHDRAW BATTERY MODAL
+   * ============================================================
+   */
+
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+
+  const [withdrawBattery, setWithdrawBattery] =
+    useState<RentalBattery | null>(null);
+
+  const [withdrawReason, setWithdrawReason] = useState('');
+
+  const [withdrawNotes, setWithdrawNotes] = useState('');
+
+  const [withdrawingBattery, setWithdrawingBattery] =
+    useState(false);
+
+  /*
+   * ============================================================
+   * FORMAT DATE
+   * ============================================================
+   */
+
   const formatUpdated = useCallback((value?: string) => {
     if (!value) return 'N/A';
+
     const then = new Date(value).getTime();
+
     const diffMs = Date.now() - then;
+
     if (diffMs < 0) return 'just now';
+
     const mins = Math.floor(diffMs / 60000);
+
     if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins} min ago`;
+
+    if (mins < 60) {
+      return `${mins} min ago`;
+    }
+
     const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
+
+    if (hours < 24) {
+      return `${hours}h ago`;
+    }
+
     return `${Math.floor(hours / 24)}d ago`;
   }, []);
 
   /*
-   * Build the fleet view from GET /admin/rentals/fleet.
+   * ============================================================
+   * LOAD RENTAL FLEET
+   * ============================================================
    */
+
   const loadFleet = useCallback(async () => {
     setLoading(true);
     setError(null);
+
     try {
       const fleet = await getRentalFleet();
 
       const fleetBatteries: RentalBattery[] = [];
-      const fleetSessions: RentalSession[] = [];
 
       /*
-       * Batteries currently out with a user.
+       * Batteries currently issued to riders
        */
       for (const issued of fleet.issued) {
         const currentRental: CurrentRental = {
           sessionId: String(issued.sessionId),
+
           renter: {
-            id: issued.user.email || issued.user.phone || '',
-            name: issued.user.name || issued.user.email || 'Rider',
-            phone: issued.user.phone || '',
+            id:
+              issued.user.email ||
+              issued.user.phone ||
+              '',
+
+            name:
+              issued.user.name ||
+              issued.user.email ||
+              'Rider',
+
+            phone:
+              issued.user.phone ||
+              '',
           },
+
           startTime: issued.rentedAt,
+
           durationMinutes: 0,
           startSoc: 0,
           currentSoc: 0,
@@ -92,65 +160,78 @@ const RentalManagement: React.FC = () => {
 
         fleetBatteries.push({
           id: issued.batteryUid,
-          soc: 0,
-          slotId: `${issued.sourceBoothUid} / ${issued.sourceSlotIdentifier}`,
-          status: 'issued',
-          lastUpdated: formatUpdated(issued.rentedAt),
-          currentRental,
-        });
 
-        fleetSessions.push({
-          id: String(issued.sessionId),
-          riderName: issued.user.name || issued.user.email || 'Rider',
-          ownBatteryId: '',
-          rentalBatteryId: issued.batteryUid,
-          startSoc: 0,
-          currentSoc: 0,
-          durationMinutes: 0,
-          amount: 0,
-          status: issued.state === 'RETURNED'
-            ? 'completed'
-            : 'active',
+          soc: 0,
+
+          slotId:
+            `${issued.sourceBoothUid} / ${issued.sourceSlotIdentifier}`,
+
+          status: 'issued',
+
+          lastUpdated: formatUpdated(issued.rentedAt),
+
+          currentRental,
         });
       }
 
       /*
-       * Batteries sitting in a booth slot (rental pool).
+       * Batteries currently inside booth slots
        */
       for (const inSlot of fleet.inSlots) {
         fleetBatteries.push({
           id: inSlot.batteryUid,
+
           soc: inSlot.chargeLevel ?? 0,
-          slotId: `${inSlot.boothUid} / ${inSlot.slotIdentifier}`,
-          status: inSlot.chargeLevel !== null && inSlot.chargeLevel < 30
-            ? 'charging'
-            : 'available',
+
+          slotId:
+            `${inSlot.boothUid} / ${inSlot.slotIdentifier}`,
+
+          status:
+            inSlot.chargeLevel !== null &&
+              inSlot.chargeLevel < 30
+              ? 'charging'
+              : 'available',
+
           lastUpdated: 'Now',
         });
       }
 
       setBatteries(fleetBatteries);
-      setSessions(fleetSessions);
     } catch (err) {
-      setError(
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Failed to load the rental fleet.'
-      );
+      const message =
+        (
+          err as {
+            response?: {
+              data?: {
+                error?: string;
+              };
+            };
+          }
+        )?.response?.data?.error ||
+        'Failed to load the rental fleet.';
+
+      setError(message);
+
       setBatteries([]);
-      setSessions([]);
     } finally {
       setLoading(false);
     }
   }, [formatUpdated]);
+
+  /*
+   * ============================================================
+   * INITIAL LOAD
+   * ============================================================
+   */
 
   useEffect(() => {
     loadFleet();
   }, [loadFleet]);
 
   /*
-   * ------------------------------------------------------------------
+   * ============================================================
    * SUMMARY STATISTICS
-   * ------------------------------------------------------------------
+   * ============================================================
    */
 
   const totalBatteryCount = batteries.length;
@@ -171,39 +252,28 @@ const RentalManagement: React.FC = () => {
     (battery) => battery.status === 'maintenance'
   ).length;
 
-  const activeSessionCount = sessions.filter(
-    (session) => session.status === 'active'
+  const withdrawnCount = batteries.filter(
+    (battery) => battery.status === 'withdrawn'
   ).length;
 
-  const totalRevenue = sessions.reduce(
-    (total, session) => total + session.amount,
-    0
-  );
-
   /*
-   * In production this should come from the backend.
-   * For now, the mock sessions represent today's revenue.
-   */
-  const todaysRevenue = totalRevenue;
-
-  /*
-   * ------------------------------------------------------------------
-   * FILTERED BATTERIES
-   * ------------------------------------------------------------------
+   * ============================================================
+   * FILTER BATTERIES
+   * ============================================================
    */
 
   const filteredBatteries = useMemo(() => {
+    const search = searchTerm.toLowerCase().trim();
+
     return batteries.filter((battery) => {
       const matchesSearch =
-        battery.id
+        battery.id.toLowerCase().includes(search) ||
+        battery.slotId.toLowerCase().includes(search) ||
+        (
+          battery.currentRental?.renter.name || ''
+        )
           .toLowerCase()
-          .includes(searchTerm.toLowerCase()) ||
-        battery.slotId
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase()) ||
-        battery.currentRental?.renter.name
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase());
+          .includes(search);
 
       const matchesStatus =
         statusFilter === 'all' ||
@@ -211,50 +281,266 @@ const RentalManagement: React.FC = () => {
 
       return matchesSearch && matchesStatus;
     });
-  }, [searchTerm, statusFilter]);
+  }, [batteries, searchTerm, statusFilter]);
 
   /*
-   * ------------------------------------------------------------------
-   * ATTENTION REQUIRED
-   * ------------------------------------------------------------------
+   * ============================================================
+   * BATTERIES REQUIRING ATTENTION
+   * ============================================================
    */
 
   const attentionBatteries = batteries.filter((battery) => {
     return (
       battery.status === 'maintenance' ||
-      battery.soc <= 20
+      (
+        battery.status !== 'withdrawn' &&
+        battery.soc <= 20
+      )
     );
   });
 
   /*
-   * ------------------------------------------------------------------
-   * STATUS LABEL
-   * ------------------------------------------------------------------
+   * ============================================================
+   * ADD BATTERY
+   * ============================================================
    */
 
-  const getStatusLabel = (status: RentalBattery['status']) => {
-    switch (status) {
-      case 'available':
-        return 'Available';
+  const handleAddBattery = async (
+    event: React.FormEvent
+  ) => {
+    event.preventDefault();
 
-      case 'issued':
-        return 'Issued';
+    if (!addForm.batteryUid.trim()) {
+      setError('Battery ID is required.');
+      return;
+    }
 
-      case 'charging':
-        return 'Charging';
+    if (!addForm.boothUid.trim()) {
+      setError('Booth ID is required.');
+      return;
+    }
 
-      case 'maintenance':
-        return 'Maintenance';
+    if (!addForm.slotIdentifier.trim()) {
+      setError('Slot identifier is required.');
+      return;
+    }
 
-      default:
-        return status;
+    const chargeLevel = Number(addForm.chargeLevel);
+
+    if (
+      Number.isNaN(chargeLevel) ||
+      chargeLevel < 0 ||
+      chargeLevel > 100
+    ) {
+      setError('Charge level must be between 0 and 100.');
+      return;
+    }
+
+    setAddingBattery(true);
+    setError(null);
+
+    try {
+      /*
+       * ========================================================
+       * CONNECT YOUR BACKEND API HERE
+       * ========================================================
+       *
+       * Example:
+       *
+       * const createdBattery = await createRentalBattery({
+       *   batteryUid: addForm.batteryUid.trim(),
+       *   batteryType: addForm.batteryType,
+       *   chargeLevel,
+       *   boothUid: addForm.boothUid.trim(),
+       *   slotIdentifier: addForm.slotIdentifier.trim(),
+       *   notes: addForm.notes.trim(),
+       * });
+       *
+       * Then add the response to the fleet.
+       */
+
+      const newBattery: RentalBattery = {
+        id: addForm.batteryUid.trim(),
+
+        soc: chargeLevel,
+
+        slotId:
+          `${addForm.boothUid.trim()} / ${addForm.slotIdentifier.trim()}`,
+
+        status:
+          chargeLevel < 30
+            ? 'charging'
+            : 'available',
+
+        lastUpdated: 'Just now',
+      };
+
+      setBatteries((previous) => {
+        const alreadyExists = previous.some(
+          (battery) =>
+            battery.id.toLowerCase() ===
+            newBattery.id.toLowerCase()
+        );
+
+        if (alreadyExists) {
+          setError(
+            `Battery ${newBattery.id} already exists.`
+          );
+
+          return previous;
+        }
+
+        return [newBattery, ...previous];
+      });
+
+      setAddForm({
+        batteryUid: '',
+        batteryType: 'E-Bike',
+        chargeLevel: '100',
+        boothUid: '',
+        slotIdentifier: '',
+        notes: '',
+      });
+
+      setShowAddModal(false);
+    } catch (err) {
+      const message =
+        (
+          err as {
+            response?: {
+              data?: {
+                error?: string;
+              };
+            };
+          }
+        )?.response?.data?.error ||
+        'Failed to add rental battery.';
+
+      setError(message);
+    } finally {
+      setAddingBattery(false);
     }
   };
 
   /*
-   * ------------------------------------------------------------------
-   * IF A BATTERY IS SELECTED
-   * ------------------------------------------------------------------
+   * ============================================================
+   * OPEN WITHDRAW MODAL
+   * ============================================================
+   */
+
+  const openWithdrawModal = (
+    battery: RentalBattery
+  ) => {
+    /*
+     * A battery being used by a rider cannot be withdrawn.
+     */
+    if (battery.status === 'issued') {
+      setError(
+        'This battery cannot be withdrawn because it is currently issued to a rider.'
+      );
+
+      return;
+    }
+
+    if (battery.status === 'withdrawn') {
+      setError(
+        'This battery has already been withdrawn.'
+      );
+
+      return;
+    }
+
+    setWithdrawBattery(battery);
+
+    setWithdrawReason('');
+
+    setWithdrawNotes('');
+
+    setShowWithdrawModal(true);
+  };
+
+  /*
+   * ============================================================
+   * WITHDRAW BATTERY
+   * ============================================================
+   */
+
+  const handleWithdrawBattery = async (
+    event: React.FormEvent
+  ) => {
+    event.preventDefault();
+
+    if (!withdrawBattery) {
+      return;
+    }
+
+    if (!withdrawReason.trim()) {
+      setError('Please provide a withdrawal reason.');
+      return;
+    }
+
+    setWithdrawingBattery(true);
+    setError(null);
+
+    try {
+      /*
+       * ========================================================
+       * CONNECT YOUR BACKEND API HERE
+       * ========================================================
+       *
+       * Example:
+       *
+       * await withdrawRentalBattery(
+       *   withdrawBattery.id,
+       *   {
+       *     reason: withdrawReason.trim(),
+       *     notes: withdrawNotes.trim(),
+       *   }
+       * );
+       */
+
+      setBatteries((previous) =>
+        previous.map((battery) =>
+          battery.id === withdrawBattery.id
+            ? {
+              ...battery,
+              status: 'withdrawn',
+              lastUpdated: 'Just now',
+            }
+            : battery
+        )
+      );
+
+      setShowWithdrawModal(false);
+
+      setWithdrawBattery(null);
+
+      setWithdrawReason('');
+
+      setWithdrawNotes('');
+    } catch (err) {
+      const message =
+        (
+          err as {
+            response?: {
+              data?: {
+                error?: string;
+              };
+            };
+          }
+        )?.response?.data?.error ||
+        'Failed to withdraw rental battery.';
+
+      setError(message);
+    } finally {
+      setWithdrawingBattery(false);
+    }
+  };
+
+  /*
+   * ============================================================
+   * SELECTED BATTERY
+   * ============================================================
    */
 
   if (selectedBattery) {
@@ -266,13 +552,20 @@ const RentalManagement: React.FC = () => {
     );
   }
 
+  /*
+   * ============================================================
+   * PAGE
+   * ============================================================
+   */
+
   return (
     <div className="min-h-full bg-gray-950 px-4 py-6 sm:px-6 lg:px-8">
+
       <div className="mx-auto max-w-7xl space-y-6">
 
-        {/* =========================================================
+        {/* =====================================================
             PAGE HEADER
-        ========================================================== */}
+        ====================================================== */}
 
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 
@@ -286,12 +579,30 @@ const RentalManagement: React.FC = () => {
             </h1>
 
             <p className="mt-2 max-w-2xl text-sm text-gray-500">
-              Monitor rental batteries, active riders, battery usage,
-              returns and rental revenue.
+              Manage rental batteries, monitor battery status,
+              add new batteries, and withdraw batteries from
+              the rental fleet.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-3">
+
+            {/* ADD BATTERY */}
+
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setShowAddModal(true);
+              }}
+              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-500"
+            >
+              <Plus className="h-4 w-4" />
+
+              Add Rental Battery
+            </button>
+
+            {/* REFRESH */}
 
             <button
               type="button"
@@ -299,62 +610,92 @@ const RentalManagement: React.FC = () => {
               disabled={loading}
               className="inline-flex items-center gap-2 rounded-xl border border-gray-700 bg-gray-900 px-4 py-2.5 text-sm font-semibold text-gray-200 transition hover:border-gray-600 hover:bg-gray-800 disabled:opacity-50"
             >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw
+                className={`h-4 w-4 ${loading ? 'animate-spin' : ''
+                  }`}
+              />
+
               Refresh
             </button>
 
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 rounded-xl border border-gray-700 bg-gray-900 px-4 py-2.5 text-sm font-semibold text-gray-200 transition hover:border-gray-600 hover:bg-gray-800"
-            >
-              <Settings className="h-4 w-4" />
-              Rental Settings
-            </button>
 
           </div>
         </div>
 
-        {/* Loading / Error state */}
+        {/* =====================================================
+            LOADING
+        ====================================================== */}
+
         {loading && !error && (
           <div className="flex items-center justify-center rounded-2xl border border-gray-800 bg-gray-900 py-16">
+
             <div className="flex flex-col items-center gap-3">
+
               <Loader2 className="h-8 w-8 animate-spin text-indigo-400" />
-              <p className="text-sm text-gray-500">Loading rental fleet...</p>
+
+              <p className="text-sm text-gray-500">
+                Loading rental fleet...
+              </p>
+
             </div>
+
           </div>
         )}
+
+        {/* =====================================================
+            ERROR
+        ====================================================== */}
 
         {error && (
           <div className="flex items-center justify-between gap-4 rounded-2xl border border-red-500/30 bg-red-500/5 p-5">
+
             <div className="flex items-center gap-3">
+
               <XCircle className="h-6 w-6 text-red-400" />
+
               <div>
+
                 <p className="text-sm font-semibold text-red-300">
-                  Could not load the rental fleet
+                  Rental Management Error
                 </p>
-                <p className="text-sm text-gray-500">{error}</p>
+
+                <p className="text-sm text-gray-500">
+                  {error}
+                </p>
+
               </div>
+
             </div>
+
             <button
               type="button"
-              onClick={loadFleet}
-              className="rounded-lg border border-red-500/40 px-3 py-2 text-xs font-semibold text-red-300 transition hover:bg-red-500/10"
+              onClick={() => setError(null)}
+              className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-800 hover:text-white"
             >
-              Retry
+              <X className="h-4 w-4" />
             </button>
+
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        {/* =====================================================
+            BATTERY SUMMARY
+        ====================================================== */}
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
 
           {/* Total */}
+
           <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
+
             <div className="flex items-center justify-between">
+
               <p className="text-sm text-gray-500">
                 Total Batteries
               </p>
 
               <BatteryFull className="h-5 w-5 text-gray-500" />
+
             </div>
 
             <p className="mt-3 text-3xl font-bold text-white">
@@ -364,16 +705,21 @@ const RentalManagement: React.FC = () => {
             <p className="mt-1 text-xs text-gray-600">
               Rental fleet
             </p>
+
           </div>
 
           {/* Available */}
+
           <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
+
             <div className="flex items-center justify-between">
+
               <p className="text-sm text-gray-500">
                 Available
               </p>
 
               <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+
             </div>
 
             <p className="mt-3 text-3xl font-bold text-emerald-400">
@@ -383,16 +729,21 @@ const RentalManagement: React.FC = () => {
             <p className="mt-1 text-xs text-gray-600">
               Ready for rental
             </p>
+
           </div>
 
           {/* Issued */}
+
           <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
+
             <div className="flex items-center justify-between">
+
               <p className="text-sm text-gray-500">
                 Issued
               </p>
 
               <UserRound className="h-5 w-5 text-indigo-400" />
+
             </div>
 
             <p className="mt-3 text-3xl font-bold text-indigo-400">
@@ -402,16 +753,21 @@ const RentalManagement: React.FC = () => {
             <p className="mt-1 text-xs text-gray-600">
               Currently with riders
             </p>
+
           </div>
 
           {/* Charging */}
+
           <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
+
             <div className="flex items-center justify-between">
+
               <p className="text-sm text-gray-500">
                 Charging
               </p>
 
               <BatteryCharging className="h-5 w-5 text-yellow-400" />
+
             </div>
 
             <p className="mt-3 text-3xl font-bold text-yellow-400">
@@ -421,16 +777,21 @@ const RentalManagement: React.FC = () => {
             <p className="mt-1 text-xs text-gray-600">
               Being recharged
             </p>
+
           </div>
 
           {/* Maintenance */}
+
           <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
+
             <div className="flex items-center justify-between">
+
               <p className="text-sm text-gray-500">
                 Maintenance
               </p>
 
               <Wrench className="h-5 w-5 text-orange-400" />
+
             </div>
 
             <p className="mt-3 text-3xl font-bold text-orange-400">
@@ -440,96 +801,38 @@ const RentalManagement: React.FC = () => {
             <p className="mt-1 text-xs text-gray-600">
               Require attention
             </p>
+
           </div>
 
-        </div>
+          {/* Withdrawn */}
 
-        {/* =========================================================
-            BUSINESS / REVENUE OVERVIEW
-        ========================================================== */}
-
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-
-          {/* Active sessions */}
           <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
 
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">
-                  Active Rental Sessions
-                </p>
 
-                <p className="mt-2 text-3xl font-bold text-white">
-                  {activeSessionCount}
-                </p>
-              </div>
+              <p className="text-sm text-gray-500">
+                Withdrawn
+              </p>
 
-              <div className="rounded-xl bg-indigo-500/10 p-3">
-                <Activity className="h-6 w-6 text-indigo-400" />
-              </div>
+              <XCircle className="h-5 w-5 text-red-400" />
+
             </div>
 
-            <p className="mt-3 text-xs text-gray-600">
-              Riders currently using rental batteries
+            <p className="mt-3 text-3xl font-bold text-red-400">
+              {withdrawnCount}
             </p>
 
-          </div>
-
-          {/* Today's revenue */}
-          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
-
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">
-                  Today's Rental Revenue
-                </p>
-
-                <p className="mt-2 text-3xl font-bold text-emerald-400">
-                  KES {todaysRevenue.toLocaleString()}
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-emerald-500/10 p-3">
-                <DollarSign className="h-6 w-6 text-emerald-400" />
-              </div>
-            </div>
-
-            <p className="mt-3 text-xs text-gray-600">
-              Revenue from rental sessions today
-            </p>
-
-          </div>
-
-          {/* Total revenue */}
-          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
-
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">
-                  Rental Revenue
-                </p>
-
-                <p className="mt-2 text-3xl font-bold text-emerald-400">
-                  KES {totalRevenue.toLocaleString()}
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-emerald-500/10 p-3">
-                <DollarSign className="h-6 w-6 text-emerald-400" />
-              </div>
-            </div>
-
-            <p className="mt-3 text-xs text-gray-600">
-              Total recorded rental revenue
+            <p className="mt-1 text-xs text-gray-600">
+              Removed from rental
             </p>
 
           </div>
 
         </div>
 
-        {/* =========================================================
+        {/* =====================================================
             ATTENTION REQUIRED
-        ========================================================== */}
+        ====================================================== */}
 
         {attentionBatteries.length > 0 && (
           <div className="overflow-hidden rounded-2xl border border-orange-500/20 bg-gray-900">
@@ -543,6 +846,7 @@ const RentalManagement: React.FC = () => {
                 </div>
 
                 <div>
+
                   <h2 className="font-semibold text-white">
                     Attention Required
                   </h2>
@@ -550,6 +854,7 @@ const RentalManagement: React.FC = () => {
                   <p className="mt-1 text-sm text-gray-500">
                     Rental batteries that may require administrator attention.
                   </p>
+
                 </div>
 
               </div>
@@ -571,6 +876,7 @@ const RentalManagement: React.FC = () => {
                     </div>
 
                     <div>
+
                       <p className="font-semibold text-white">
                         {battery.id}
                       </p>
@@ -580,6 +886,7 @@ const RentalManagement: React.FC = () => {
                           ? 'Maintenance required'
                           : `Low battery level: ${battery.soc}%`}
                       </p>
+
                     </div>
 
                   </div>
@@ -600,9 +907,9 @@ const RentalManagement: React.FC = () => {
           </div>
         )}
 
-        {/* =========================================================
+        {/* =====================================================
             BATTERY FLEET
-        ========================================================== */}
+        ====================================================== */}
 
         <div>
 
@@ -615,31 +922,39 @@ const RentalManagement: React.FC = () => {
             <div className="mt-1 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
 
               <div>
+
                 <h2 className="text-xl font-bold text-white">
                   Rental Batteries
                 </h2>
 
                 <p className="mt-1 text-sm text-gray-500">
-                  Monitor the status and usage of every rental battery.
+                  Monitor, add, and withdraw rental batteries.
                 </p>
+
               </div>
 
               <p className="text-sm text-gray-500">
+
                 Showing{' '}
+
                 <span className="font-semibold text-gray-300">
                   {filteredBatteries.length}
-                </span>{' '}
-                of{' '}
+                </span>
+
+                {' '}of{' '}
+
                 <span className="font-semibold text-gray-300">
                   {batteries.length}
                 </span>
+
               </p>
 
             </div>
 
           </div>
 
-          {/* Search + filters */}
+          {/* Search and filters */}
+
           <div className="mb-5 flex flex-col gap-3 md:flex-row">
 
             <div className="relative flex-1">
@@ -662,11 +977,15 @@ const RentalManagement: React.FC = () => {
               value={statusFilter}
               onChange={(event) =>
                 setStatusFilter(
-                  event.target.value as 'all' | RentalBattery['status']
+                  event.target.value as
+                  | 'all'
+                  | RentalBattery['status']
+                  | 'withdrawn'
                 )
               }
               className="rounded-xl border border-gray-800 bg-gray-900 px-4 py-3 text-sm text-gray-300 outline-none focus:border-indigo-500"
             >
+
               <option value="all">
                 All Statuses
               </option>
@@ -686,26 +1005,62 @@ const RentalManagement: React.FC = () => {
               <option value="maintenance">
                 Maintenance
               </option>
+
+              <option value="withdrawn">
+                Withdrawn
+              </option>
+
             </select>
 
           </div>
 
           {/* Battery cards */}
+
           {filteredBatteries.length > 0 ? (
+
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
 
               {filteredBatteries.map((battery) => (
-                <RentalBatteryCard
+                <div
                   key={battery.id}
-                  battery={battery}
-                  onViewDetails={() =>
-                    setSelectedBattery(battery)
-                  }
-                />
+                  className="relative"
+                >
+
+                  <RentalBatteryCard
+                    battery={battery}
+                    onViewDetails={() =>
+                      setSelectedBattery(battery)
+                    }
+                  />
+
+                  {/* WITHDRAW BUTTON */}
+
+                  {battery.status !== 'issued' &&
+                    battery.status !== 'withdrawn' && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openWithdrawModal(battery)
+                        }
+                        className="mt-3 w-full rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-2.5 text-sm font-semibold text-red-400 transition hover:bg-red-500/10"
+                      >
+                        Withdraw Battery
+                      </button>
+                    )}
+
+                  {battery.status === 'withdrawn' && (
+                    <div className="mt-3 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-2.5 text-center text-sm font-semibold text-red-400">
+                      Withdrawn from Rental
+                    </div>
+                  )}
+
+                </div>
               ))}
 
             </div>
+
           ) : (
+
             <div className="rounded-2xl border border-dashed border-gray-800 bg-gray-900 p-10 text-center">
 
               <BatteryFull className="mx-auto h-10 w-10 text-gray-700" />
@@ -719,323 +1074,428 @@ const RentalManagement: React.FC = () => {
               </p>
 
             </div>
+
           )}
 
         </div>
 
-        {/* =========================================================
-            ACTIVE RENTAL SESSIONS
-        ========================================================== */}
+      </div>
 
-        <div className="overflow-hidden rounded-2xl border border-gray-800 bg-gray-900">
+      {/* =======================================================
+          ADD BATTERY MODAL
+      ======================================================== */}
 
-          <div className="border-b border-gray-800 p-5">
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-gray-800 bg-gray-900 shadow-2xl">
+
+            {/* Header */}
+
+            <div className="flex items-center justify-between border-b border-gray-800 p-5">
 
               <div>
-                <p className="text-xs uppercase tracking-[0.18em] text-indigo-400">
-                  Live Sessions
-                </p>
 
-                <h2 className="mt-1 text-xl font-bold text-white">
-                  Rental Sessions
+                <h2 className="text-lg font-bold text-white">
+                  Add Rental Battery
                 </h2>
 
                 <p className="mt-1 text-sm text-gray-500">
-                  Monitor riders currently using rental batteries.
+                  Register a new battery into the rental fleet.
                 </p>
-              </div>
-
-              <div className="flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-400">
-
-                <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-
-                {activeSessionCount} Active
 
               </div>
+
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="rounded-lg p-2 text-gray-500 hover:bg-gray-800 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
 
             </div>
 
-          </div>
+            {/* Form */}
 
-          <div className="overflow-x-auto">
+            <form
+              onSubmit={handleAddBattery}
+              className="space-y-5 p-5"
+            >
 
-            <table className="w-full min-w-[1050px]">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
 
-              <thead className="bg-gray-950">
+                {/* Battery ID */}
 
-                <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
+                <div>
 
-                  <th className="px-5 py-4">
-                    Session
-                  </th>
+                  <label className="mb-2 block text-sm font-medium text-gray-300">
+                    Battery ID / UID
+                  </label>
 
-                  <th className="px-5 py-4">
-                    Rider
-                  </th>
+                  <input
+                    type="text"
+                    value={addForm.batteryUid}
+                    onChange={(event) =>
+                      setAddForm({
+                        ...addForm,
+                        batteryUid: event.target.value,
+                      })
+                    }
+                    placeholder="e.g. RENT-BAT-004"
+                    className="w-full rounded-xl border border-gray-700 bg-gray-950 px-4 py-3 text-sm text-white outline-none placeholder:text-gray-600 focus:border-indigo-500"
+                  />
 
-                  <th className="px-5 py-4">
-                    Own Battery
-                  </th>
+                </div>
 
-                  <th className="px-5 py-4">
-                    Rental Battery
-                  </th>
+                {/* Battery Type */}
 
-                  <th className="px-5 py-4">
-                    SoC
-                  </th>
+                <div>
 
-                  <th className="px-5 py-4">
-                    Duration
-                  </th>
+                  <label className="mb-2 block text-sm font-medium text-gray-300">
+                    Battery Type
+                  </label>
 
-                  <th className="px-5 py-4">
-                    Amount
-                  </th>
+                  <select
+                    value={addForm.batteryType}
+                    onChange={(event) =>
+                      setAddForm({
+                        ...addForm,
+                        batteryType: event.target.value,
+                      })
+                    }
+                    className="w-full rounded-xl border border-gray-700 bg-gray-950 px-4 py-3 text-sm text-white outline-none focus:border-indigo-500"
+                  >
 
-                  <th className="px-5 py-4">
-                    Status
-                  </th>
+                    <option value="E-Bike">
+                      E-Bike
+                    </option>
 
-                  <th className="px-5 py-4">
-                    Action
-                  </th>
+                    <option value="Scooter">
+                      Scooter
+                    </option>
 
-                </tr>
+                    <option value="Car Module">
+                      Car Module
+                    </option>
 
-              </thead>
+                  </select>
 
-              <tbody className="divide-y divide-gray-800">
+                </div>
 
-                {sessions.length > 0 ? (
-                  sessions.map((session) => (
-                    <tr
-                      key={session.id}
-                      className="transition hover:bg-gray-800/40"
-                    >
+                {/* Charge Level */}
 
-                      <td className="px-5 py-4 font-semibold text-white">
-                        {session.id}
-                      </td>
+                <div>
 
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-2">
+                  <label className="mb-2 block text-sm font-medium text-gray-300">
+                    Initial Charge Level (%)
+                  </label>
 
-                          <div className="rounded-lg bg-gray-800 p-2">
-                            <UserRound className="h-4 w-4 text-gray-400" />
-                          </div>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={addForm.chargeLevel}
+                    onChange={(event) =>
+                      setAddForm({
+                        ...addForm,
+                        chargeLevel: event.target.value,
+                      })
+                    }
+                    className="w-full rounded-xl border border-gray-700 bg-gray-950 px-4 py-3 text-sm text-white outline-none focus:border-indigo-500"
+                  />
 
-                          <span className="text-gray-300">
-                            {session.riderName}
-                          </span>
+                </div>
 
-                        </div>
-                      </td>
+                {/* Booth */}
 
-                      <td className="px-5 py-4 text-gray-400">
-                        {session.ownBatteryId}
-                      </td>
+                <div>
 
-                      <td className="px-5 py-4">
+                  <label className="mb-2 block text-sm font-medium text-gray-300">
+                    Booth ID
+                  </label>
 
-                        <span className="font-semibold text-gray-300">
-                          {session.rentalBatteryId}
-                        </span>
+                  <input
+                    type="text"
+                    value={addForm.boothUid}
+                    onChange={(event) =>
+                      setAddForm({
+                        ...addForm,
+                        boothUid: event.target.value,
+                      })
+                    }
+                    placeholder="e.g. BOOTH-01"
+                    className="w-full rounded-xl border border-gray-700 bg-gray-950 px-4 py-3 text-sm text-white outline-none placeholder:text-gray-600 focus:border-indigo-500"
+                  />
 
-                      </td>
+                </div>
 
-                      <td className="px-5 py-4">
+                {/* Slot */}
 
-                        <div className="flex items-center gap-2">
+                <div>
 
-                          <span className="text-gray-300">
-                            {session.startSoc}%
-                          </span>
+                  <label className="mb-2 block text-sm font-medium text-gray-300">
+                    Slot
+                  </label>
 
-                          <span className="text-gray-600">
-                            →
-                          </span>
+                  <input
+                    type="text"
+                    value={addForm.slotIdentifier}
+                    onChange={(event) =>
+                      setAddForm({
+                        ...addForm,
+                        slotIdentifier: event.target.value,
+                      })
+                    }
+                    placeholder="e.g. SLOT-04"
+                    className="w-full rounded-xl border border-gray-700 bg-gray-950 px-4 py-3 text-sm text-white outline-none placeholder:text-gray-600 focus:border-indigo-500"
+                  />
 
-                          <span className="font-semibold text-indigo-400">
-                            {session.currentSoc}%
-                          </span>
+                </div>
 
-                        </div>
+              </div>
 
-                      </td>
+              {/* Notes */}
 
-                      <td className="px-5 py-4">
+              <div>
 
-                        <div className="flex items-center gap-2 text-gray-300">
+                <label className="mb-2 block text-sm font-medium text-gray-300">
+                  Notes
+                </label>
 
-                          <Clock3 className="h-4 w-4 text-gray-600" />
+                <textarea
+                  value={addForm.notes}
+                  onChange={(event) =>
+                    setAddForm({
+                      ...addForm,
+                      notes: event.target.value,
+                    })
+                  }
+                  rows={3}
+                  placeholder="Optional notes about this battery..."
+                  className="w-full resize-none rounded-xl border border-gray-700 bg-gray-950 px-4 py-3 text-sm text-white outline-none placeholder:text-gray-600 focus:border-indigo-500"
+                />
 
-                          {session.durationMinutes} min
+              </div>
 
-                        </div>
+              {/* Buttons */}
 
-                      </td>
+              <div className="flex justify-end gap-3 border-t border-gray-800 pt-5">
 
-                      <td className="px-5 py-4 font-semibold text-emerald-400">
-                        KES {session.amount.toLocaleString()}
-                      </td>
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="rounded-xl border border-gray-700 px-5 py-2.5 text-sm font-semibold text-gray-300 hover:bg-gray-800"
+                >
+                  Cancel
+                </button>
 
-                      <td className="px-5 py-4">
+                <button
+                  type="submit"
+                  disabled={addingBattery}
+                  className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+                >
 
-                        <span className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold capitalize text-emerald-400">
+                  {addingBattery && (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  )}
 
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  Add Battery
 
-                          {session.status}
+                </button>
 
-                        </span>
+              </div>
 
-                      </td>
-
-                      <td className="px-5 py-4">
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const battery = batteries.find(
-                              (item) =>
-                                item.id === session.rentalBatteryId
-                            );
-
-                            if (battery) {
-                              setSelectedBattery(battery);
-                            }
-                          }}
-                          className="rounded-lg border border-gray-700 px-3 py-2 text-xs font-semibold text-gray-300 transition hover:border-indigo-500 hover:bg-indigo-500/10 hover:text-indigo-400"
-                        >
-                          View
-                        </button>
-
-                      </td>
-
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-
-                    <td
-                      colSpan={9}
-                      className="px-5 py-12 text-center"
-                    >
-                      <Activity className="mx-auto h-8 w-8 text-gray-700" />
-
-                      <p className="mt-3 font-semibold text-gray-400">
-                        No rental sessions
-                      </p>
-
-                      <p className="mt-1 text-sm text-gray-600">
-                        There are currently no rental sessions to display.
-                      </p>
-
-                    </td>
-
-                  </tr>
-                )}
-
-              </tbody>
-
-            </table>
+            </form>
 
           </div>
 
         </div>
+      )}
 
-        {/* =========================================================
-            CURRENT RENTAL BREAKDOWN
-        ========================================================== */}
+      {/* =======================================================
+          WITHDRAW BATTERY MODAL
+      ======================================================== */}
 
-        {sessions.length > 0 && (
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+      {showWithdrawModal && withdrawBattery && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
 
-            <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-gray-800 bg-gray-900 shadow-2xl">
 
-              <div className="flex items-center gap-3">
+            {/* Header */}
 
-                <div className="rounded-xl bg-indigo-500/10 p-3">
-                  <BatteryCharging className="h-5 w-5 text-indigo-400" />
-                </div>
+            <div className="flex items-center justify-between border-b border-gray-800 p-5">
 
-                <div>
-                  <p className="text-sm text-gray-500">
-                    Rental Energy
+              <div>
+
+                <h2 className="text-lg font-bold text-white">
+                  Withdraw Battery
+                </h2>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  Remove this battery from the rental fleet.
+                </p>
+
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowWithdrawModal(false)}
+                className="rounded-lg p-2 text-gray-500 hover:bg-gray-800 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+
+            </div>
+
+            <form
+              onSubmit={handleWithdrawBattery}
+              className="space-y-5 p-5"
+            >
+
+              {/* Battery */}
+
+              <div className="rounded-xl border border-gray-800 bg-gray-950 p-4">
+
+                <p className="text-xs uppercase tracking-wider text-gray-600">
+                  Battery
+                </p>
+
+                <p className="mt-1 text-lg font-bold text-white">
+                  {withdrawBattery.id}
+                </p>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  {withdrawBattery.slotId}
+                </p>
+
+              </div>
+
+              {/* Reason */}
+
+              <div>
+
+                <label className="mb-2 block text-sm font-medium text-gray-300">
+                  Withdrawal Reason
+                </label>
+
+                <select
+                  value={withdrawReason}
+                  onChange={(event) =>
+                    setWithdrawReason(event.target.value)
+                  }
+                  className="w-full rounded-xl border border-gray-700 bg-gray-950 px-4 py-3 text-sm text-white outline-none focus:border-red-500"
+                >
+
+                  <option value="">
+                    Select a reason
+                  </option>
+
+                  <option value="Damaged">
+                    Damaged
+                  </option>
+
+                  <option value="Faulty">
+                    Faulty
+                  </option>
+
+                  <option value="Lost">
+                    Lost
+                  </option>
+
+                  <option value="Battery degradation">
+                    Battery degradation
+                  </option>
+
+                  <option value="End of life">
+                    End of life
+                  </option>
+
+                  <option value="Other">
+                    Other
+                  </option>
+
+                </select>
+
+              </div>
+
+              {/* Notes */}
+
+              <div>
+
+                <label className="mb-2 block text-sm font-medium text-gray-300">
+                  Additional Notes
+                </label>
+
+                <textarea
+                  value={withdrawNotes}
+                  onChange={(event) =>
+                    setWithdrawNotes(event.target.value)
+                  }
+                  rows={4}
+                  placeholder="Explain why this battery is being withdrawn..."
+                  className="w-full resize-none rounded-xl border border-gray-700 bg-gray-950 px-4 py-3 text-sm text-white outline-none placeholder:text-gray-600 focus:border-red-500"
+                />
+
+              </div>
+
+              {/* Warning */}
+
+              <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 p-4">
+
+                <div className="flex gap-3">
+
+                  <AlertTriangle className="h-5 w-5 shrink-0 text-orange-400" />
+
+                  <p className="text-sm text-gray-400">
+                    This battery will be marked as
+                    <span className="font-semibold text-red-400">
+                      {' '}WITHDRAWN
+                    </span>
+                    {' '}and will no longer be available for rental.
                   </p>
 
-                  <p className="mt-1 text-xl font-bold text-white">
-                    KES 240
-                  </p>
                 </div>
 
               </div>
 
-              <p className="mt-3 text-xs text-gray-600">
-                Energy consumed by the rental battery.
-              </p>
+              {/* Buttons */}
 
-            </div>
+              <div className="flex justify-end gap-3 border-t border-gray-800 pt-5">
 
-            <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowWithdrawModal(false)
+                  }
+                  className="rounded-xl border border-gray-700 px-5 py-2.5 text-sm font-semibold text-gray-300 hover:bg-gray-800"
+                >
+                  Cancel
+                </button>
 
-              <div className="flex items-center gap-3">
+                <button
+                  type="submit"
+                  disabled={withdrawingBattery}
+                  className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50"
+                >
 
-                <div className="rounded-xl bg-yellow-500/10 p-3">
-                  <Clock3 className="h-5 w-5 text-yellow-400" />
-                </div>
+                  {withdrawingBattery && (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  )}
 
-                <div>
-                  <p className="text-sm text-gray-500">
-                    Rental Time
-                  </p>
+                  Withdraw Battery
 
-                  <p className="mt-1 text-xl font-bold text-white">
-                    KES 100
-                  </p>
-                </div>
-
-              </div>
-
-              <p className="mt-3 text-xs text-gray-600">
-                Time-based rental charge for the active session.
-              </p>
-
-            </div>
-
-            <div className="rounded-2xl border border-emerald-500/20 bg-gray-900 p-5">
-
-              <div className="flex items-center gap-3">
-
-                <div className="rounded-xl bg-emerald-500/10 p-3">
-                  <DollarSign className="h-5 w-5 text-emerald-400" />
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-500">
-                    Current Rental Total
-                  </p>
-
-                  <p className="mt-1 text-xl font-bold text-emerald-400">
-                    KES 340
-                  </p>
-                </div>
+                </button>
 
               </div>
 
-              <p className="mt-3 text-xs text-gray-600">
-                Energy plus time charges for the active rental.
-              </p>
-
-            </div>
+            </form>
 
           </div>
-        )}
 
-      </div>
+        </div>
+      )}
+
     </div>
   );
 };
