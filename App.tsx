@@ -77,7 +77,11 @@ const AppContent: React.FC = () => {
       />
       <Route
         path="/admin/rentals"
-        element={<RentalManagement />}
+        element={
+          <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.DEVELOPER]}>
+            <RentalManagement />
+          </ProtectedRoute>
+        }
       />
 
       {/* 🔥 NEW: Booth Details Page */}
@@ -136,7 +140,11 @@ const AppContent: React.FC = () => {
       <Route path="*" element={<NotFound />} />
       <Route
         path="/admin/payment/waiting"
-        element={<PaymentWaitingPage />}
+        element={
+          <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.DEVELOPER]}>
+            <PaymentWaitingPage />
+          </ProtectedRoute>
+        }
       />
 
 

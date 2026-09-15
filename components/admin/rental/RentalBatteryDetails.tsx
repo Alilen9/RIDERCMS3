@@ -29,7 +29,7 @@ const RentalBatteryDetails: React.FC<RentalBatteryDetailsProps> = ({
       case 'maintenance':
         return 'bg-orange-500/10 border-orange-500/20 text-orange-400';
 
-      case 'disabled':
+      case 'withdrawn':
         return 'bg-red-500/10 border-red-500/20 text-red-400';
 
       default:

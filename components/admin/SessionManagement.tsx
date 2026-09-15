@@ -5,6 +5,8 @@ import {
   AdminSession,
   SessionFilters,
   deleteSession,
+  getRentalSessions,
+  RentalSession,
 } from '../../services/adminService';
 
 import ConfirmationModal from './ConfirmationModal';
@@ -20,19 +22,6 @@ const SESSIONS_PER_PAGE = 10;
 interface SessionManagementProps {
   onNavigateToBooth?: (boothUid: string) => void;
   onNavigateToUser?: (email: string) => void;
-}
-
-interface RentalSession {
-  id: string;
-  riderName: string;
-  phone?: string;
-  rentalBatteryId: string;
-  ownBatteryId?: string;
-  durationMinutes?: number;
-  amount?: number;
-  totalAmount?: number;
-  status?: string;
-  startTime?: string;
 }
 
 type SessionView = 'sessions' | 'rental';
@@ -176,6 +165,42 @@ const SessionManagement: React.FC<SessionManagementProps> = ({
     }
   }, [
     fetchSessionsData,
+    sessionView,
+  ]);
+
+  // -----------------------------------------
+  // FETCH RENTAL SESSIONS
+  // -----------------------------------------
+
+  const fetchRentalSessions = useCallback(async () => {
+    try {
+      const {
+        sessions: fetchedRentalSessions,
+      } = await getRentalSessions();
+
+      setRentalSessions(fetchedRentalSessions);
+    } catch (error) {
+      console.error(error);
+      throw error;
+    }
+  }, []);
+
+  // -----------------------------------------
+  // LOAD RENTAL SESSIONS ON VIEW SWITCH
+  // -----------------------------------------
+
+  useEffect(() => {
+    if (sessionView !== 'rental') {
+      return;
+    }
+
+    fetchRentalSessions().catch(() => {
+      toast.error(
+        'Failed to fetch rental sessions.'
+      );
+    });
+  }, [
+    fetchRentalSessions,
     sessionView,
   ]);
 
@@ -383,18 +408,7 @@ const SessionManagement: React.FC<SessionManagementProps> = ({
       setIsRentalRefreshing(true);
 
       try {
-        /*
-         * Rental session API should be connected here.
-         *
-         * Example later:
-         *
-         * const data = await getRentalSessions();
-         * setRentalSessions(data);
-         *
-         * For now the list remains empty until
-         * the rental-session backend endpoint
-         * is connected.
-         */
+        await fetchRentalSessions();
       } catch (error) {
         console.error(error);
         toast.error(
@@ -404,7 +418,7 @@ const SessionManagement: React.FC<SessionManagementProps> = ({
         setIsRentalRefreshing(false);
       }
     },
-    []
+    [fetchRentalSessions]
   );
 
   // -----------------------------------------

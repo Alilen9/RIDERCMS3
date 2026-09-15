@@ -1050,3 +1050,136 @@ export const sortRentalBatteriesBySoc = (
       (a.chargeLevel ?? 0)
   );
 };
+
+/**
+ * =========================================================
+ * RENTAL SESSIONS
+ * =========================================================
+ */
+
+export interface RentalSession {
+  id: string;
+  riderName: string;
+  phone?: string;
+  rentalBatteryId: string;
+  ownBatteryId?: string;
+  durationMinutes?: number;
+  amount?: number;
+  totalAmount?: number;
+  status?: string;
+  startTime?: string;
+}
+
+export interface RentalSessionsResponse {
+  sessions: RentalSession[];
+  total: number;
+}
+
+/**
+ * Fetches rental battery sessions.
+ */
+export const getRentalSessions =
+  async (): Promise<RentalSessionsResponse> => {
+    try {
+      const response =
+        await apiClient.get<RentalSessionsResponse>(
+          '/admin/rentals/sessions'
+        );
+
+      return response.data;
+    } catch (error) {
+      console.error(
+        'Failed to fetch rental sessions:',
+        error
+      );
+
+      throw error;
+    }
+  };
+
+/**
+ * =========================================================
+ * RENTAL BATTERY ADMIN ACTIONS
+ * =========================================================
+ */
+
+export interface CreateRentalBatteryData {
+  batteryUid: string;
+  chargeLevel: number;
+  boothUid: string;
+  slotIdentifier: string;
+  notes?: string;
+}
+
+export interface CreateRentalBatteryResponse {
+  batteryUid: string;
+  chargeLevel: number;
+  boothUid: string;
+  slotIdentifier: string;
+  notes?: string | null;
+}
+
+/**
+ * Adds a battery to the rental pool.
+ */
+export const createRentalBattery =
+  async (
+    data: CreateRentalBatteryData
+  ): Promise<CreateRentalBatteryResponse> => {
+    try {
+      const response =
+        await apiClient.post<CreateRentalBatteryResponse>(
+          '/admin/rentals',
+          data
+        );
+
+      return response.data;
+    } catch (error) {
+      console.error(
+        'Failed to create rental battery:',
+        error
+      );
+
+      throw error;
+    }
+  };
+
+export interface WithdrawRentalBatteryData {
+  reason: string;
+  notes?: string;
+}
+
+export interface WithdrawRentalBatteryResponse {
+  batteryUid: string;
+  withdrawn: boolean;
+  reason: string;
+  notes?: string | null;
+}
+
+/**
+ * Withdraws a battery from the rental pool.
+ */
+export const withdrawRentalBattery =
+  async (
+    batteryUid: string,
+    data: WithdrawRentalBatteryData
+  ): Promise<WithdrawRentalBatteryResponse> => {
+    try {
+      const response =
+        await apiClient.post<WithdrawRentalBatteryResponse>(
+          `/admin/rentals/${encodeURIComponent(
+            batteryUid
+          )}/withdraw`,
+          data
+        );
+
+      return response.data;
+    } catch (error) {
+      console.error(
+        'Failed to withdraw rental battery:',
+        error
+      );
+
+      throw error;
+    }
+  };

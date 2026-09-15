@@ -18,7 +18,11 @@ import {
 
 import RentalBatteryCard from './RentalBatteryCard';
 import RentalBatteryDetails from './RentalBatteryDetails';
-import { getRentalFleet } from '../../../services/adminService';
+import {
+  getRentalFleet,
+  createRentalBattery,
+  withdrawRentalBattery,
+} from '../../../services/adminService';
 
 import type {
   RentalBattery,
@@ -341,34 +345,27 @@ const RentalManagement: React.FC = () => {
 
     try {
       /*
-       * ========================================================
-       * CONNECT YOUR BACKEND API HERE
-       * ========================================================
-       *
-       * Example:
-       *
-       * const createdBattery = await createRentalBattery({
-       *   batteryUid: addForm.batteryUid.trim(),
-       *   batteryType: addForm.batteryType,
-       *   chargeLevel,
-       *   boothUid: addForm.boothUid.trim(),
-       *   slotIdentifier: addForm.slotIdentifier.trim(),
-       *   notes: addForm.notes.trim(),
-       * });
-       *
-       * Then add the response to the fleet.
+       * Register the battery with the backend so it
+       * becomes part of the borrowable rental pool.
        */
+      const createdBattery = await createRentalBattery({
+        batteryUid: addForm.batteryUid.trim(),
+        chargeLevel,
+        boothUid: addForm.boothUid.trim(),
+        slotIdentifier: addForm.slotIdentifier.trim(),
+        notes: addForm.notes.trim() || undefined,
+      });
 
       const newBattery: RentalBattery = {
-        id: addForm.batteryUid.trim(),
+        id: createdBattery.batteryUid,
 
-        soc: chargeLevel,
+        soc: createdBattery.chargeLevel,
 
         slotId:
-          `${addForm.boothUid.trim()} / ${addForm.slotIdentifier.trim()}`,
+          `${createdBattery.boothUid} / ${createdBattery.slotIdentifier}`,
 
         status:
-          chargeLevel < 30
+          createdBattery.chargeLevel < 30
             ? 'charging'
             : 'available',
 
@@ -484,20 +481,16 @@ const RentalManagement: React.FC = () => {
 
     try {
       /*
-       * ========================================================
-       * CONNECT YOUR BACKEND API HERE
-       * ========================================================
-       *
-       * Example:
-       *
-       * await withdrawRentalBattery(
-       *   withdrawBattery.id,
-       *   {
-       *     reason: withdrawReason.trim(),
-       *     notes: withdrawNotes.trim(),
-       *   }
-       * );
+       * Record the withdrawal with the backend so the
+       * battery leaves the borrowable rental pool.
        */
+      await withdrawRentalBattery(
+        withdrawBattery.id,
+        {
+          reason: withdrawReason.trim(),
+          notes: withdrawNotes.trim(),
+        }
+      );
 
       setBatteries((previous) =>
         previous.map((battery) =>

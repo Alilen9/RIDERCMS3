@@ -14,6 +14,7 @@ import {
   User,
   BatteryType,
   ActiveBatteryEntry,
+  UserRole,
 } from '../types';
 
 import * as boothService from '../services/boothService';
@@ -1555,16 +1556,21 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
 
         <div className="flex items-center gap-4">
 
-          <button
-            onClick={() =>
-              navigate(
-                '/admin/dashboard'
-              )
-            }
-            className="p-2 bg-gray-700 rounded-full hover:bg-gray-600 transition-colors text-sm"
-          >
-            Admin View
-          </button>
+          {(
+            user.role === UserRole.ADMIN ||
+            user.role === UserRole.DEVELOPER
+          ) && (
+              <button
+                onClick={() =>
+                  navigate(
+                    '/admin/dashboard'
+                  )
+                }
+                className="p-2 bg-gray-700 rounded-full hover:bg-gray-600 transition-colors text-sm"
+              >
+                Admin View
+              </button>
+            )}
 
           <button
             onClick={onLogout}
