@@ -10,6 +10,7 @@ import { signInWithEmailAndPassword } from 'firebase/auth';
 import ReCAPTCHA from 'react-google-recaptcha';
 import { auth } from '../../firebase';
 import loginBg from '../../assets/images/login.jpeg';
+import { Link } from 'react-router-dom';
 
 interface AuthProps {
   onLogin: (user: User) => void;
@@ -225,6 +226,11 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               error={errors.password?.message}
               togglePassword
             />
+            <div className="text-right">
+              <Link to="/forgot-password" className="text-emerald-600 hover:text-emerald-700 text-xs font-bold">
+                Forgot Password?
+              </Link>
+            </div>
             <button
               type="submit"
               disabled={isLoading}

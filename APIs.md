@@ -75,6 +75,7 @@ Comprehensive endpoint reference for this project.
 | POST | `/api/admin/booths/:boothUid/status` | `boothUid` | - | `status` |
 | POST | `/api/admin/booths/:boothUid/slots/:slotIdentifier/status` | `boothUid`, `slotIdentifier` | - | `status` |
 | POST | `/api/admin/booths/:boothUid/slots/:slotIdentifier/command` | `boothUid`, `slotIdentifier` | - | Command object keys: `forceLock`, `forceUnlock`, `openForCollection`, `openForDeposit`, `startCharging`, `stopCharging`, `openDoorId` |
+| POST | `/api/admin/booths/:boothUid/slots/:slotIdentifier/manual-withdraw` | `boothUid`, `slotIdentifier` | - | - |
 | GET | `/api/admin/booths/:boothUid` | `boothUid` | - | - |
 | POST | `/api/admin/booths/:boothUid/reset-slots` | `boothUid` | - | `slotIdentifier` (optional) |
 | GET | `/api/admin/problem-reports` | - | `status`, `limit`, `offset` | - |

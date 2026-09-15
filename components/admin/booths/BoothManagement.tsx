@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { QRCodeCanvas } from 'qrcode.react';
 import { Booth } from '@/types';
-import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, sendSlotCommand, SlotCommand, resetBoothSlots, deleteBoothSlot, updateSlotStatus } from '../../../services/adminService';
+import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, sendSlotCommand, SlotCommand, resetBoothSlots, deleteBoothSlot, updateSlotStatus, reconcileSlotDeposit } from '../../../services/adminService';
 import ConfirmationModal from '../ConfirmationModal';
 import BoothListView from './BoothListView';
 import BoothDetailView from './BoothDetailView';
@@ -15,9 +15,9 @@ interface BoothManagementProps {
 }
 
 // Helper function to format time ago
-const formatTimeAgo = (timestamp: string | undefined | null): string => {
+const formatTimeAgo = (timestamp: string | Date | undefined | null): string => {
   if (!timestamp) return 'N/A';
-  const date = new Date(timestamp);
+  const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
   const now = new Date();
   const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
@@ -63,6 +63,7 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [pendingCommands, setPendingCommands] = useState<Record<string, string | null>>({});
+  const [lastStatusFetchAt, setLastStatusFetchAt] = useState<Date | null>(null);
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
     title: string;
@@ -113,6 +114,7 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
       const statuses = await getBoothStatus();
       //console.log('DEBUG: Fetched Booth Statuses:', statuses);
       setBoothStatuses(statuses);
+      setLastStatusFetchAt(new Date());
     } catch (err) {
       console.error('Failed to fetch booth statuses:', err);
       toast.error('Could not retrieve live station statuses. Displaying cached data only.', { duration: 5000 });
@@ -293,6 +295,26 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
     }
   };
 
+  const handleReconcileDeposit = async (slotIdentifier: string) => {
+    if (!boothForDetails) return;
+
+    const loadingToast = toast.loading('Re-syncing deposit status...');
+    try {
+      const result = await reconcileSlotDeposit(boothForDetails.booth_uid, slotIdentifier);
+      if (result.reconciled) {
+        toast.success(`Deposit restored to '${result.newStatus}'.`, { id: loadingToast });
+      } else {
+        toast(`No deposit needed re-syncing (${result.reason}).`, { id: loadingToast });
+      }
+      // Refresh both administrative and live data to reflect the corrected state.
+      Promise.all([fetchBooths(), fetchBoothStatuses()]);
+    } catch (error) {
+      const errorMessage = (error as any)?.response?.data?.error || (error as Error).message;
+      toast.error(`Failed to re-sync deposit: ${errorMessage}`, { id: loadingToast });
+      console.error("Error reconciling deposit:", error);
+    }
+  };
+
   const handleDownloadQrCode = () => {
     if (!boothForQrCode) return;
     const canvas = document.getElementById('booth-qr-code') as HTMLCanvasElement;
@@ -375,6 +397,8 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
             onDetailViewClose?.();
           }}
           onSendCommand={handleSendCommand}
+          onManualWithdraw={onManualWithdraw}
+          onReconcileDeposit={handleReconcileDeposit}
           formatTimeAgo={formatTimeAgo}
           getSlotStatusDisplay={getSlotStatusDisplay}
           onRefreshStatus={fetchBoothStatuses}
@@ -384,7 +408,6 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
           pendingCommands={pendingCommands}
           onShowConfirmation={handleShowConfirmation}
           onUpdateSlotStatus={(slotIdentifier, status) => handleUpdateSlotStatus(boothForDetails.booth_uid, slotIdentifier, status)}
-          onManualWithdraw={onManualWithdraw}
         />
       ) : (
         <BoothListView

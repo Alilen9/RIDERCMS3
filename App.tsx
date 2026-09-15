@@ -9,6 +9,7 @@ import {
 } from 'react-router-dom';
 
 import Auth from './components/auth/Auth';
+import ForgotPassword from './components/auth/ForgotPassword';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import { UserRole } from './types';
 
@@ -45,6 +46,11 @@ const AuthHandler = () => {
           navigate('/operator/scan', { replace: true });
           break;
         case UserRole.USER:
+          navigate('/dashboard', { replace: true });
+          break;
+        case UserRole.DEVELOPER:
+          navigate('/dashboard', { replace: true });
+          break;
         default:
           navigate('/dashboard', { replace: true });
           break;
@@ -65,6 +71,7 @@ const AppContent: React.FC = () => {
     <Routes>
       {/* Auth */}
       <Route path="/auth" element={<AuthHandler />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
 
       {/* Admin Dashboard */}
       <Route

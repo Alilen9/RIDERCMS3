@@ -21,6 +21,7 @@ export interface AdminUser {
 export interface ListUsersResponse {
   users: AdminUser[];
   nextPageToken?: string;
+  total?: number;
 }
 
 export type UserAccountStatus = 'active' | 'disabled';
@@ -55,6 +56,9 @@ export interface AdminBoothStatus {
     | 'unknown';
 
     userName: string | null;
+    userPhone?: string | null;
+    batteryOwner: string | null;
+    pendingManualUnlock?: boolean;
 
     battery: {
       isOccupied: boolean;
@@ -356,6 +360,29 @@ export const sendSlotCommand = async (
   );
 };
 
+export interface ManualWithdrawResponse {
+  sessionId: number;
+  amount: number;
+  userName: string;
+  slotIdentifier: string;
+}
+
+/**
+ * Triggers a manual withdrawal for a slot occupied by a user's battery.
+ * @param boothUid The UID of the target booth.
+ * @param slotIdentifier The identifier of the target slot.
+ * @returns A promise that resolves with the created withdrawal session details.
+ */
+export const manualWithdrawSlot = async (
+  boothUid: string,
+  slotIdentifier: string
+): Promise<ManualWithdrawResponse> => {
+  const response = await apiClient.post<ManualWithdrawResponse>(
+    `/admin/booths/${boothUid}/slots/${slotIdentifier}/manual-withdraw`
+  );
+  return response.data;
+};
+
 /**
  * =========================================================
  * USERS
@@ -452,6 +479,27 @@ export const deleteUser = async (
   } catch (error) {
     console.error(
       `Failed to delete user ${userId}:`,
+      error
+    );
+
+    throw error;
+  }
+};
+
+/**
+ * Sends a password reset email to the specified user.
+ * @param userId The UID of the user to reset the password for.
+ */
+export const resetUserPassword = async (
+  userId: string
+): Promise<void> => {
+  try {
+    await apiClient.post(
+      `/admin/users/${userId}/reset-password`
+    );
+  } catch (error) {
+    console.error(
+      `Failed to reset password for user ${userId}:`,
       error
     );
 
@@ -634,7 +682,7 @@ export const getSlotWithdrawalInfo = async (
   try {
     const response =
       await apiClient.get<SlotWithdrawalInfo>(
-        `/booths/${boothUid}/slots/${slotIdentifier}/withdrawal-info`
+        `/admin/booths/${boothUid}/slots/${slotIdentifier}/withdrawal-info`
       );
 
     return response.data;
@@ -646,6 +694,34 @@ export const getSlotWithdrawalInfo = async (
 
     throw error;
   }
+};
+
+export interface ReconcileDepositResponse {
+  boothUid: string;
+  slotIdentifier: string;
+  reconciled: boolean;
+  depositId: number | null;
+  previousStatus: string | null;
+  newStatus: string | null;
+  reason: string;
+}
+
+/**
+ * Re-syncs a slot's deposit status against the physically present battery.
+ * If a deposit was wrongly marked 'failed' while its battery is still in the
+ * slot, the backend restores it to 'completed' so the user's credit is recovered.
+ * @param boothUid The UID of the target booth.
+ * @param slotIdentifier The identifier of the target slot.
+ * @returns A promise that resolves with the reconciliation outcome.
+ */
+export const reconcileSlotDeposit = async (
+  boothUid: string,
+  slotIdentifier: string
+): Promise<ReconcileDepositResponse> => {
+  const response = await apiClient.post<ReconcileDepositResponse>(
+    `/admin/booths/${boothUid}/slots/${slotIdentifier}/reconcile-deposit`
+  );
+  return response.data;
 };
 
 /**
@@ -885,6 +961,52 @@ export const deleteSession = async (
 
     throw error;
   }
+};
+
+export interface RetryPaymentResponse {
+  message: string;
+  checkoutRequestId: string;
+  amount: number;
+}
+
+/**
+ * Re-triggers the M-Pesa STK push for a failed/pending withdrawal session.
+ * Mirrors the manual-withdraw payment flow. The release of the battery is a
+ * separate, explicit admin action and is NOT automatic.
+ * @param sessionId The withdrawal session id.
+ * @param phone The phone number to send the M-Pesa prompt to.
+ * @param amount Optional amount override (defaults to the session amount).
+ * @returns A promise that resolves with the STK push result.
+ */
+export const retryWithdrawalPayment = async (
+  sessionId: number,
+  phone: string,
+  amount?: number
+): Promise<RetryPaymentResponse> => {
+  const response = await apiClient.post<RetryPaymentResponse>(
+    `/admin/sessions/${sessionId}/charge`,
+    { phone, ...(amount != null ? { amount } : {}) }
+  );
+  return response.data;
+};
+
+export interface SessionPaymentStatus {
+  paymentStatus: 'pending' | 'paid' | 'failed';
+  rawStatus: string;
+}
+
+/**
+ * Polls the M-Pesa payment status of a withdrawal session charged by an admin.
+ * @param sessionId The withdrawal session id.
+ * @returns A promise that resolves with the payment status.
+ */
+export const getSessionPaymentStatus = async (
+  sessionId: number
+): Promise<SessionPaymentStatus> => {
+  const response = await apiClient.get<SessionPaymentStatus>(
+    `/admin/sessions/${sessionId}/payment-status`
+  );
+  return response.data;
 };
 
 /**

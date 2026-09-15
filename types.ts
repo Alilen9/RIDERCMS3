@@ -90,6 +90,7 @@ export interface Booth {
   updated_at: string;
   latitude?: number | null;
   longitude?: number | null;
+  phoneNumber?: string | null;
   slots: BoothSlot[];
   slotCount: number;
 }
@@ -100,7 +101,9 @@ export interface BoothSlot {
   doorStatus: string;
   chargeLevel: number | null;
   batteryUid: string | null;
-  userName: string | null; // Added to match the joined user name from the DB
+  userName: string | null;
+  userPhone?: string | null;
+  batteryOwner: string | null; // Added to match the joined user name from the DB
 }
 
 

@@ -11,6 +11,7 @@ import {
 
 import ConfirmationModal from './ConfirmationModal';
 import SessionDetailView from './SessionDetailView';
+import RetryPaymentView from './payment/RetryPaymentView';
 import SessionFiltersBar from '../ui/filters/SessionFiltersBar';
 import RentalSessions from './rental/Sessions';
 
@@ -85,6 +86,13 @@ const SessionManagement: React.FC<SessionManagementProps> = ({
 
   const [sessionForDetails, setSessionForDetails] =
     useState<AdminSession | null>(null);
+
+  // -----------------------------------------
+  // RETRY PAYMENT
+  // -----------------------------------------
+
+  const [showRetryPayment, setShowRetryPayment] =
+    useState(false);
 
   // -----------------------------------------
   // DELETE MODAL
@@ -432,7 +440,16 @@ const SessionManagement: React.FC<SessionManagementProps> = ({
       {/* SESSION DETAILS                       */}
       {/* ------------------------------------- */}
 
-      {showSessionDetail &&
+      {showRetryPayment && sessionForDetails ? (
+        <RetryPaymentView
+          session={sessionForDetails}
+          onBack={() => setShowRetryPayment(false)}
+          onDone={() => {
+            setShowRetryPayment(false);
+            handleRefresh();
+          }}
+        />
+      ) : showSessionDetail &&
         sessionForDetails ? (
         <SessionDetailView
           session={sessionForDetails}
@@ -448,6 +465,11 @@ const SessionManagement: React.FC<SessionManagementProps> = ({
                 icon: '🔧',
               }
             );
+          }}
+          onRetryPayment={(session) => {
+            setSessionForDetails(session);
+            setShowSessionDetail(false);
+            setShowRetryPayment(true);
           }}
         />
       ) : (
@@ -828,6 +850,27 @@ const SessionManagement: React.FC<SessionManagementProps> = ({
                                   >
                                     Delete
                                   </button>
+
+                                  {session.sessionType === 'withdrawal' &&
+                                    session.status === 'failed' && (
+                                      <>
+                                        <span className="text-gray-600">
+                                          |
+                                        </span>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setSessionForDetails(session);
+                                            setShowSessionDetail(false);
+                                            setShowRetryPayment(true);
+                                          }}
+                                          className="text-emerald-400 hover:text-emerald-300 text-xs font-semibold hover:underline"
+                                        >
+                                          Retry Payment
+                                        </button>
+                                      </>
+                                    )}
 
                                 </div>
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { usePayment } from "@/hooks/usePayment";
 import { getSlotWithdrawalInfo } from "@/services/adminService";
+import { ManualWithdrawRequest } from "@/services/paymentService";
 import toast from "react-hot-toast";
 
 
@@ -8,6 +8,8 @@ interface ManualWithdrawPageProps {
   onWaiting?: () => void;
   boothUid?: string;
   slotIdentifier?: string;
+  initiatePayment: (data: ManualWithdrawRequest) => Promise<void>;
+  loading: boolean;
 }
 
 
@@ -15,9 +17,9 @@ const ManualWithdrawPage: React.FC<ManualWithdrawPageProps> = ({
   onWaiting,
   boothUid,
   slotIdentifier,
+  initiatePayment,
+  loading,
 }) => {
-
-  const { initiatePayment, loading } = usePayment();
 
 
   const [userId, setUserId] = useState("");
@@ -67,6 +69,8 @@ const ManualWithdrawPage: React.FC<ManualWithdrawPageProps> = ({
         userId,
         phoneNumber,
         amount: Number(amount),
+        boothUid,
+        slotIdentifier,
       });
 
 
@@ -161,8 +165,7 @@ const ManualWithdrawPage: React.FC<ManualWithdrawPageProps> = ({
               onChange={(e) => setPhoneNumber(e.target.value)}
               placeholder="0712345678"
               required
-              disabled={!!(boothUid && slotIdentifier)}
-              className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2"
             />
 
           </div>

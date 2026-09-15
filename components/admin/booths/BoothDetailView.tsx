@@ -1,6 +1,19 @@
 import React from 'react';
 import { Booth } from '@/types';
 import { AdminBoothStatus, SlotCommand } from '../../../services/adminService';
+import { Phone, PhoneCall, MessageCircle } from 'lucide-react';
+import { FaWhatsapp } from 'react-icons/fa';
+
+// Convert phone number to WhatsApp format
+const formatWhatsAppNumber = (phone: string) => {
+  const cleaned = phone.replace(/\D/g, '');
+
+  if (cleaned.startsWith('0')) {
+    return `254${cleaned.slice(1)}`;
+  }
+
+  return cleaned;
+};
 
 interface BoothDetailViewProps {
   booth: Booth;
@@ -9,6 +22,8 @@ interface BoothDetailViewProps {
   onUpdateSlotStatus: (slotIdentifier: string, status: 'available' | 'disabled') => void;
   onShowConfirmation: (action: () => void, title: string, message: string, isDestructive?: boolean) => void;
   onSendCommand: (slotIdentifier: string, command: SlotCommand) => void;
+  onManualWithdraw?: (slotIdentifier: string, boothUid: string) => void;
+  onReconcileDeposit?: (slotIdentifier: string) => void;
   formatTimeAgo: (timestamp: string | undefined | null) => string;
   getSlotStatusDisplay: (status: string | null | undefined) => { classes: string; text: string };
   onRefreshStatus: () => void;
@@ -16,7 +31,6 @@ interface BoothDetailViewProps {
   onDeleteSlot: (slotIdentifier: string) => void;
   onResetSlot: (slotIdentifier: string) => void;
   pendingCommands: Record<string, string | null>;
-  onManualWithdraw?: (slotIdentifier: string, boothUid: string) => void;
 }
 
 const BoothDetailView: React.FC<BoothDetailViewProps> = ({
@@ -26,6 +40,8 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
   onUpdateSlotStatus,
   onShowConfirmation,
   onSendCommand,
+  onManualWithdraw,
+  onReconcileDeposit,
   formatTimeAgo,
   getSlotStatusDisplay,
   onRefreshStatus,
@@ -33,7 +49,6 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
   onDeleteSlot,
   onResetSlot,
   pendingCommands,
-  onManualWithdraw,
 }) => {
 
   // Merge administrative slot data (from `booth.slots`) with live telemetry data (from `boothStatus.slots`).
@@ -41,7 +56,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
   const mergedSlots = React.useMemo(() => {
     return (booth.slots || []).map(adminSlot => {
       const liveSlot = boothStatus?.slots?.find(s => s.slotIdentifier === adminSlot.identifier);
-      
+
       return {
         slotIdentifier: adminSlot.identifier,
         // Prioritize administrative status (e.g. 'disabled') over live status
@@ -50,7 +65,9 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
         // Combine battery info: live telemetry takes precedence
         battery: liveSlot?.battery || (adminSlot.chargeLevel !== null ? { chargeLevel: adminSlot.chargeLevel } : null),
         // "Rented By" comes from the DB (adminSlot)
-        userName: adminSlot.userName || liveSlot?.userName,
+        userName: adminSlot.userName || liveSlot?.userName || liveSlot?.batteryOwner,
+        userPhone: adminSlot.userPhone || liveSlot?.userPhone || null,
+        pendingManualUnlock: liveSlot?.pendingManualUnlock || false,
         telemetry: liveSlot?.telemetry,
       };
     });
@@ -68,30 +85,41 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
               {booth.name}
               <span className="text-gray-500 text-lg font-normal">({booth.booth_uid.substring(0, 8)}...)</span>
             </h2>
-            <div className="flex items-center gap-2">
-              <p className="text-xs text-gray-400 mt-1">Last Heartbeat: {formatTimeAgo(boothStatus?.lastHeartbeatAt)}</p>
+            <div className="flex items-center gap-3 mt-1">
+              {booth.phoneNumber && (
+                <>
+                  <span className="text-gray-600">|</span>
+                  <a
+                    href={`tel:${booth.phoneNumber}`}
+                    title="Call"
+                    className="text-emerald-400 hover:text-emerald-300 transition-colors"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Phone size={14} />
+                  </a>
+                  <a
+                    href={`https://wa.me/${booth.phoneNumber.replace(/[^0-9]/g, '')}`}
+                    title="WhatsApp"
+                    className="text-green-400 hover:text-green-300 transition-colors"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <MessageCircle size={14} />
+                  </a>
+                </>
+              )}
               <button onClick={onRefreshStatus} className="text-cyan-400 hover:text-cyan-300 p-1 rounded-full" title="Refresh Status">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M20 4h-5v5M4 20h5v-5" /></svg>
               </button>
             </div>
           </div>
-          <button
-            onClick={() => onShowConfirmation(
-              onResetSlots,
-              'Reset All Slots',
-              `Are you sure you want to reset all slots for "${booth.name}"? This will set all slots to 'available', clear any battery links, and can resolve synchronization issues. This action is irreversible.`,
-              true
-            )}
-            className="bg-red-800 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-            Reset All Slots
-          </button>
+
         </div>
       </div>
 
       {/* Slot Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
         {booth ? (
           mergedSlots.length > 0 ? (
             mergedSlots.map(slot => (
@@ -129,13 +157,46 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                           <span className="text-gray-500">Battery</span>
                           <span className="text-white">{slot.battery ? `${slot.battery.chargeLevel}%` : 'N/A'}</span>
                         </div>
-                        <div className="flex justify-between text-sm items-center">
-                          <span className="text-gray-500">Rented By</span>
+                        <div className="flex justify-between text-sm items-center gap-2">
+                          <span className="text-gray-500 flex-shrink-0">Rented By</span>
                           {slot.userName ? (
-                            <span className="text-cyan-400 font-semibold truncate" title={slot.userName}>{slot.userName}</span>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-cyan-400 font-semibold truncate" title={slot.userName}>{slot.userName}</span>
+                              {slot.userPhone && (
+                                <div className="flex items-center gap-1.5 flex-shrink-0">
+                                  <a
+                                    href={`tel:${slot.userPhone}`}
+                                    title="Call"
+                                    className="text-gray-400 hover:text-green-400"
+                                  >
+                                    <PhoneCall size={14} className="text-green-500" />
+                                  </a>
+                                  <span className="text-gray-600">|</span>
+                                  <a
+                                    href={`https://wa.me/${formatWhatsAppNumber(slot.userPhone)}`}
+                                    title="WhatsApp"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-gray-400 hover:text-green-400"
+                                  >
+                                    <FaWhatsapp size={16} className="text-green-500" />
+                                  </a>
+                                </div>
+                              )}
+                            </div>
                           ) : (<span className="text-gray-600">None</span>)}
-
                         </div>
+                        {slot.pendingManualUnlock && (
+                          <div className="bg-amber-900/40 border border-amber-600/40 rounded-lg p-3 text-sm">
+                            <p className="text-amber-300 font-semibold flex items-center gap-2">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              Manual withdrawal paid
+                            </p>
+                            <p className="text-amber-400/80 text-xs mt-1">Press <strong>Unlock</strong> to release battery</p>
+                          </div>
+                        )}
                         <div className="border-t border-gray-700/50 pt-3 mt-3">
                           <p className="text-xs font-bold text-gray-400 mb-2">Commands</p>
                           <div className="grid grid-cols-2 gap-2">
@@ -203,6 +264,28 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                                   Start Charging
                                 </button>
                             )}
+                            {onManualWithdraw && slot.userName && !slot.pendingManualUnlock && (
+                              <button
+                                onClick={() => onShowConfirmation(
+                                  () => onManualWithdraw(slot.slotIdentifier, booth.booth_uid),
+                                  'Manual Withdraw?',
+                                  `Manually withdraw battery from slot ${slot.slotIdentifier}? The customer's deposit will be redeemed, cost calculated, and slot released.`,
+                                  true
+                                )}
+                                className="col-span-2 bg-orange-800 hover:bg-orange-700 py-2 rounded text-xs font-bold text-white"
+                              >
+                                Manual Withdraw
+                              </button>
+                            )}
+                            {onReconcileDeposit && (slot.battery || slot.status === 'occupied' || slot.status === 'charging') && (
+                              <button
+                                onClick={() => onReconcileDeposit(slot.slotIdentifier)}
+                                title="If the battery is still in the slot but the deposit was wrongly marked failed, restore the deposit so the customer's credit and withdrawal path are recovered."
+                                className="col-span-2 mt-2 bg-cyan-900/50 hover:bg-cyan-900/80 text-cyan-300 py-2 rounded text-xs font-bold border border-cyan-700/50"
+                              >
+                                Re-sync Deposit
+                              </button>
+                            )}
                             <button
                               onClick={() => onShowConfirmation(
                                 () => onResetSlot(slot.slotIdentifier),
@@ -238,14 +321,6 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                             >
                               Delete Slot
                             </button>
-                            {onManualWithdraw && (slot.slotIdentifier === 'A1' || slot.slotIdentifier === 'B1') && (
-                              <button
-                                onClick={() => onManualWithdraw(slot.slotIdentifier, booth.booth_uid)}
-                                className="col-span-2 mt-2 bg-red-800 hover:bg-red-700 text-white py-2 rounded text-xs font-bold"
-                              >
-                                Manual Withdraw
-                              </button>
-                            )}
                           </div>
                         </div>
                       </div>

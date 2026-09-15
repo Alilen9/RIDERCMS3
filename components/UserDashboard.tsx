@@ -123,6 +123,12 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
   const [showAddMorePrompt, setShowAddMorePrompt] =
     useState(false);
 
+  const [showReleaseConfirm, setShowReleaseConfirm] =
+    useState(false);
+
+  const [scannedBoothUid, setScannedBoothUid] =
+    useState('');
+
   /*
    * ============================================================
    * RENTAL AVAILABILITY
@@ -179,15 +185,25 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
     if (!userLocation) return [];
 
     return booths
+      .filter((booth) => {
+        const lat = Number(booth.latitude);
+        const lng = Number(booth.longitude);
+        return (
+          Number.isFinite(lat) &&
+          Number.isFinite(lng)
+        );
+      })
       .map((booth) => {
+        const lat = Number(booth.latitude);
+        const lng = Number(booth.longitude);
         const R = 6371;
 
         const dLat =
-          (booth.latitude - userLocation.lat) *
+          (lat - userLocation.lat) *
           (Math.PI / 180);
 
         const dLng =
-          (booth.longitude - userLocation.lng) *
+          (lng - userLocation.lng) *
           (Math.PI / 180);
 
         const a =
@@ -195,9 +211,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
           Math.cos(
             userLocation.lat * (Math.PI / 180)
           ) *
-          Math.cos(
-            booth.latitude * (Math.PI / 180)
-          ) *
+          Math.cos(lat * (Math.PI / 180)) *
           Math.sin(dLng / 2) ** 2;
 
         const c =
@@ -212,15 +226,21 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
         return {
           id: booth.booth_uid,
           name: booth.name,
+          location: booth.location_address,
           available: booth.availableSlots,
-          lat: booth.latitude,
-          lng: booth.longitude,
+          lat,
+          lng,
           rawDist: dist,
           distanceLabel: `${dist.toFixed(1)} km`,
         };
       })
       .sort((a, b) => a.rawDist - b.rawDist);
   }, [booths, userLocation]);
+
+  const nearestStation =
+    sortedStations.length > 0
+      ? sortedStations[0]
+      : undefined;
 
   /*
    * ============================================================
@@ -253,10 +273,14 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
    */
 
   const loadRentalBatteries = useCallback(
-    async (): Promise<RentalBatteryOption[]> => {
+    async (
+      boothUid: string
+    ): Promise<RentalBatteryOption[]> => {
       try {
         const response =
-          await boothService.getAvailableRentalBatteries();
+          await boothService.getAvailableRentalBatteries(
+            boothUid
+          );
 
         const batteries =
           Array.isArray(response)
@@ -315,8 +339,18 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
       setRentalUnavailable(false);
 
       try {
+        if (!manualBoothId.trim()) {
+          toast.error(
+            'Please enter or scan a booth UID first.'
+          );
+
+          return;
+        }
+
         const available =
-          await loadRentalBatteries();
+          await loadRentalBatteries(
+            manualBoothId
+          );
 
         if (
           !available ||
@@ -384,6 +418,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
     [
       checkingRentalAvailability,
       loadRentalBatteries,
+      manualBoothId,
       navigate,
     ]
   );
@@ -1303,6 +1338,30 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
       async (
         decodedText: string
       ) => {
+        if (
+          !withdrawalSessionId
+        ) {
+          toast.error(
+            'No active withdrawal session.'
+          );
+
+          return;
+        }
+
+        setScannedBoothUid(
+          decodedText
+        );
+
+        setShowReleaseConfirm(true);
+      },
+      [withdrawalSessionId]
+    );
+
+  const confirmRelease =
+    useCallback(
+      async () => {
+        setShowReleaseConfirm(false);
+
         setLoading(true);
 
         try {
@@ -1316,7 +1375,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
 
           const result =
             await boothService.releaseBattery(
-              decodedText,
+              scannedBoothUid,
               withdrawalSessionId
             );
 
@@ -1340,9 +1399,11 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
           );
         } finally {
           setLoading(false);
+
+          setScannedBoothUid('');
         }
       },
-      [withdrawalSessionId]
+      [withdrawalSessionId, scannedBoothUid]
     );
 
   /*
@@ -1678,6 +1739,44 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
               </button>
 
             </div>
+
+            {nearestStation && (
+              <div className="w-full max-w-sm bg-gray-800/50 p-5 rounded-2xl border border-gray-700">
+                <p className="text-xs uppercase tracking-wide text-gray-500 mb-3">
+                  Nearest Station
+                </p>
+
+                <div className="flex items-center justify-between gap-4">
+
+                  <div className="min-w-0">
+                    <p className="font-bold text-sm text-white truncate">
+                      {nearestStation.name}
+                    </p>
+
+                    {nearestStation.location && (
+                      <p className="text-xs text-gray-500 mt-0.5 truncate">
+                        {nearestStation.location}
+                      </p>
+                    )}
+
+                    <p className="text-xs text-gray-500 mt-1">
+                      {nearestStation.distanceLabel} away
+                    </p>
+                  </div>
+
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-2xl font-bold text-emerald-400 leading-none">
+                      {nearestStation.available}
+                    </p>
+
+                    <p className="text-xs text-gray-500 mt-1">
+                      slots available
+                    </p>
+                  </div>
+
+                </div>
+              </div>
+            )}
 
             <button
               onClick={() =>
@@ -2253,6 +2352,19 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
         }
         confirmButtonText="Yes, Cancel"
         isDestructive={true}
+      />
+
+      <ConfirmationModal
+        isOpen={showReleaseConfirm}
+        title="Confirm Battery Release"
+        message="You are about to open a slot at this booth to collect your battery. Make sure you are physically at the station."
+        onConfirm={confirmRelease}
+        onCancel={() => {
+          setShowReleaseConfirm(false);
+          setScannedBoothUid('');
+        }}
+        confirmButtonText="Confirm & Open"
+        isDestructive={false}
       />
 
       {/* ========================================================
