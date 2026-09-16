@@ -6,12 +6,14 @@ import {
   Route,
   Navigate,
   useNavigate,
+  useLocation,
 } from 'react-router-dom';
 
 import Auth from './components/auth/Auth';
 import ForgotPassword from './components/auth/ForgotPassword';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import { UserRole } from './types';
+import { readLastVisitedPath } from './utils/lastVisitedPath';
 
 import AdminDashboard from './components/AdminDashboard';
 import UserDashboard from './components/UserDashboard';
@@ -29,34 +31,107 @@ import RentalManagement from './components/admin/rental/RentalManagement';
 /**
  * Handles redirect logic after login
  */
+/**
+ * Handles redirect logic after login.
+ *
+ * Auth uses inMemoryPersistence, so the user is re-logged in on every
+ * reload. Instead of always dumping them on their role dashboard, we
+ * restore the page they were on before (explicit redirect target first,
+ * then the last visited page, then the role default).
+ */
+const DEFAULT_HOME: Record<UserRole, string> = {
+  [UserRole.ADMIN]: '/admin/dashboard',
+  [UserRole.DEVELOPER]: '/admin/dashboard',
+  [UserRole.OPERATOR]: '/operator/scan',
+  [UserRole.USER]: '/dashboard',
+};
+
+/**
+ * Mirrors the allowedRoles used in ProtectedRoute for the given role.
+ */
+const isPathAllowedForRole = (
+  pathname: string,
+  role: UserRole
+): boolean => {
+  const area = pathname.split('/')[1];
+
+  switch (role) {
+    case UserRole.OPERATOR:
+      return area === 'operator';
+    case UserRole.USER:
+      return (
+        area === 'dashboard' ||
+        area === 'rental'
+      );
+    case UserRole.ADMIN:
+      return area === 'admin';
+    case UserRole.DEVELOPER:
+      return (
+        area === 'admin' ||
+        area === 'dashboard' ||
+        area === 'rental'
+      );
+    default:
+      return false;
+  }
+};
+
+/**
+ * Picks where to land after login:
+ * 1. the protected page the user originally tried to open,
+ * 2. the last visited protected page,
+ * 3. the role-appropriate dashboard.
+ */
+const resolveLandingPage = (
+  role: UserRole,
+  from?: { pathname?: string } | null
+): string => {
+  const candidates = [
+    from?.pathname,
+    readLastVisitedPath(),
+  ];
+
+  for (const candidate of candidates) {
+    if (
+      candidate &&
+      candidate !== '/auth' &&
+      candidate !== '/forgot-password' &&
+      isPathAllowedForRole(candidate, role)
+    ) {
+      return candidate;
+    }
+  }
+
+  return DEFAULT_HOME[role] ?? '/dashboard';
+};
+
 const AuthHandler = () => {
   const { user, login, isLoading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     if (isLoading) return;
 
     if (user) {
-      switch (user.role) {
-        case UserRole.ADMIN:
-        case UserRole.DEVELOPER:
-          navigate('/admin/dashboard', { replace: true });
-          break;
-        case UserRole.OPERATOR:
-          navigate('/operator/scan', { replace: true });
-          break;
-        case UserRole.USER:
-          navigate('/dashboard', { replace: true });
-          break;
-        case UserRole.DEVELOPER:
-          navigate('/dashboard', { replace: true });
-          break;
-        default:
-          navigate('/dashboard', { replace: true });
-          break;
-      }
+      const from = (
+        location.state as
+          | { from?: { pathname?: string } }
+          | null
+        | undefined
+      )?.from;
+
+      navigate(
+        resolveLandingPage(user.role, from),
+        { replace: true }
+      );
     }
-  }, [user, isLoading, navigate]);
+  }, [
+    user,
+    isLoading,
+    navigate,
+    location.state,
+  ]);
 
   return <Auth onLogin={login} />;
 };

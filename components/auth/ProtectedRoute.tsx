@@ -1,7 +1,8 @@
-import React, { JSX } from 'react';
+import React, { JSX, useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { UserRole } from '../../types';
 import { useAuth } from './AuthContext';
+import { saveLastVisitedPath } from '../../utils/lastVisitedPath';
 
 interface ProtectedRouteProps {
   children: JSX.Element;
@@ -11,6 +12,25 @@ interface ProtectedRouteProps {
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
   const { user, isLoading } = useAuth();
   const location = useLocation();
+
+  // Remember this page so it can be restored after a re-login.
+  useEffect(() => {
+    if (
+      !isLoading &&
+      user &&
+      allowedRoles.includes(user.role)
+    ) {
+      saveLastVisitedPath(
+        location.pathname + location.search
+      );
+    }
+  }, [
+    user,
+    isLoading,
+    allowedRoles,
+    location.pathname,
+    location.search,
+  ]);
 
   // While checking the session, show a loading indicator.
   // This prevents a flicker from the login page to the dashboard.
