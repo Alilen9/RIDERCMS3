@@ -56,7 +56,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const { breakdowns } = useBreakdowns();
   const [initialBoothForDetail, setInitialBoothForDetail] = useState<Booth | null>(null);
   const [manualWithdrawContext, setManualWithdrawContext] = useState<{ boothUid: string; slotIdentifier: string } | null>(null);
-  const { initiatePayment, status: paymentStatus, loading: paymentLoading } = usePayment();
+  const { initiatePayment, status: paymentStatus, loading: paymentLoading, timedOut: paymentTimedOut, checkStatusNow } = usePayment();
   // UI State
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [error, setError] = useState<string>('');
@@ -229,6 +229,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
               boothUid={manualWithdrawContext?.boothUid}
               slotIdentifier={manualWithdrawContext?.slotIdentifier}
               paymentStatus={paymentStatus}
+              timedOut={paymentTimedOut}
+              onCheckAgain={checkStatusNow}
             />
           )}
           {activeSection === 'cleanup' && <SessionCleanup />}

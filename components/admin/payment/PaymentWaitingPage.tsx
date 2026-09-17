@@ -9,6 +9,8 @@ interface PaymentWaitingPageProps {
   boothUid?: string;
   slotIdentifier?: string;
   paymentStatus?: 'IDLE' | 'PENDING' | 'SUCCESS' | 'FAILED';
+  timedOut?: boolean;
+  onCheckAgain?: () => Promise<void>;
 }
 
 
@@ -18,10 +20,13 @@ const PaymentWaitingPage: React.FC<PaymentWaitingPageProps> = ({
   boothUid,
   slotIdentifier,
   paymentStatus = 'PENDING',
+  timedOut = false,
+  onCheckAgain,
 }) => {
 
   const [slotOpened, setSlotOpened] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
+  const [checking, setChecking] = useState(false);
 
   useEffect(() => {
     if (paymentStatus === "FAILED") {
@@ -29,6 +34,16 @@ const PaymentWaitingPage: React.FC<PaymentWaitingPageProps> = ({
       onBack?.();
     }
   }, [paymentStatus, onBack]);
+
+  const handleCheckAgain = async () => {
+    if (!onCheckAgain) return;
+    setChecking(true);
+    try {
+      await onCheckAgain();
+    } finally {
+      setChecking(false);
+    }
+  };
 
   const handleWithdrawNow = async () => {
     if (!boothUid || !slotIdentifier || slotOpened) return;
@@ -92,8 +107,34 @@ const PaymentWaitingPage: React.FC<PaymentWaitingPageProps> = ({
 
         {paymentStatus !== "SUCCESS" && (
           <p className="text-gray-400 mt-4">
-            Waiting for customer to enter MPESA PIN...
+            {timedOut
+              ? "Still waiting for a payment confirmation from M-Pesa."
+              : "Waiting for customer to enter MPESA PIN..."}
           </p>
+        )}
+
+        {paymentStatus !== "SUCCESS" && timedOut && (
+          <div className="mt-6 p-4 bg-amber-900/40 border border-amber-600 rounded-lg max-w-md mx-auto">
+            <p className="text-amber-300 text-sm mb-3">
+              This is taking longer than expected. The payment may already have
+              gone through but Safaricom's confirmation could be delayed. Check
+              again before canceling.
+            </p>
+            <button
+              onClick={handleCheckAgain}
+              disabled={checking}
+              className="px-5 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded-lg font-semibold flex items-center gap-2 mx-auto"
+            >
+              {checking ? (
+                <>
+                  <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                  Checking...
+                </>
+              ) : (
+                "Check Status Again"
+              )}
+            </button>
+          </div>
         )}
 
         {paymentStatus === "SUCCESS" && !slotOpened && (
