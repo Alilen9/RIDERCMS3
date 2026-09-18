@@ -1,16 +1,18 @@
-
 import apiClient from '../client/apiClient';
 import { Booth, UserRole } from '../types';
 
 /**
- * The shape of a user object as returned by the GET /api/admin/users endpoint.
+ * =========================================================
+ * USERS
+ * =========================================================
  */
+
 export interface AdminUser {
   uid: string;
   email: string;
   displayName: string;
   phoneNumber?: string;
-  role: UserRole;
+  role: string;
   disabled: boolean;
   creationTime: string;
   lastSignInTime: string;
@@ -22,33 +24,49 @@ export interface ListUsersResponse {
   total?: number;
 }
 
-/**
- * The possible account statuses for a user.
- */
 export type UserAccountStatus = 'active' | 'disabled';
 
 /**
- * The shape of a booth status object as returned by GET /api/admin/booths/status.
+ * =========================================================
+ * BOOTH STATUS
+ * =========================================================
  */
+
 export interface AdminBoothStatus {
   boothUid: string;
   name: string;
   location: string;
   status: string;
   lastHeartbeatAt: string;
+
   slots: {
     slotIdentifier: string;
-    status: 'booting' | 'available' | 'occupied' | 'disabled' | 'error';
-    doorStatus: 'locked' | 'unlocked' | 'ajar' | 'unknown';
+
+    status:
+    | 'booting'
+    | 'available'
+    | 'occupied'
+    | 'disabled'
+    | 'error';
+
+    doorStatus:
+    | 'locked'
+    | 'unlocked'
+    | 'ajar'
+    | 'unknown';
+
     userName: string | null;
     userPhone?: string | null;
-    batteryOwner: string | null; // Added to match the joined user name from the DB
+    batteryOwner: string | null;
+    pendingManualUnlock?: boolean;
+
     battery: {
       isOccupied: boolean;
       chargeLevel: number;
       voltage?: number;
       temperature?: number;
     } | null;
+
     telemetry?: {
       batteryInserted: boolean;
       doorClosed: boolean;
@@ -64,8 +82,11 @@ export interface AdminBoothStatus {
 }
 
 /**
- * The shape of a transaction object as returned by GET /api/admin/transactions.
+ * =========================================================
+ * TRANSACTIONS
+ * =========================================================
  */
+
 export interface AdminTransaction {
   txId: string;
   type: string;
@@ -83,24 +104,117 @@ export interface ListTransactionsResponse {
   transactions: AdminTransaction[];
   total: number;
 }
+
 /**
- * The shape of the application settings object.
+ * =========================================================
+ * APPLICATION SETTINGS
+ * =========================================================
  */
+
 export interface AppSettings {
+  /**
+   * Standard charging / swap pricing.
+   */
   pricing?: {
     cost_per_charge_percent: number;
     base_swap_fee: number;
     cost_per_kwh: number;
     overtime_penalty_per_min: number;
   };
+
+  /**
+   * =======================================================
+   * RENTAL SETTINGS
+   * =======================================================
+   *
+   * Controls rental battery allocation, pricing,
+   * verification and rental behaviour.
+   */
+  rental?: {
+    /**
+     * Allocate the available rental battery
+     * with the highest SOC first.
+     *
+     * Example:
+     * R-1091 = 94%
+     * R-1082 = 87%
+     * R-1105 = 82%
+     *
+     * R-1091 will be selected first.
+     */
+    allocate_highest_soc_first: boolean;
+
+    /**
+     * Minimum SOC required before a battery
+     * can be allocated for rental.
+     *
+     * Example:
+     * 50 means batteries below 50% cannot
+     * be assigned to a rider.
+     */
+    minimum_soc_percent: number;
+
+    /**
+     * Maximum number of rental batteries
+     * one user can have at the same time.
+     */
+    max_rental_batteries_per_user: number;
+
+    /**
+     * Maximum/recommended rental duration
+     * in minutes before overtime rules apply.
+     */
+    rental_time_limit_minutes: number;
+
+    /**
+     * Rental energy charge in KES per kWh.
+     */
+    rental_energy_rate_per_kwh: number;
+
+    /**
+     * Rental time charge in KES per minute.
+     */
+    rental_time_rate_per_minute: number;
+
+    /**
+     * Require the rider to scan the assigned
+     * rental battery before it can be issued.
+     */
+    require_rental_scan_before_issue: boolean;
+
+    /**
+     * Require the rider to scan the rental
+     * battery when returning it.
+     */
+    require_return_scan: boolean;
+
+    /**
+     * Automatically put a returned rental
+     * battery into charging status.
+     */
+    auto_charge_returned_battery: boolean;
+
+    /**
+     * Allow a rider to use a rental battery
+     * while their own battery is charging.
+     */
+    allow_rental_while_own_battery_charging: boolean;
+  };
+
+  /**
+   * User access control.
+   */
   access_control?: {
     allow_open_registration: boolean;
   };
 }
 
 /**
- * The data required to create a new booth.
+ * =========================================================
+ * BOOTHS
+ * =========================================================
  */
+
 export interface CreateBoothData {
   name: string;
   locationAddress: string;
@@ -109,10 +223,6 @@ export interface CreateBoothData {
   initialSlots: number;
 }
 
-/**
- * The data allowed when updating an existing booth.
- * PATCH /api/admin/booths/:boothUid
- */
 export interface UpdateBoothData {
   name?: string;
   locationAddress?: string;
@@ -120,116 +230,134 @@ export interface UpdateBoothData {
   longitude?: number | null;
 }
 
-/**
- * The response from creating a new booth.
- */
 export interface CreateBoothResponse {
   message: string;
   boothUid: string;
 }
 
 /**
- * Creates a new booth in the system.
- * @param boothData The data for the new booth.
- * @returns A promise that resolves with the creation response.
+ * Creates a new booth.
  */
-export const createBooth = async (boothData: CreateBoothData): Promise<CreateBoothResponse> => {
-  const response = await apiClient.post<CreateBoothResponse>('/admin/booths', boothData);
+export const createBooth = async (
+  boothData: CreateBoothData
+): Promise<CreateBoothResponse> => {
+  const response = await apiClient.post<CreateBoothResponse>(
+    '/admin/booths',
+    boothData
+  );
+
   return response.data;
 };
 
-/**
- * The response from fetching a list of booths.
- */
 export interface ListBoothsResponse {
   booths: Booth[];
   total: number;
-}
+};
 
 /**
- * Fetches a list of all booths from the admin endpoint.
- * @returns A promise that resolves with the list of booths.
+ * Fetches all booths.
  */
 export const getBooths = async (): Promise<ListBoothsResponse> => {
-  const response = await apiClient.get<ListBoothsResponse>('/admin/booths');
+  const response = await apiClient.get<ListBoothsResponse>(
+    '/admin/booths'
+  );
+
   return response.data;
 };
 
 /**
- * Updates an existing booth's details.
- * @param boothUid The UID of the booth to update.
- * @param boothData The data to update.
- * @returns A promise that resolves when the update is complete.
+ * Updates a booth.
  */
-export const updateBooth = async (boothUid: string, boothData: UpdateBoothData): Promise<Booth> => {
-  const response = await apiClient.patch<{ message: string, booth: Booth }>(`/admin/booths/${boothUid}`, boothData);
+export const updateBooth = async (
+  boothUid: string,
+  boothData: UpdateBoothData
+): Promise<Booth> => {
+  const response = await apiClient.patch<{
+    message: string;
+    booth: Booth;
+  }>(
+    `/admin/booths/${boothUid}`,
+    boothData
+  );
+
   return response.data.booth;
 };
 
 /**
- * Deletes a booth from the system.
- * @param boothUid The UID of the booth to delete.
- * @returns A promise that resolves when the deletion is complete.
+ * Deletes a booth.
  */
-export const deleteBooth = async (boothUid: string): Promise<void> => {
-  await apiClient.delete(`/admin/booths/${boothUid}`);
+export const deleteBooth = async (
+  boothUid: string
+): Promise<void> => {
+  await apiClient.delete(
+    `/admin/booths/${boothUid}`
+  );
 };
 
 /**
- * Deletes a specific slot from a booth.
- * @param boothUid The UID of the booth.
- * @param slotIdentifier The identifier of the slot to delete.
+ * =========================================================
+ * BOOTH SLOTS
+ * =========================================================
  */
-export const deleteBoothSlot = async (boothUid: string, slotIdentifier: string): Promise<void> => {
+
+/**
+ * Deletes a booth slot.
+ */
+export const deleteBoothSlot = async (
+  boothUid: string,
+  slotIdentifier: string
+): Promise<void> => {
   try {
-    await apiClient.delete(`/admin/booths/${boothUid}/slots/${slotIdentifier}`);
+    await apiClient.delete(
+      `/admin/booths/${boothUid}/slots/${slotIdentifier}`
+    );
   } catch (error) {
-    console.error(`Failed to delete slot ${slotIdentifier} from booth ${boothUid}:`, error);
+    console.error(
+      `Failed to delete slot ${slotIdentifier} from booth ${boothUid}:`,
+      error
+    );
+
     throw error;
   }
 };
 
 /**
- * Deletes a session from the system.
- * @param sessionId The ID of the session to delete.
+ * Updates the status of a booth slot.
  */
-export const deleteSession = async (sessionId: number): Promise<void> => {
-  try {
-    // Assumes an API endpoint like DELETE /api/admin/sessions/:id
-    await apiClient.delete(`/admin/sessions/${sessionId}`);
-  } catch (error) {
-    console.error(`Failed to delete session ${sessionId}:`, error);
-    throw error;
-  }
-};
-/**
- * Updates the status of a specific booth slot (e.g., to enable or disable it).
- * @param boothUid The UID of the target booth.
- * @param slotIdentifier The identifier of the target slot.
- * @param status The new status to set for the slot.
- */
-export const updateSlotStatus = async (boothUid: string, slotIdentifier: string, status: 'available' | 'disabled'): Promise<{ message: string, slot: any }> => {
-  const response = await apiClient.post(`/admin/booths/${boothUid}/slots/${slotIdentifier}/status`, { status });
+export const updateSlotStatus = async (
+  boothUid: string,
+  slotIdentifier: string,
+  status: 'available' | 'disabled'
+): Promise<{
+  message: string;
+  slot: any;
+}> => {
+  const response = await apiClient.post(
+    `/admin/booths/${boothUid}/slots/${slotIdentifier}/status`,
+    {
+      status,
+    }
+  );
+
   return response.data;
 };
 
-
-/**
- * The shape of a command to be sent to a slot.
- * Keys are command names, values are their parameters (often just `true`).
- */
 export interface SlotCommand {
   [key: string]: any;
 }
 
 /**
- * Sends a command to a specific booth slot.
- * @param boothUid The UID of the target booth.
- * @param slotIdentifier The identifier of the target slot.
- * @param command The command object to send.
+ * Sends a command to a booth slot.
  */
-export const sendSlotCommand = async (boothUid: string, slotIdentifier: string, command: SlotCommand): Promise<void> => {
-  await apiClient.post(`/admin/booths/${boothUid}/slots/${slotIdentifier}/command`, command);
+export const sendSlotCommand = async (
+  boothUid: string,
+  slotIdentifier: string,
+  command: SlotCommand
+): Promise<void> => {
+  await apiClient.post(
+    `/admin/booths/${boothUid}/slots/${slotIdentifier}/command`,
+    command
+  );
 };
 
 export interface ManualWithdrawResponse {
@@ -239,6 +367,12 @@ export interface ManualWithdrawResponse {
   slotIdentifier: string;
 }
 
+/**
+ * Triggers a manual withdrawal for a slot occupied by a user's battery.
+ * @param boothUid The UID of the target booth.
+ * @param slotIdentifier The identifier of the target slot.
+ * @returns A promise that resolves with the created withdrawal session details.
+ */
 export const manualWithdrawSlot = async (
   boothUid: string,
   slotIdentifier: string
@@ -247,6 +381,319 @@ export const manualWithdrawSlot = async (
     `/admin/booths/${boothUid}/slots/${slotIdentifier}/manual-withdraw`
   );
   return response.data;
+};
+
+/**
+ * =========================================================
+ * USERS
+ * =========================================================
+ */
+
+/**
+ * Fetches paginated users.
+ */
+export const getUsers = async (
+  pageToken?: string
+): Promise<ListUsersResponse> => {
+  try {
+    const response =
+      await apiClient.get<ListUsersResponse>(
+        '/admin/users',
+        {
+          params: {
+            pageToken,
+            pageSize: 50,
+          },
+        }
+      );
+
+    return response.data;
+  } catch (error) {
+    console.error(
+      'Failed to fetch users:',
+      error
+    );
+
+    throw error;
+  }
+};
+
+/**
+ * Sets user role.
+ */
+export const setRole = async (
+  userId: string,
+  newRole: UserRole
+): Promise<void> => {
+  try {
+    await apiClient.put(
+      `/admin/users/${userId}/role`,
+      {
+        role: newRole,
+      }
+    );
+  } catch (error) {
+    console.error(
+      `Failed to set role for user ${userId}:`,
+      error
+    );
+
+    throw error;
+  }
+};
+
+/**
+ * Sets user account status.
+ */
+export const setUserStatus = async (
+  payload: {
+    uid: string;
+    status: string;
+  }
+): Promise<void> => {
+  try {
+    await apiClient.post(
+      '/admin/users/set-status',
+      payload
+    );
+  } catch (error) {
+    console.error(
+      `Failed to set status for user ${payload.uid}:`,
+      error
+    );
+
+    throw error;
+  }
+};
+
+/**
+ * Deletes a user.
+ */
+export const deleteUser = async (
+  userId: string
+): Promise<void> => {
+  try {
+    await apiClient.delete(
+      `/admin/users/${userId}`
+    );
+  } catch (error) {
+    console.error(
+      `Failed to delete user ${userId}:`,
+      error
+    );
+
+    throw error;
+  }
+};
+
+/**
+ * Sends a password reset email to the specified user.
+ * @param userId The UID of the user to reset the password for.
+ */
+export const resetUserPassword = async (
+  userId: string
+): Promise<void> => {
+  try {
+    await apiClient.post(
+      `/admin/users/${userId}/reset-password`
+    );
+  } catch (error) {
+    console.error(
+      `Failed to reset password for user ${userId}:`,
+      error
+    );
+
+    throw error;
+  }
+};
+
+/**
+ * =========================================================
+ * BOOTH STATUS
+ * =========================================================
+ */
+
+export const getBoothStatus =
+  async (): Promise<AdminBoothStatus[]> => {
+    try {
+      const response =
+        await apiClient.get<AdminBoothStatus[]>(
+          '/admin/booths/status',
+          {
+            params: {
+              _: new Date().getTime(),
+            },
+          }
+        );
+
+      return response.data;
+    } catch (error) {
+      console.error(
+        'Failed to fetch booths status:',
+        error
+      );
+
+      throw error;
+    }
+  };
+
+/**
+ * =========================================================
+ * TRANSACTIONS
+ * =========================================================
+ */
+
+export const getTransactions = async (
+  limit: number,
+  offset: number,
+  filters?: {
+    searchTerm?: string;
+    status?: string;
+  }
+): Promise<ListTransactionsResponse> => {
+  try {
+    const response =
+      await apiClient.get<ListTransactionsResponse>(
+        '/admin/transactions',
+        {
+          params: {
+            limit,
+            offset,
+            ...filters,
+          },
+        }
+      );
+
+    return response.data;
+  } catch (error) {
+    console.error(
+      'Failed to fetch transactions:',
+      error
+    );
+
+    throw error;
+  }
+};
+
+/**
+ * =========================================================
+ * SETTINGS
+ * =========================================================
+ */
+
+/**
+ * Fetches application settings.
+ */
+export const getSettings =
+  async (): Promise<AppSettings> => {
+    try {
+      const response =
+        await apiClient.get<AppSettings>(
+          '/admin/settings'
+        );
+
+      return response.data;
+    } catch (error) {
+      console.error(
+        'Failed to fetch settings:',
+        error
+      );
+
+      throw error;
+    }
+  };
+
+/**
+ * Updates application settings.
+ */
+export const updateSettings = async (
+  settings: Partial<AppSettings>
+): Promise<void> => {
+  try {
+    await apiClient.post(
+      '/admin/settings',
+      settings
+    );
+  } catch (error) {
+    console.error(
+      'Failed to update settings:',
+      error
+    );
+
+    throw error;
+  }
+};
+
+/**
+ * =========================================================
+ * SLOT DETAILS
+ * =========================================================
+ */
+
+export interface SlotDetails {
+  slotIdentifier: string;
+  isCharging: boolean;
+  chargeLevel: number;
+  status: string;
+  userName: string | null;
+}
+
+/**
+ * Fetches detailed slot information.
+ */
+export const getSlotDetails = async (
+  boothUid: string,
+  slotIdentifier: string
+): Promise<SlotDetails> => {
+  try {
+    const response =
+      await apiClient.get<SlotDetails>(
+        `/booths/${boothUid}/slots/${slotIdentifier}`
+      );
+
+    return response.data;
+  } catch (error) {
+    console.error(
+      `Failed to fetch slot details for ${boothUid}/${slotIdentifier}:`,
+      error
+    );
+
+    throw error;
+  }
+};
+
+export interface SlotWithdrawalInfo {
+  userId: string;
+  userName: string;
+  userPhone: string;
+  calculatedAmount: number;
+  socAtDeposit: number;
+  socCurrent: number;
+  chargeDurationMinutes: number;
+}
+
+/**
+ * Fetches withdrawal information.
+ */
+export const getSlotWithdrawalInfo = async (
+  boothUid: string,
+  slotIdentifier: string
+): Promise<SlotWithdrawalInfo> => {
+  try {
+    const response =
+      await apiClient.get<SlotWithdrawalInfo>(
+        `/admin/booths/${boothUid}/slots/${slotIdentifier}/withdrawal-info`
+      );
+
+    return response.data;
+  } catch (error) {
+    console.error(
+      `Failed to fetch withdrawal info for ${boothUid}/${slotIdentifier}:`,
+      error
+    );
+
+    throw error;
+  }
 };
 
 export interface ReconcileDepositResponse {
@@ -275,6 +722,245 @@ export const reconcileSlotDeposit = async (
     `/admin/booths/${boothUid}/slots/${slotIdentifier}/reconcile-deposit`
   );
   return response.data;
+};
+
+/**
+ * =========================================================
+ * SIMULATION TOOLS
+ * =========================================================
+ */
+
+/**
+ * Simulates hardware confirmation of a battery deposit.
+ */
+export const simulateConfirmDeposit = async (
+  data: {
+    boothUid: string;
+    slotIdentifier: string;
+    chargeLevel: number;
+  }
+): Promise<void> => {
+  await apiClient.post(
+    '/admin/simulate/confirm-deposit',
+    data
+  );
+};
+
+/**
+ * Simulates a successful M-Pesa payment.
+ */
+export const simulateConfirmPayment = async (
+  data: {
+    checkoutRequestId: string;
+  }
+): Promise<void> => {
+  await apiClient.post(
+    '/admin/simulate/confirm-payment',
+    data
+  );
+};
+
+/**
+ * Resets booth slots.
+ */
+export const resetBoothSlots = async (
+  boothUid: string,
+  slotIdentifier?: string
+): Promise<void> => {
+  await apiClient.post(
+    `/admin/booths/${boothUid}/reset-slots`,
+    slotIdentifier
+      ? {
+        slotIdentifier,
+      }
+      : {}
+  );
+};
+
+/**
+ * =========================================================
+ * OPERATORS
+ * =========================================================
+ */
+
+export interface InviteOperatorData {
+  email: string;
+  name: string;
+}
+
+/**
+ * Invites an operator.
+ */
+export const inviteOperator = async (
+  inviteData: InviteOperatorData
+): Promise<AdminUser> => {
+  try {
+    const response =
+      await apiClient.post<{
+        user: AdminUser;
+      }>(
+        '/admin/invite-operator',
+        inviteData
+      );
+
+    return response.data.user;
+  } catch (error) {
+    console.error(
+      'Failed to invite operator:',
+      error
+    );
+
+    throw error;
+  }
+};
+
+/**
+ * =========================================================
+ * DASHBOARD
+ * =========================================================
+ */
+
+export interface DashboardSummary {
+  totalRevenue: number;
+  activeStations: number;
+  totalSwaps: number;
+  activeSessions: number;
+  totalUsers: number;
+
+  swapVolumeTrend: {
+    name: string;
+    val: number;
+  }[];
+
+  batteryUsage: {
+    name: string;
+    value: number;
+  }[];
+}
+
+/**
+ * Fetches dashboard summary.
+ */
+export const getDashboardSummary =
+  async (): Promise<DashboardSummary> => {
+    try {
+      const response =
+        await apiClient.get<DashboardSummary>(
+          '/admin/dashboard-summary'
+        );
+
+      return response.data;
+    } catch (error) {
+      console.error(
+        'Failed to fetch dashboard summary:',
+        error
+      );
+
+      throw error;
+    }
+  };
+
+/**
+ * =========================================================
+ * SESSIONS
+ * =========================================================
+ */
+
+export interface AdminSession {
+  id: number;
+
+  sessionType:
+  | 'deposit'
+  | 'withdrawal';
+
+  status:
+  | 'pending'
+  | 'in_progress'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+  amount: number | null;
+
+  createdAt: string;
+
+  userEmail: string | null;
+
+  userPhoneNumber: string | null;
+
+  boothUid: string | null;
+
+  slotIdentifier: string | null;
+
+  batteryUid: string | null;
+}
+
+export interface ListSessionsResponse {
+  sessions: AdminSession[];
+  total: number;
+}
+
+export interface SessionFilters {
+  searchTerm?: string;
+  status?: string;
+  sessionType?: string;
+  boothUid?: string;
+  slotIdentifier?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  userId?: string;
+}
+
+/**
+ * Fetches sessions.
+ */
+export const getSessions = async (
+  limit: number,
+  offset: number,
+  filters?: SessionFilters
+): Promise<ListSessionsResponse> => {
+  try {
+    const response =
+      await apiClient.get<ListSessionsResponse>(
+        '/admin/sessions',
+        {
+          params: {
+            limit,
+            offset,
+            ...filters,
+          },
+        }
+      );
+
+    return response.data;
+  } catch (error) {
+    console.error(
+      'Failed to fetch sessions:',
+      error
+    );
+
+    throw error;
+  }
+};
+
+/**
+ * Deletes a session.
+ */
+export const deleteSession = async (
+  sessionId: number
+): Promise<void> => {
+  try {
+    await apiClient.delete(
+      `/admin/sessions/${sessionId}`
+    );
+  } catch (error) {
+    console.error(
+      `Failed to delete session ${sessionId}:`,
+      error
+    );
+
+    throw error;
+  }
 };
 
 export interface RetryPaymentResponse {
@@ -324,302 +1010,10 @@ export const getSessionPaymentStatus = async (
 };
 
 /**
- * Fetches a paginated list of all users from the admin endpoint.
- * @param pageToken - The token for fetching the next page of results.
- * @returns A promise that resolves with the list of users and a potential next page token.
+ * =========================================================
+ * PAYMENTS
+ * =========================================================
  */
-export const getUsers = async (pageToken?: string): Promise<ListUsersResponse> => {
-  try {
-    const response = await apiClient.get<ListUsersResponse>('/admin/users', {
-      params: { pageToken, pageSize: 50 },
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Failed to fetch users:', error);
-    throw error;
-  }
-};
-
-/**
- * Fetches the comprehensive status of all booths from the admin endpoint.
- * @returns A promise that resolves with an array of booth statuses.
- */
-export const getBoothStatus = async (): Promise<AdminBoothStatus[]> => {
-  try {
-    // Add a cache-busting parameter to prevent the browser from returning a 304 Not Modified response
-    const response = await apiClient.get<AdminBoothStatus[]>('/admin/booths/status', {
-      params: {
-        '_': new Date().getTime(),
-      }
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Failed to fetch booths status:', error);
-    throw error;
-  }
-};
-
-
-// You can continue to add other admin service functions here, for example:
-/*
-export const getProblemReports = async (status?: string): Promise<any[]> => {
-  const response = await apiClient.get('/admin/problem-reports', { params: { status } });
-  return response.data;
-};
-*/
-/**
- * Sets the role for a specific user.
- * @param userId The UID of the user to modify.
- * @param newRole The new role to assign.
- */
-export const setRole = async (userId: string, newRole: UserRole): Promise<void> => {
-  try {
-    await apiClient.put(`/admin/users/${userId}/role`, { role: newRole });
-  } catch (error) {
-    console.error(`Failed to set role for user ${userId}:`, error);
-    throw error;
-  }
-};
-
-/**
- * Sets the account status (enabled/disabled) for a specific user.
- * @param userId The UID of the user to modify.
- * @param status The new status to set.
- */
-export const setUserStatus = async (payload: { uid: string; status: string }): Promise<void> => {
-  try {
-    await apiClient.post(`/admin/users/set-status`, payload);
-  } catch (error) {
-    console.error(`Failed to set status for user ${payload.uid}:`, error);
-    throw error;
-  }
-};
-
-// You can continue to add other admin service functions here, for example:
-/*
-export const getProblemReports = async (status?: string): Promise<any[]> => {
-  const response = await apiClient.get('/admin/problem-reports', { params: { status } });
-  return response.data;
-};
-*/
-/**
- * Deletes a user from the system.
- * @param userId The UID of the user to delete.
- */
-export const deleteUser = async (userId: string): Promise<void> => {
-  try {
-    await apiClient.delete(`/admin/users/${userId}`);
-  } catch (error) {
-    console.error(`Failed to delete user ${userId}:`, error);
-    throw error;
-  }
-};
-
-/**
- * Sends a password reset email to the specified user.
- * @param userId The UID of the user to reset the password for.
- */
-export const resetUserPassword = async (userId: string): Promise<void> => {
-  try {
-    await apiClient.post(`/admin/users/${userId}/reset-password`);
-  } catch (error) {
-    console.error(`Failed to reset password for user ${userId}:`, error);
-    throw error;
-  }
-};
-
-/**
- * Fetches a paginated list of all transactions from the admin endpoint.
- * @param limit The number of transactions to fetch.
- * @param offset The number of transactions to skip.
- * @param filters Optional search and filter criteria.
- */
-export const getTransactions = async (
-  limit: number,
-  offset: number,
-  filters?: { searchTerm?: string; status?: string }
-): Promise<ListTransactionsResponse> => {
-  try {
-    const response = await apiClient.get<ListTransactionsResponse>('/admin/transactions', {
-      params: {
-        limit,
-        offset,
-        ...filters,
-      },
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Failed to fetch transactions:', error);
-    throw error;
-  }
-};
-
-/**
- * Fetches all application settings from the admin endpoint.
- */
-export const getSettings = async (): Promise<AppSettings> => {
-  try {
-    const response = await apiClient.get<AppSettings>('/admin/settings');
-    return response.data;
-  } catch (error) {
-    console.error('Failed to fetch settings:', error);
-    throw error;
-  }
-};
-
-
-export interface SlotDetails {
-  slotIdentifier: string;
-  isCharging: boolean;
-  chargeLevel: number;
-  status: string;
-  userName: string | null;
-}
-
-/**
- * Fetches detailed status for a specific booth slot.
- * @param boothUid The UID of the booth.
- * @param slotIdentifier The identifier of the slot.
- */
-export const getSlotDetails = async (boothUid: string, slotIdentifier: string): Promise<SlotDetails> => {
-  try {
-    const response = await apiClient.get<SlotDetails>(`/booths/${boothUid}/slots/${slotIdentifier}`);
-    return response.data;
-  } catch (error) {
-    console.error(`Failed to fetch slot details for ${boothUid}/${slotIdentifier}:`, error);
-    throw error;
-  }
-};
-
-export interface SlotWithdrawalInfo {
-  userId: string;
-  userName: string;
-  userPhone: string;
-  calculatedAmount: number;
-  socAtDeposit: number;
-  socCurrent: number;
-  chargeDurationMinutes: number;
-}
-
-export const getSlotWithdrawalInfo = async (boothUid: string, slotIdentifier: string): Promise<SlotWithdrawalInfo> => {
-  try {
-    const response = await apiClient.get<SlotWithdrawalInfo>(`/admin/booths/${boothUid}/slots/${slotIdentifier}/withdrawal-info`);
-    return response.data;
-  } catch (error) {
-    console.error(`Failed to fetch withdrawal info for ${boothUid}/${slotIdentifier}:`, error);
-    throw error;
-  }
-};
-
-/**
- * Updates one or more application settings.
- * @param settings The settings object to update.
- */
-export const updateSettings = async (settings: Partial<AppSettings>): Promise<void> => {
-  try {
-    await apiClient.post('/admin/settings', settings);
-  } catch (error) {
-    console.error('Failed to update settings:', error);
-    throw error;
-  }
-};
-
-/**
- * (Dev Tool) Simulates a hardware confirmation of a battery deposit.
- * @param data The simulation data.
- */
-export const simulateConfirmDeposit = async (data: {
-  boothUid: string;
-  slotIdentifier: string;
-  chargeLevel: number;
-}): Promise<void> => {
-  await apiClient.post('/admin/simulate/confirm-deposit', data);
-};
-
-/**
- * (Dev Tool) Simulates a successful M-Pesa payment for a withdrawal.
- * @param data The simulation data.
- */
-export const simulateConfirmPayment = async (data: {
-  checkoutRequestId: string;
-}): Promise<void> => {
-  await apiClient.post('/admin/simulate/confirm-payment', data);
-};
-
-/**
- * Resets all slots in a given booth to their default 'available' state.
- * @param boothUid The UID of the booth to reset.
- * @param slotIdentifier Optional. The specific slot to reset. If omitted, all slots are reset.
- * @returns A promise that resolves when the reset is complete.
- */
-export const resetBoothSlots = async (boothUid: string, slotIdentifier?: string): Promise<void> => {
-  await apiClient.post(`/admin/booths/${boothUid}/reset-slots`, slotIdentifier ? { slotIdentifier } : {});
-};
-
-/**
- * The data required to invite a new operator.
- */
-export interface InviteOperatorData {
-  email: string;
-  name: string;
-}
-
-/**
- * Invites a new operator to the system.
- * @param inviteData The data for the new operator.
- * @returns A promise that resolves with the newly created user.
- */
-export const inviteOperator = async (inviteData: InviteOperatorData): Promise<AdminUser> => {
-  try {
-    const response = await apiClient.post<{ user: AdminUser }>('/admin/invite-operator', inviteData);
-    return response.data.user;
-  } catch (error) {
-    console.error('Failed to invite operator:', error);
-    throw error;
-  }
-};
-/**
- * The shape of the dashboard summary data.
- */
-export interface DashboardSummary {
-  totalRevenue: number;
-  activeStations: number;
-  totalSwaps: number;
-  activeSessions: number;
-  totalUsers: number;
-  swapVolumeTrend: { name: string; val: number }[];
-  batteryUsage: { name: string; value: number }[];
-}
-
-/**
- * Fetches the aggregated summary data for the admin dashboard.
- * @returns A promise that resolves with the dashboard summary data.
- */
-export const getDashboardSummary = async (): Promise<DashboardSummary> => {
-  try {
-    const response = await apiClient.get<DashboardSummary>('/admin/dashboard-summary');
-    return response.data;
-  } catch (error) {
-    console.error('Failed to fetch dashboard summary:', error);
-    throw error;
-  }
-};
-
-/**
- * The shape of a session object as returned by GET /api/admin/sessions.
- */
-export interface AdminSession {
-  id: number;
-  sessionType: 'deposit' | 'withdrawal';
-  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
-  amount: number | null;
-  createdAt: string;
-  userEmail: string | null;
-  userPhoneNumber: string | null;
-  boothUid: string | null;
-  slotIdentifier: string | null;
-  batteryUid: string | null;
-}
 
 export interface AdminPayment {
   id: number;
@@ -648,27 +1042,8 @@ export interface PaymentFilters {
   sortOrder?: 'ASC' | 'DESC';
 }
 
-export interface ListSessionsResponse {
-  sessions: AdminSession[];
-  total: number;
-}
-
-export interface SessionFilters {
-  searchTerm?: string;
-  status?: string;
-  sessionType?: string;
-  boothUid?: string;
-  slotIdentifier?: string;
-  dateFrom?: string;
-  dateTo?: string;
-  userId?: string;
-}
-
 /**
- * Fetches a paginated list of all payments from the admin endpoint.
- * @param limit The number of payments to fetch.
- * @param offset The number of payments to skip.
- * @param filters Optional search and filter criteria.
+ * Fetches payments.
  */
 export const getPayments = async (
   limit: number,
@@ -676,34 +1051,257 @@ export const getPayments = async (
   filters?: PaymentFilters
 ): Promise<ListPaymentsResponse> => {
   try {
-    const response = await apiClient.get<ListPaymentsResponse>('/admin/payments', {
-      params: { limit, offset, ...filters },
-    });
+    const response =
+      await apiClient.get<ListPaymentsResponse>(
+        '/admin/payments',
+        {
+          params: {
+            limit,
+            offset,
+            ...filters,
+          },
+        }
+      );
+
     return response.data;
   } catch (error) {
-    console.error('Failed to fetch payments:', error);
+    console.error(
+      'Failed to fetch payments:',
+      error
+    );
+
     throw error;
   }
 };
 
 /**
- * Fetches a paginated list of all sessions from the admin endpoint.
- * @param limit The number of sessions to fetch.
- * @param offset The number of sessions to skip.
- * @param filters Optional search and filter criteria.
+ * =========================================================
+ * RENTAL FLEET
+ * =========================================================
  */
-export const getSessions = async (
-  limit: number,
-  offset: number,
-  filters?: SessionFilters
-): Promise<ListSessionsResponse> => {
-  try {
-    const response = await apiClient.get<ListSessionsResponse>('/admin/sessions', {
-      params: { limit, offset, ...filters },
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Failed to fetch sessions:', error);
-    throw error;
-  }
+
+export interface RentalFleetIssued {
+  batteryUid: string;
+
+  state:
+  | 'ISSUED'
+  | 'RETURNED';
+
+  sessionId: number;
+
+  rentedAt: string;
+
+  sourceBoothUid: string;
+
+  sourceSlotIdentifier: string;
+
+  user: {
+    name: string;
+    phone: string;
+    email: string;
+  };
+}
+
+export interface RentalFleetInSlot {
+  batteryUid: string;
+
+  state: 'IN_SLOT';
+
+  boothUid: string;
+
+  slotIdentifier: string;
+
+  chargeLevel: number | null;
+
+  slotStatus: string;
+}
+
+export interface RentalFleetResponse {
+  total: number;
+
+  issued: RentalFleetIssued[];
+
+  inSlots: RentalFleetInSlot[];
+}
+
+/**
+ * Fetches rental fleet.
+ */
+export const getRentalFleet =
+  async (): Promise<RentalFleetResponse> => {
+    try {
+      const response =
+        await apiClient.get<RentalFleetResponse>(
+          '/admin/rentals/fleet'
+        );
+
+      return response.data;
+    } catch (error) {
+      console.error(
+        'Failed to fetch rental fleet:',
+        error
+      );
+
+      throw error;
+    }
+  };
+
+/**
+ * =========================================================
+ * RENTAL BATTERY SORTING
+ * =========================================================
+ */
+
+/**
+ * Sort rental batteries by SOC.
+ *
+ * Highest SOC comes first.
+ *
+ * Example:
+ *
+ * R-1091 -> 94%
+ * R-1082 -> 87%
+ * R-1105 -> 82%
+ */
+export const sortRentalBatteriesBySoc = (
+  batteries: RentalFleetInSlot[]
+): RentalFleetInSlot[] => {
+  return [...batteries].sort(
+    (a, b) =>
+      (b.chargeLevel ?? 0) -
+      (a.chargeLevel ?? 0)
+  );
 };
+
+/**
+ * =========================================================
+ * RENTAL SESSIONS
+ * =========================================================
+ */
+
+export interface RentalSession {
+  id: string;
+  riderName: string;
+  phone?: string;
+  rentalBatteryId: string;
+  ownBatteryId?: string;
+  durationMinutes?: number;
+  amount?: number;
+  totalAmount?: number;
+  status?: string;
+  startTime?: string;
+}
+
+export interface RentalSessionsResponse {
+  sessions: RentalSession[];
+  total: number;
+}
+
+/**
+ * Fetches rental battery sessions.
+ */
+export const getRentalSessions =
+  async (): Promise<RentalSessionsResponse> => {
+    try {
+      const response =
+        await apiClient.get<RentalSessionsResponse>(
+          '/admin/rentals/sessions'
+        );
+
+      return response.data;
+    } catch (error) {
+      console.error(
+        'Failed to fetch rental sessions:',
+        error
+      );
+
+      throw error;
+    }
+  };
+
+/**
+ * =========================================================
+ * RENTAL BATTERY ADMIN ACTIONS
+ * =========================================================
+ */
+
+export interface CreateRentalBatteryData {
+  batteryUid: string;
+  chargeLevel: number;
+  boothUid: string;
+  slotIdentifier: string;
+  notes?: string;
+}
+
+export interface CreateRentalBatteryResponse {
+  batteryUid: string;
+  chargeLevel: number;
+  boothUid: string;
+  slotIdentifier: string;
+  notes?: string | null;
+}
+
+/**
+ * Adds a battery to the rental pool.
+ */
+export const createRentalBattery =
+  async (
+    data: CreateRentalBatteryData
+  ): Promise<CreateRentalBatteryResponse> => {
+    try {
+      const response =
+        await apiClient.post<CreateRentalBatteryResponse>(
+          '/admin/rentals',
+          data
+        );
+
+      return response.data;
+    } catch (error) {
+      console.error(
+        'Failed to create rental battery:',
+        error
+      );
+
+      throw error;
+    }
+  };
+
+export interface WithdrawRentalBatteryData {
+  reason: string;
+  notes?: string;
+}
+
+export interface WithdrawRentalBatteryResponse {
+  batteryUid: string;
+  withdrawn: boolean;
+  reason: string;
+  notes?: string | null;
+}
+
+/**
+ * Withdraws a battery from the rental pool.
+ */
+export const withdrawRentalBattery =
+  async (
+    batteryUid: string,
+    data: WithdrawRentalBatteryData
+  ): Promise<WithdrawRentalBatteryResponse> => {
+    try {
+      const response =
+        await apiClient.post<WithdrawRentalBatteryResponse>(
+          `/admin/rentals/${encodeURIComponent(
+            batteryUid
+          )}/withdraw`,
+          data
+        );
+
+      return response.data;
+    } catch (error) {
+      console.error(
+        'Failed to withdraw rental battery:',
+        error
+      );
+
+      throw error;
+    }
+  };

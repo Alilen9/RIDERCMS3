@@ -158,6 +158,54 @@ export const initiateDeposit = async (boothId: string): Promise<InitiateDepositR
 };
 
 /**
+ * A single borrowable rental battery option.
+ */
+export interface RentalBatteryOption {
+  id: string;
+  soc: number;
+  status?: string;
+}
+
+/**
+ * The raw response from GET /api/booths/rentals/available.
+ */
+export interface AvailableRentalBatteriesResponse {
+  boothUid: string;
+  rentals: {
+    slotId: string;
+    slotIdentifier: string;
+    batteryId: string;
+    batteryUid: string;
+    chargeLevel: number;
+  }[];
+  hasPendingRental: boolean;
+  rentalLimit: number;
+  activeRentalCount: number;
+}
+
+/**
+ * Lists borrowable (unowned) rental-pool batteries at a specific booth.
+ * @param boothUid The UID of the booth to check.
+ * @returns A promise that resolves with the available rental batteries.
+ */
+export const getAvailableRentalBatteries = async (
+  boothUid: string
+): Promise<RentalBatteryOption[]> => {
+  const response =
+    await apiClient.get<AvailableRentalBatteriesResponse>(
+      '/booths/rentals/available',
+      { params: { boothUid } }
+    );
+
+  return (response.data.rentals || []).map(
+    (rental) => ({
+      id: rental.batteryUid,
+      soc: rental.chargeLevel,
+    })
+  );
+};
+
+/**
  * Allows a logged-in user to check the status of their currently deposited battery.
  * @returns A promise that resolves with the battery's status and location.
  */
