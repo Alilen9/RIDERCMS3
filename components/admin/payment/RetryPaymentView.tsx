@@ -33,6 +33,55 @@ const RetryPaymentView: React.FC<RetryPaymentViewProps> = ({ session, onBack, on
 
   useEffect(() => clearPolling, [clearPolling]);
 
+  // Resume: if the admin comes back to a session that already has an M-Pesa
+  // prompt in flight (status pending/in_progress), don't make them resend it —
+  // jump straight into the waiting state and poll for the result.
+  const startPolling = useCallback(() => {
+    clearPolling();
+    pollRef.current = setInterval(async () => {
+      try {
+        const { paymentStatus } = await getSessionPaymentStatus(session.id);
+        if (paymentStatus === 'paid') {
+          clearPolling();
+          setPhase('paid');
+          toast.success('Payment received.');
+        } else if (paymentStatus === 'failed') {
+          clearPolling();
+          setPhase('failed');
+          toast.error('Payment failed. You can retry.');
+        }
+      } catch (error) {
+        // Keep polling on transient errors; individual polls are fire-and-forget.
+        console.error('Poll payment status error:', error);
+      }
+    }, 3000);
+  }, [clearPolling, session.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { paymentStatus, rawStatus } = await getSessionPaymentStatus(session.id);
+        if (cancelled) return;
+        if (paymentStatus === 'paid') {
+          setPhase('paid');
+        } else if (paymentStatus === 'pending') {
+          setPhase('waiting');
+          startPolling();
+        }
+        // 'failed' stays on 'idle' so the admin can re-send the prompt.
+        void rawStatus;
+      } catch (error) {
+        // Transient error on resume: leave the form in idle state.
+        console.error('Resume payment status check error:', error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      clearPolling();
+    };
+  }, [session.id, startPolling, clearPolling]);
+
   const handleSendPrompt = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -60,23 +109,7 @@ const RetryPaymentView: React.FC<RetryPaymentViewProps> = ({ session, onBack, on
     }
 
     // Poll payment status until it resolves.
-    pollRef.current = setInterval(async () => {
-      try {
-        const { paymentStatus } = await getSessionPaymentStatus(session.id);
-        if (paymentStatus === 'paid') {
-          clearPolling();
-          setPhase('paid');
-          toast.success('Payment received.');
-        } else if (paymentStatus === 'failed') {
-          clearPolling();
-          setPhase('failed');
-          toast.error('Payment failed. You can retry.');
-        }
-      } catch (error) {
-        // Keep polling on transient errors; individual polls are fire-and-forget.
-        console.error('Poll payment status error:', error);
-      }
-    }, 3000);
+    startPolling();
   };
 
   const handleRelease = async () => {

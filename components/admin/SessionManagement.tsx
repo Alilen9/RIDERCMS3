@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import {
   getSessions,
@@ -24,6 +24,17 @@ const SESSIONS_PER_PAGE = 10;
 interface SessionManagementProps {
   onNavigateToBooth?: (boothUid: string) => void;
   onNavigateToUser?: (email: string) => void;
+  /**
+   * When set (restored from the URL), auto-opens the detail/retry view for that
+   * session after the list loads, so an admin who left mid-payment comes back
+   * to the exact same screen.
+   */
+  initialSessionId?: number | null;
+  initialRetry?: boolean;
+  onDetailOpened?: (sessionId: number) => void;
+  onDetailClosed?: () => void;
+  onRetryOpened?: (sessionId: number) => void;
+  onRetryClosed?: () => void;
 }
 
 type SessionView = 'sessions' | 'rental';
@@ -31,6 +42,12 @@ type SessionView = 'sessions' | 'rental';
 const SessionManagement: React.FC<SessionManagementProps> = ({
   onNavigateToBooth,
   onNavigateToUser,
+  initialSessionId = null,
+  initialRetry = false,
+  onDetailOpened,
+  onDetailClosed,
+  onRetryOpened,
+  onRetryClosed,
 }) => {
   // -----------------------------------------
   // ACTIVE SESSION VIEW
@@ -377,12 +394,46 @@ const SessionManagement: React.FC<SessionManagementProps> = ({
   ) => {
     setSessionForDetails(session);
     setShowSessionDetail(true);
+    onDetailOpened?.(session.id);
   };
 
   const handleCloseDetail = () => {
     setShowSessionDetail(false);
     setSessionForDetails(null);
+    onDetailClosed?.();
   };
+
+  // -----------------------------------------
+  // RESTORE FROM URL (re-login / reload)
+  // -----------------------------------------
+
+  const didApplyInitialSessionRef = useRef(false);
+
+  useEffect(() => {
+    if (didApplyInitialSessionRef.current) return;
+    if (initialSessionId == null) return;
+
+    const target = sessions.find(
+      (s) => s.id === initialSessionId
+    );
+    if (!target) return;
+
+    didApplyInitialSessionRef.current = true;
+    setSessionForDetails(target);
+    setShowSessionDetail(true);
+    onDetailOpened?.(target.id);
+
+    if (initialRetry) {
+      setShowRetryPayment(true);
+      onRetryOpened?.(target.id);
+    }
+  }, [
+    sessions,
+    initialSessionId,
+    initialRetry,
+    onDetailOpened,
+    onRetryOpened,
+  ]);
 
   // -----------------------------------------
   // REFRESH NORMAL SESSIONS
@@ -444,10 +495,14 @@ const SessionManagement: React.FC<SessionManagementProps> = ({
       {showRetryPayment && sessionForDetails ? (
         <RetryPaymentView
           session={sessionForDetails}
-          onBack={() => setShowRetryPayment(false)}
+          onBack={() => {
+            setShowRetryPayment(false);
+            onRetryClosed?.();
+          }}
           onDone={() => {
             setShowRetryPayment(false);
             handleRefresh();
+            onRetryClosed?.();
           }}
         />
       ) : showSessionDetail &&
@@ -471,6 +526,7 @@ const SessionManagement: React.FC<SessionManagementProps> = ({
             setSessionForDetails(session);
             setShowSessionDetail(false);
             setShowRetryPayment(true);
+            onRetryOpened?.(session.id);
           }}
         />
       ) : (
@@ -852,6 +908,7 @@ const SessionManagement: React.FC<SessionManagementProps> = ({
                                             setSessionForDetails(session);
                                             setShowSessionDetail(false);
                                             setShowRetryPayment(true);
+                                            onRetryOpened?.(session.id);
                                           }}
                                           className="text-emerald-400 hover:text-emerald-300 text-xs font-semibold hover:underline"
                                         >

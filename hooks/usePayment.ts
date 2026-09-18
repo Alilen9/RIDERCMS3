@@ -14,7 +14,7 @@ const POLL_INTERVAL_MS = 3000;
  */
 const PENDING_TIMEOUT_MS = 90 * 1000;
 
-export function usePayment() {
+export function usePayment(resumeSessionId?: number | null) {
   const [status, setStatus] = useState<'IDLE' | 'PENDING' | 'SUCCESS' | 'FAILED'>('IDLE');
   const [loading, setLoading] = useState(false);
   const [lastResponse, setLastResponse] = useState<ManualWithdrawResponse | null>(null);
@@ -110,6 +110,27 @@ export function usePayment() {
 
     schedulePendingTimeout();
   }, [lastResponse, resolveWithStatus, schedulePendingTimeout]);
+
+  // Resume a payment that was still in flight when the admin left the page
+  // (navigated away, app backgrounded, or a forced re-login). By supplying the
+  // payment sessionId from the URL we restart the poll so the waiting screen is
+  // still there, waiting, when the admin comes back.
+  useEffect(() => {
+    if (resumeSessionId == null) return;
+
+    setStatus('PENDING');
+    setLoading(false);
+    setLastResponse({
+      success: false,
+      message: 'Resumed from previous screen.',
+      sessionId: resumeSessionId,
+      transactionId: '',
+    });
+    setTimedOut(false);
+    clearPendingTimeout();
+    pollStatus(resumeSessionId);
+    schedulePendingTimeout();
+  }, [resumeSessionId, pollStatus, schedulePendingTimeout, clearPendingTimeout]);
 
   // Clean up timers if the dashboard section unmounts mid-payment.
   useEffect(() => {

@@ -1018,7 +1018,8 @@ export const getSessionPaymentStatus = async (
   sessionId: number
 ): Promise<SessionPaymentStatus> => {
   const response = await apiClient.get<SessionPaymentStatus>(
-    `/admin/sessions/${sessionId}/payment-status`
+    `/admin/sessions/${sessionId}/payment-status`,
+    { params: { _: new Date().getTime() } }
   );
   return response.data;
 };

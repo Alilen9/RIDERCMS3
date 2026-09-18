@@ -304,7 +304,9 @@ export const payForWithdrawal = async (sessionId: number): Promise<{ checkoutReq
  */
 export const getWithdrawalStatus = async (checkoutRequestId: string): Promise<WithdrawalStatusResponse> => {
   try {
-    const response = await apiClient.get<WithdrawalStatusResponse>(`/booths/withdrawal-status/${checkoutRequestId}`);
+    const response = await apiClient.get<WithdrawalStatusResponse>(`/booths/withdrawal-status/${checkoutRequestId}`, {
+      params: { _: new Date().getTime() },
+    });
     return response.data;
   } catch (error) {
     throw error;

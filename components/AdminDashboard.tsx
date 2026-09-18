@@ -1,11 +1,13 @@
 
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { SlotStatus, BatteryType, Transaction, SystemLog, Battery, Booth, Station, DashboardSummary } from '../types';
 import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, getDashboardSummary } from '../services/adminService';
 import { useSummaryStats, useStatusTrend, useBreakdowns } from '../hooks/useStats';
+import { parseAdminWorkspace, buildAdminDashboardPath, AdminWorkspaceParams } from '../utils/adminWorkspace';
+import { saveLastVisitedPath } from '../utils/lastVisitedPath';
 import AdminSidebar from './admin/AdminSidebar';
 import UserManagement from './admin/user/UserManagement';
 import ConfirmationModal from './admin/ConfirmationModal';
@@ -32,6 +34,51 @@ interface AdminDashboardProps {
   onLogout: () => void;
 }
 
+type AdminSection =
+  | 'dashboard'
+  | 'map'
+  | 'intelligence'
+  | 'stations'
+  | 'addBooth'
+  | 'editBooth'
+  | 'users'
+  | 'batteries'
+  | 'sessions'
+  | 'rental'
+  | 'addRentalBattery'
+  | 'finance'
+  | 'settings'
+  | 'logs'
+  | 'simulation'
+  | 'stats'
+  | 'cleanup'
+  | 'payments'
+  | 'manualWithdraw'
+  | 'paymentWaiting';
+
+const ADMIN_SECTIONS: AdminSection[] = [
+  'dashboard',
+  'map',
+  'intelligence',
+  'stations',
+  'addBooth',
+  'editBooth',
+  'users',
+  'batteries',
+  'sessions',
+  'rental',
+  'addRentalBattery',
+  'finance',
+  'settings',
+  'logs',
+  'simulation',
+  'stats',
+  'cleanup',
+  'payments',
+  'manualWithdraw',
+  'paymentWaiting',
+];
+
 const MOCK_LOGS: SystemLog[] = [
   { id: 'l1', timestamp: '14:32:01', level: 'INFO', message: 'Door opened at Station ST-001 Slot 3', actor: 'System' },
   { id: 'l2', timestamp: '14:30:45', level: 'INFO', message: 'Payment verified for TX-101', actor: 'System' },
@@ -47,7 +94,16 @@ const MOCK_BATTERIES: Battery[] = [
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const navigate = useNavigate();
-  const [activeSection, setActiveSection] = useState<'dashboard' | 'map' | 'intelligence' | 'stations' | 'addBooth' | 'editBooth' | 'users' | 'batteries' | 'sessions' | 'rental' | 'addRentalBattery' | 'finance' | 'settings' | 'logs' | 'simulation' | 'stats' | 'cleanup' | 'payments' | 'manualWithdraw' | "paymentWaiting">('dashboard');
+  // Workspace is persisted in the URL query string so a re-login/reload lands
+  // the admin back on the exact screen they were working on (e.g. a retry
+  // payment or manual-withdrawal waiting screen).
+  const [workspace] = useState(() => parseAdminWorkspace(window.location.search));
+  const [currentSessionId, setCurrentSessionId] = useState<number | null>(workspace.sessionId ? Number(workspace.sessionId) : null);
+  const resumePaymentSessionId = workspace.paymentSessionId ? Number(workspace.paymentSessionId) : null;
+  const [activeSection, setActiveSection] = useState<AdminSection>(() => {
+    const section = workspace.section;
+    return section && (ADMIN_SECTIONS as string[]).includes(section) ? (section as AdminSection) : 'dashboard';
+  });
   const [batteries, setBatteries] = useState<Battery[]>(MOCK_BATTERIES);
   const [booths, setBooths] = useState<Booth[]>([]);
   const [boothToEdit, setBoothToEdit] = useState<Booth | null>(null);
@@ -56,12 +112,38 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const { summary: statsSummary, loading: statsLoading } = useSummaryStats();
   const { trend: statusTrend } = useStatusTrend(7);
   const { breakdowns } = useBreakdowns();
-  const [initialBoothForDetail, setInitialBoothForDetail] = useState<Booth | null>(null);
-  const [manualWithdrawContext, setManualWithdrawContext] = useState<{ boothUid: string; slotIdentifier: string } | null>(null);
-  const { initiatePayment, status: paymentStatus, loading: paymentLoading, timedOut: paymentTimedOut, checkStatusNow } = usePayment();
+  const [initialBoothForDetail, setInitialBoothForDetail] = useState<Booth | null>(workspace.booth ? ({ booth_uid: workspace.booth } as Booth) : null);
+  const [manualWithdrawContext, setManualWithdrawContext] = useState<{ boothUid: string; slotIdentifier: string } | null>(workspace.booth && workspace.slot ? { boothUid: workspace.booth, slotIdentifier: workspace.slot } : null);
+  const { initiatePayment, status: paymentStatus, loading: paymentLoading, timedOut: paymentTimedOut, checkStatusNow, lastResponse } = usePayment(resumePaymentSessionId);
   // UI State
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [error, setError] = useState<string>('');
+
+  // Keep /admin/dashboard?section=... + lastVisitedPath in sync with the screen
+  // the admin is currently on.
+  const syncWorkspace = useCallback((params: AdminWorkspaceParams) => {
+    const path = buildAdminDashboardPath(params);
+    window.history.replaceState(null, '', path);
+    saveLastVisitedPath(path);
+  }, []);
+
+  const setSectionWithSync = useCallback((section: AdminSection, extra: Omit<AdminWorkspaceParams, 'section'> = {}) => {
+    setActiveSection(section);
+    syncWorkspace({ ...extra, section });
+  }, [syncWorkspace]);
+
+  // Persist the payment session id so the waiting screen can be resumed after
+  // the admin navigates away / reloads mid-payment.
+  useEffect(() => {
+    if (activeSection !== 'paymentWaiting') return;
+    if (!lastResponse?.sessionId) return;
+    syncWorkspace({
+      section: 'paymentWaiting',
+      booth: manualWithdrawContext?.boothUid,
+      slot: manualWithdrawContext?.slotIdentifier,
+      paymentSessionId: String(lastResponse.sessionId),
+    });
+  }, [activeSection, paymentStatus, lastResponse, manualWithdrawContext, syncWorkspace]);
 
   useEffect(() => {
     const fetchSummary = async () => {
@@ -87,7 +169,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
   const handleBoothAdded = (newBooth: Partial<Booth>) => {
     // This will now be handled by the BoothManagement component refetching
-    setActiveSection('stations');
+    setSectionWithSync('stations');
   };
 
 
@@ -95,7 +177,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     setBooths(prevBooths =>
       prevBooths.map(b => b.booth_uid === updatedBooth.booth_uid ? updatedBooth : b)
     );
-    setActiveSection('stations');
+    setSectionWithSync('stations');
     setBoothToEdit(null);
   };
 
@@ -120,21 +202,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
   const handleNavigation = (section: 'addBooth' | 'editBooth', data?: any) => {
     if (section === 'editBooth') setBoothToEdit(data);
-    setActiveSection(section);
+    setSectionWithSync(section);
   };
 
   const handleMapBoothClick = (booth: Booth) => {
     setInitialBoothForDetail(booth);
-    setActiveSection('stations'); // Switch to the stations section
+    setSectionWithSync('stations', { booth: booth.booth_uid }); // Switch to the stations section
   };
 
   const navigateToBooth = (boothUid: string) => {
     setInitialBoothForDetail({ booth_uid: boothUid } as any);
-    setActiveSection('stations');
+    setSectionWithSync('stations', { booth: boothUid });
   };
 
   const navigateToUser = (email: string) => {
-    setActiveSection('users');
+    setSectionWithSync('users');
   };
 
 
@@ -143,7 +225,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const renderStations = () => {
     return <BoothManagement onNavigate={handleNavigation} initialDetailBooth={initialBoothForDetail} onDetailViewClose={() => setInitialBoothForDetail(null)} onManualWithdraw={(slotIdentifier, boothUid) => {
       setManualWithdrawContext({ boothUid, slotIdentifier });
-      setActiveSection('manualWithdraw');
+      setSectionWithSync('manualWithdraw', { booth: boothUid, slot: slotIdentifier });
     }} />
   };
 
@@ -152,7 +234,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     <div className="min-h-screen bg-gray-950 text-white font-sans flex">
       <AdminSidebar
         activeSection={activeSection}
-        onNavigate={(section) => setActiveSection(section as any)}
+        onNavigate={(section) => setSectionWithSync(section as AdminSection)}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
         onLogout={onLogout}
@@ -206,18 +288,43 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           } : null} statusTrend={statusTrend} breakdowns={breakdowns} />}
           {activeSection === 'map' && <NetworkMap onBoothClick={handleMapBoothClick} />}
           {activeSection === 'stations' && renderStations()}
-          {activeSection === 'addBooth' && <AddBoothsForm onBoothAdded={handleBoothAdded} onCancel={() => { setActiveSection('stations'); }} />}
-          {activeSection === 'editBooth' && boothToEdit && <EditBoothsForm boothToEdit={boothToEdit} onBoothUpdated={handleBoothUpdated} onCancel={() => setActiveSection('stations')} />}
+          {activeSection === 'addBooth' && <AddBoothsForm onBoothAdded={handleBoothAdded} onCancel={() => { setSectionWithSync('stations'); }} />}
+          {activeSection === 'editBooth' && boothToEdit && <EditBoothsForm boothToEdit={boothToEdit} onBoothUpdated={handleBoothUpdated} onCancel={() => setSectionWithSync('stations')} />}
           {activeSection === 'users' && <UserManagement />}
-          {activeSection === 'sessions' && <SessionManagement onNavigateToBooth={navigateToBooth} onNavigateToUser={navigateToUser} />}
+          {activeSection === 'sessions' && (
+            <SessionManagement
+              onNavigateToBooth={navigateToBooth}
+              onNavigateToUser={navigateToUser}
+              initialSessionId={currentSessionId}
+              initialRetry={workspace.retry === '1'}
+              onDetailOpened={(sessionId) => {
+                setCurrentSessionId(sessionId);
+                syncWorkspace({ section: 'sessions', sessionId: String(sessionId) });
+              }}
+              onDetailClosed={() => {
+                setCurrentSessionId(null);
+                syncWorkspace({ section: 'sessions' });
+              }}
+              onRetryOpened={(sessionId) => {
+                setCurrentSessionId(sessionId);
+                syncWorkspace({ section: 'sessions', sessionId: String(sessionId), retry: '1' });
+              }}
+              onRetryClosed={() => {
+                syncWorkspace({
+                  section: 'sessions',
+                  sessionId: currentSessionId != null ? String(currentSessionId) : undefined,
+                });
+              }}
+            />
+          )}
           {activeSection === 'payments' && <PaymentManagement />}
-          {activeSection === 'rental' && <RentalManagement onAddBattery={() => setActiveSection('addRentalBattery')} />}
+          {activeSection === 'rental' && <RentalManagement onAddBattery={() => setSectionWithSync('addRentalBattery')} />}
           {activeSection === 'addRentalBattery' && (
-            <AddRentalBatteryPage onBack={() => setActiveSection('rental')} />
+            <AddRentalBatteryPage onBack={() => setSectionWithSync('rental')} />
           )}
           {activeSection === "manualWithdraw" && (
             <ManualWithdrawPage
-              onWaiting={() => setActiveSection("paymentWaiting")}
+              onWaiting={() => setSectionWithSync("paymentWaiting", { booth: manualWithdrawContext?.boothUid, slot: manualWithdrawContext?.slotIdentifier })}
               boothUid={manualWithdrawContext?.boothUid}
               slotIdentifier={manualWithdrawContext?.slotIdentifier}
               initiatePayment={initiatePayment}
@@ -227,10 +334,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
 
           {activeSection === "paymentWaiting" && (
             <PaymentWaitingPage
-              onBack={() => setActiveSection("manualWithdraw")}
+              onBack={() => setSectionWithSync("manualWithdraw", { booth: manualWithdrawContext?.boothUid, slot: manualWithdrawContext?.slotIdentifier })}
               onSuccess={() => {
                 setManualWithdrawContext(null);
-                setActiveSection("stations");
+                setSectionWithSync("stations");
               }}
               boothUid={manualWithdrawContext?.boothUid}
               slotIdentifier={manualWithdrawContext?.slotIdentifier}

@@ -27,6 +27,8 @@ export async function manualWithdraw(data: ManualWithdrawRequest): Promise<Manua
 }
 
 export async function getManualWithdrawStatus(sessionId: number): Promise<PaymentStatusResponse> {
-  const response = await apiClient.get<PaymentStatusResponse>(`/admin/payments/status/${sessionId}`);
+  const response = await apiClient.get<PaymentStatusResponse>(`/admin/payments/status/${sessionId}`, {
+    params: { _: new Date().getTime() },
+  });
   return response.data;
 }
