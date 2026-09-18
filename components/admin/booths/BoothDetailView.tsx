@@ -59,8 +59,13 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
 
       return {
         slotIdentifier: adminSlot.identifier,
-        // Prioritize administrative status (e.g. 'disabled') over live status
-        status: adminSlot.status !== 'available' ? adminSlot.status : (liveSlot?.status || adminSlot.status),
+        // Administrative/in-flight states win; otherwise trust live telemetry
+        // ('occupied' requires a battery physically detected in the slot).
+        status: ['disabled', 'maintenance', 'faulty', 'opening'].includes(adminSlot.status)
+          ? adminSlot.status
+          : liveSlot?.battery
+            ? (liveSlot.battery.isOccupied ? 'occupied' : 'available')
+            : adminSlot.status,
         doorStatus: liveSlot?.doorStatus || adminSlot.doorStatus,
         // Combine battery info: live telemetry takes precedence
         battery: liveSlot?.battery || (adminSlot.chargeLevel !== null ? { chargeLevel: adminSlot.chargeLevel } : null),

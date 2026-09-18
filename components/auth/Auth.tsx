@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { useForm, SubmitHandler } from 'react-hook-form';
+import { useForm, SubmitHandler, Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { User } from '../../types';
@@ -41,7 +41,9 @@ type FormInputs = LoginFormInputs & RegisterFormInputs;
 // A factory function to get the correct, typed Zod resolver.
 // This avoids the need for `as any`.
 const getResolver = (mode: 'login' | 'register') => {
-  return zodResolver(mode === 'login' ? loginSchema : registerSchema);
+  return zodResolver(
+    mode === 'login' ? loginSchema : registerSchema,
+  ) as unknown as Resolver<FormInputs>;
 };
 
 const Auth: React.FC<AuthProps> = ({ onLogin }) => {

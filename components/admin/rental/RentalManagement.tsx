@@ -16,6 +16,8 @@ import {
   XCircle,
 } from 'lucide-react';
 
+import toast from 'react-hot-toast';
+
 import RentalBatteryCard from './RentalBatteryCard';
 import RentalBatteryDetails from './RentalBatteryDetails';
 import {
@@ -54,6 +56,15 @@ const RentalManagement: React.FC = () => {
 
   const [successMessage, setSuccessMessage] =
     useState<string | null>(null);
+
+  /*
+   * Sets the inline page-level error AND shows a toast so the
+   * message stays visible even while a modal overlay is open.
+   */
+  const showError = (message: string) => {
+    setError(message);
+    toast.error(message, { duration: 6000 });
+  };
 
   /*
    * ============================================================
@@ -430,17 +441,17 @@ const RentalManagement: React.FC = () => {
     event.preventDefault();
 
     if (!addForm.batteryUid.trim()) {
-      setError('Serial number is required.');
+      showError('Serial number is required.');
       return;
     }
 
     if (!addForm.boothUid.trim()) {
-      setError('Booth ID is required.');
+      showError('Booth ID is required.');
       return;
     }
 
     if (!addForm.slotIdentifier.trim()) {
-      setError('Slot identifier is required.');
+      showError('Slot identifier is required.');
       return;
     }
 
@@ -519,7 +530,7 @@ const RentalManagement: React.FC = () => {
         );
 
         if (alreadyExists) {
-          setError(
+          showError(
             `Battery ${newBattery.id} already exists.`
           );
 
@@ -547,7 +558,7 @@ const RentalManagement: React.FC = () => {
         )?.response?.data?.error ||
         'Failed to add rental battery.';
 
-      setError(message);
+      showError(message);
     } finally {
       setAddingBattery(false);
     }
@@ -668,7 +679,7 @@ const RentalManagement: React.FC = () => {
         `Battery ${newBattery.id} placed in ${newBattery.slotId}.`
       );
     } else if (placementPhase === 'timeout') {
-      setError(
+      showError(
         `Placement timed out. No battery was detected in slot ${pendingPlacement.slotIdentifier} — the slot has been returned to available.`
       );
     } else if (placementPhase === 'cancelled') {
@@ -676,7 +687,7 @@ const RentalManagement: React.FC = () => {
         `Placement cancelled. Slot ${pendingPlacement.slotIdentifier} is available again.`
       );
     } else if (placementPhase === 'reverted') {
-      setError(
+      showError(
         `Placement reverted. Slot ${pendingPlacement.slotIdentifier} is available again.`
       );
     }
@@ -735,7 +746,7 @@ const RentalManagement: React.FC = () => {
      * A battery being used by a rider cannot be withdrawn.
      */
     if (battery.status === 'issued') {
-      setError(
+      showError(
         'This battery cannot be withdrawn because it is currently issued to a rider.'
       );
 
@@ -743,7 +754,7 @@ const RentalManagement: React.FC = () => {
     }
 
     if (battery.status === 'withdrawn') {
-      setError(
+      showError(
         'This battery has already been withdrawn.'
       );
 
@@ -775,7 +786,7 @@ const RentalManagement: React.FC = () => {
     }
 
     if (!withdrawReason.trim()) {
-      setError('Please provide a withdrawal reason.');
+      showError('Please provide a withdrawal reason.');
       return;
     }
 
@@ -827,7 +838,7 @@ const RentalManagement: React.FC = () => {
         )?.response?.data?.error ||
         'Failed to withdraw rental battery.';
 
-      setError(message);
+      showError(message);
     } finally {
       setWithdrawingBattery(false);
     }
