@@ -22,6 +22,11 @@ import {
   getRentalFleet,
   createRentalBattery,
   withdrawRentalBattery,
+  getBoothStatus,
+} from '../../../services/adminService';
+
+import type {
+  AdminBoothStatus,
 } from '../../../services/adminService';
 
 import type {
@@ -45,6 +50,9 @@ const RentalManagement: React.FC = () => {
 
   const [error, setError] = useState<string | null>(null);
 
+  const [successMessage, setSuccessMessage] =
+    useState<string | null>(null);
+
   /*
    * ============================================================
    * ADD BATTERY MODAL
@@ -63,6 +71,15 @@ const RentalManagement: React.FC = () => {
     slotIdentifier: '',
     notes: '',
   });
+
+  const [boothOptions, setBoothOptions] =
+    useState<AdminBoothStatus[]>([]);
+
+  const [loadingBooths, setLoadingBooths] =
+    useState(false);
+
+  const [boothOptionsError, setBoothOptionsError] =
+    useState<string | null>(null);
 
   /*
    * ============================================================
@@ -123,6 +140,7 @@ const RentalManagement: React.FC = () => {
   const loadFleet = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setSuccessMessage(null);
 
     try {
       const fleet = await getRentalFleet();
@@ -234,6 +252,53 @@ const RentalManagement: React.FC = () => {
 
   /*
    * ============================================================
+   * LOAD BOOTH OPTIONS FOR ADD BATTERY MODAL
+   * ============================================================
+   */
+
+  const loadBoothOptions = useCallback(async () => {
+    setLoadingBooths(true);
+    setBoothOptionsError(null);
+
+    try {
+      const booths = await getBoothStatus();
+
+      setBoothOptions(booths);
+    } catch (err) {
+      const message =
+        (
+          err as {
+            response?: {
+              data?: {
+                error?: string;
+              };
+            };
+          }
+        )?.response?.data?.error ||
+        'Failed to load booths and slots.';
+
+      setBoothOptionsError(message);
+    } finally {
+      setLoadingBooths(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadBoothOptions();
+  }, [loadBoothOptions]);
+
+  const selectedBoothSlots = useMemo(() => {
+    if (!addForm.boothUid) return [];
+
+    const booth = boothOptions.find(
+      (option) => option.boothUid === addForm.boothUid
+    );
+
+    return booth?.slots ?? [];
+  }, [boothOptions, addForm.boothUid]);
+
+  /*
+   * ============================================================
    * SUMMARY STATISTICS
    * ============================================================
    */
@@ -342,6 +407,7 @@ const RentalManagement: React.FC = () => {
 
     setAddingBattery(true);
     setError(null);
+    setSuccessMessage(null);
 
     try {
       /*
@@ -400,6 +466,10 @@ const RentalManagement: React.FC = () => {
       });
 
       setShowAddModal(false);
+
+      setSuccessMessage(
+        `Battery ${newBattery.id} placed in ${newBattery.slotId}.`
+      );
     } catch (err) {
       const message =
         (
@@ -586,7 +656,9 @@ const RentalManagement: React.FC = () => {
               type="button"
               onClick={() => {
                 setError(null);
+                setSuccessMessage(null);
                 setShowAddModal(true);
+                loadBoothOptions();
               }}
               className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-500"
             >
@@ -663,6 +735,42 @@ const RentalManagement: React.FC = () => {
             <button
               type="button"
               onClick={() => setError(null)}
+              className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-800 hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+          </div>
+        )}
+
+        {/* =====================================================
+            SUCCESS
+        ====================================================== */}
+
+        {successMessage && (
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5">
+
+            <div className="flex items-center gap-3">
+
+              <CheckCircle2 className="h-6 w-6 text-emerald-400" />
+
+              <div>
+
+                <p className="text-sm font-semibold text-emerald-300">
+                  Rental Battery Added
+                </p>
+
+                <p className="text-sm text-gray-500">
+                  {successMessage}
+                </p>
+
+              </div>
+
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setSuccessMessage(null)}
               className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-800 hover:text-white"
             >
               <X className="h-4 w-4" />
@@ -1205,21 +1313,44 @@ const RentalManagement: React.FC = () => {
                 <div>
 
                   <label className="mb-2 block text-sm font-medium text-gray-300">
-                    Booth ID
+                    Booth
                   </label>
 
-                  <input
-                    type="text"
+                  <select
                     value={addForm.boothUid}
                     onChange={(event) =>
                       setAddForm({
                         ...addForm,
                         boothUid: event.target.value,
+                        slotIdentifier: '',
                       })
                     }
-                    placeholder="e.g. BOOTH-01"
-                    className="w-full rounded-xl border border-gray-700 bg-gray-950 px-4 py-3 text-sm text-white outline-none placeholder:text-gray-600 focus:border-indigo-500"
-                  />
+                    className="w-full rounded-xl border border-gray-700 bg-gray-950 px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 disabled:opacity-50"
+                    disabled={loadingBooths}
+                  >
+
+                    <option value="">
+                      {loadingBooths
+                        ? 'Loading booths...'
+                        : 'Select a booth...'}
+                    </option>
+
+                    {boothOptions.map((booth) => (
+                      <option
+                        key={booth.boothUid}
+                        value={booth.boothUid}
+                      >
+                        {booth.name} ({booth.boothUid})
+                      </option>
+                    ))}
+
+                  </select>
+
+                  {boothOptionsError && (
+                    <p className="mt-1 text-xs text-red-400">
+                      {boothOptionsError}
+                    </p>
+                  )}
 
                 </div>
 
@@ -1231,8 +1362,7 @@ const RentalManagement: React.FC = () => {
                     Slot
                   </label>
 
-                  <input
-                    type="text"
+                  <select
                     value={addForm.slotIdentifier}
                     onChange={(event) =>
                       setAddForm({
@@ -1240,9 +1370,45 @@ const RentalManagement: React.FC = () => {
                         slotIdentifier: event.target.value,
                       })
                     }
-                    placeholder="e.g. SLOT-04"
-                    className="w-full rounded-xl border border-gray-700 bg-gray-950 px-4 py-3 text-sm text-white outline-none placeholder:text-gray-600 focus:border-indigo-500"
-                  />
+                    className="w-full rounded-xl border border-gray-700 bg-gray-950 px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 disabled:opacity-50"
+                    disabled={
+                      loadingBooths || !addForm.boothUid
+                    }
+                  >
+
+                    <option value="">
+                      {!addForm.boothUid
+                        ? loadingBooths
+                          ? 'Loading booths...'
+                          : 'Select a booth first...'
+                        : 'Select a slot...'}
+                    </option>
+
+                    {selectedBoothSlots.map((slot) => {
+                      const isOccupied =
+                        slot.battery?.isOccupied === true;
+
+                      return (
+                        <option
+                          key={slot.slotIdentifier}
+                          value={slot.slotIdentifier}
+                          disabled={isOccupied}
+                        >
+                          {slot.slotIdentifier}
+                          {' — '}
+                          {isOccupied ? 'occupied' : slot.status}
+                        </option>
+                      );
+                    })}
+
+                  </select>
+
+                  {addForm.boothUid &&
+                    selectedBoothSlots.length === 0 && (
+                    <p className="mt-1 text-xs text-gray-500">
+                      No slots found for this booth.
+                    </p>
+                  )}
 
                 </div>
 
