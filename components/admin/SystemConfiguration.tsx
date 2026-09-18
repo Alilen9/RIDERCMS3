@@ -200,7 +200,8 @@ const SystemConfig: React.FC = () => {
     rental?.rental_time_limit_minutes ?? 60;
 
   const rentalEnergyRate =
-    rental?.rental_energy_rate_per_kwh ?? 50;
+    rental?.rental_energy_rate_per_percent ??
+    ((rental?.rental_energy_rate_per_kwh ?? 50) / 100);
 
   const rentalTimeRate =
     rental?.rental_time_rate_per_minute ?? 10;
@@ -449,17 +450,18 @@ const SystemConfig: React.FC = () => {
               <div>
 
                 <label className="block text-xs uppercase text-gray-500 mb-1">
-                  Rental Energy Rate (KES/kWh)
+                  Rental SOC Rate (KES per 1% SOC)
                 </label>
 
                 <input
                   type="number"
                   min="0"
+                  step="0.01"
                   value={rentalEnergyRate}
                   onChange={(e) =>
                     handleInputChange(
                       'rental',
-                      'rental_energy_rate_per_kwh',
+                      'rental_energy_rate_per_percent',
                       parseFloat(e.target.value) || 0
                     )
                   }
@@ -467,7 +469,7 @@ const SystemConfig: React.FC = () => {
                 />
 
                 <p className="text-xs text-gray-600 mt-1">
-                  Amount charged for energy consumed from the rental battery.
+                  Amount charged per 1% of SOC consumed from the rental battery.
                 </p>
 
               </div>
@@ -661,7 +663,7 @@ const SystemConfig: React.FC = () => {
               <div>
 
                 <label className="block text-xs uppercase text-gray-500 mb-1">
-                  Rental Time Limit (minutes)
+                  Rental Overtime Penalty (minutes)
                 </label>
 
                 <input
@@ -679,7 +681,7 @@ const SystemConfig: React.FC = () => {
                 />
 
                 <p className="text-xs text-gray-600 mt-1">
-                  Maximum recommended rental duration before overtime charges apply.
+                  Minutes after which rental overtime penalty charges apply.
                 </p>
 
               </div>

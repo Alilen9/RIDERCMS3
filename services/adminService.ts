@@ -167,9 +167,15 @@ export interface AppSettings {
     rental_time_limit_minutes: number;
 
     /**
-     * Rental energy charge in KES per kWh.
+     * Rental energy charge in KES per 1% of SOC consumed.
      */
-    rental_energy_rate_per_kwh: number;
+    rental_energy_rate_per_percent: number;
+
+    /**
+     * Deprecated legacy key (KES per full battery). Used as a fallback
+     * when rental_energy_rate_per_percent is not set.
+     */
+    rental_energy_rate_per_kwh?: number;
 
     /**
      * Rental time charge in KES per minute.

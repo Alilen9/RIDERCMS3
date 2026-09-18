@@ -65,7 +65,6 @@ const RentalManagement: React.FC = () => {
 
   const [addForm, setAddForm] = useState({
     batteryUid: '',
-    batteryType: 'E-Bike',
     boothUid: '',
     slotIdentifier: '',
     notes: '',
@@ -379,7 +378,7 @@ const RentalManagement: React.FC = () => {
     event.preventDefault();
 
     if (!addForm.batteryUid.trim()) {
-      setError('Battery ID is required.');
+      setError('Serial number is required.');
       return;
     }
 
@@ -445,7 +444,6 @@ const RentalManagement: React.FC = () => {
 
       setAddForm({
         batteryUid: '',
-        batteryType: 'E-Bike',
         boothUid: '',
         slotIdentifier: '',
         notes: '',
@@ -1205,12 +1203,12 @@ const RentalManagement: React.FC = () => {
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
 
-                {/* Battery ID */}
+                {/* Serial Number */}
 
                 <div>
 
                   <label className="mb-2 block text-sm font-medium text-gray-300">
-                    Battery ID / UID
+                    Serial Number
                   </label>
 
                   <input
@@ -1222,44 +1220,9 @@ const RentalManagement: React.FC = () => {
                         batteryUid: event.target.value,
                       })
                     }
-                    placeholder="e.g. RENT-BAT-004"
+                    placeholder="e.g. R-1091"
                     className="w-full rounded-xl border border-gray-700 bg-gray-950 px-4 py-3 text-sm text-white outline-none placeholder:text-gray-600 focus:border-indigo-500"
                   />
-
-                </div>
-
-                {/* Battery Type */}
-
-                <div>
-
-                  <label className="mb-2 block text-sm font-medium text-gray-300">
-                    Battery Type
-                  </label>
-
-                  <select
-                    value={addForm.batteryType}
-                    onChange={(event) =>
-                      setAddForm({
-                        ...addForm,
-                        batteryType: event.target.value,
-                      })
-                    }
-                    className="w-full rounded-xl border border-gray-700 bg-gray-950 px-4 py-3 text-sm text-white outline-none focus:border-indigo-500"
-                  >
-
-                    <option value="E-Bike">
-                      E-Bike
-                    </option>
-
-                    <option value="Scooter">
-                      Scooter
-                    </option>
-
-                    <option value="Car Module">
-                      Car Module
-                    </option>
-
-                  </select>
 
                 </div>
 
@@ -1295,7 +1258,7 @@ const RentalManagement: React.FC = () => {
                         key={booth.boothUid}
                         value={booth.boothUid}
                       >
-                        {booth.name} ({booth.boothUid})
+                        {booth.name}
                       </option>
                     ))}
 
