@@ -1234,7 +1234,11 @@ export const getRentalSessions =
 
 export interface CreateRentalBatteryData {
   batteryUid: string;
-  chargeLevel: number;
+  /**
+   * Optional override. When omitted, the backend reads the
+   * battery's live SOC from the slot it is placed into.
+   */
+  chargeLevel?: number;
   boothUid: string;
   slotIdentifier: string;
   notes?: string;

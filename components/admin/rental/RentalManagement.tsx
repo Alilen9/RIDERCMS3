@@ -66,7 +66,6 @@ const RentalManagement: React.FC = () => {
   const [addForm, setAddForm] = useState({
     batteryUid: '',
     batteryType: 'E-Bike',
-    chargeLevel: '100',
     boothUid: '',
     slotIdentifier: '',
     notes: '',
@@ -394,17 +393,6 @@ const RentalManagement: React.FC = () => {
       return;
     }
 
-    const chargeLevel = Number(addForm.chargeLevel);
-
-    if (
-      Number.isNaN(chargeLevel) ||
-      chargeLevel < 0 ||
-      chargeLevel > 100
-    ) {
-      setError('Charge level must be between 0 and 100.');
-      return;
-    }
-
     setAddingBattery(true);
     setError(null);
     setSuccessMessage(null);
@@ -416,7 +404,6 @@ const RentalManagement: React.FC = () => {
        */
       const createdBattery = await createRentalBattery({
         batteryUid: addForm.batteryUid.trim(),
-        chargeLevel,
         boothUid: addForm.boothUid.trim(),
         slotIdentifier: addForm.slotIdentifier.trim(),
         notes: addForm.notes.trim() || undefined,
@@ -459,7 +446,6 @@ const RentalManagement: React.FC = () => {
       setAddForm({
         batteryUid: '',
         batteryType: 'E-Bike',
-        chargeLevel: '100',
         boothUid: '',
         slotIdentifier: '',
         notes: '',
@@ -622,7 +608,7 @@ const RentalManagement: React.FC = () => {
    */
 
   return (
-    <div className="min-h-full bg-gray-950 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-gray-950">
 
       <div className="mx-auto max-w-7xl space-y-6">
 
@@ -633,13 +619,6 @@ const RentalManagement: React.FC = () => {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-indigo-400">
-              Administration
-            </p>
-
-            <h1 className="mt-1 text-2xl font-bold text-white sm:text-3xl">
-              Rental Management
-            </h1>
 
             <p className="mt-2 max-w-2xl text-sm text-gray-500">
               Manage rental batteries, monitor battery status,
@@ -1281,30 +1260,6 @@ const RentalManagement: React.FC = () => {
                     </option>
 
                   </select>
-
-                </div>
-
-                {/* Charge Level */}
-
-                <div>
-
-                  <label className="mb-2 block text-sm font-medium text-gray-300">
-                    Initial Charge Level (%)
-                  </label>
-
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={addForm.chargeLevel}
-                    onChange={(event) =>
-                      setAddForm({
-                        ...addForm,
-                        chargeLevel: event.target.value,
-                      })
-                    }
-                    className="w-full rounded-xl border border-gray-700 bg-gray-950 px-4 py-3 text-sm text-white outline-none focus:border-indigo-500"
-                  />
 
                 </div>
 
