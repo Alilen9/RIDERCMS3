@@ -199,6 +199,13 @@ export interface AppSettings {
      * while their own battery is charging.
      */
     allow_rental_while_own_battery_charging: boolean;
+
+    /**
+     * Master switch for the rental battery feature.
+     * When false, rental UI is hidden from riders and
+     * the user-facing rental endpoints reject requests.
+     */
+    enabled?: boolean;
   };
 
   /**

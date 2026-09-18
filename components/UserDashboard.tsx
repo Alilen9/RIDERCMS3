@@ -144,6 +144,9 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
   const [rentalUnavailable, setRentalUnavailable] =
     useState(false);
 
+  const [rentalsEnabled, setRentalsEnabled] =
+    useState(true);
+
   /*
    * ============================================================
    * REFS
@@ -335,6 +338,14 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
         return;
       }
 
+      if (!rentalsEnabled) {
+        toast.error(
+          'Battery rentals are currently disabled.'
+        );
+
+        return;
+      }
+
       setCheckingRentalAvailability(true);
       setRentalUnavailable(false);
 
@@ -420,6 +431,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
       loadRentalBatteries,
       manualBoothId,
       navigate,
+      rentalsEnabled,
     ]
   );
 
@@ -434,6 +446,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
   const renderRentalButton = (
     extraClassName = ''
   ) => {
+    if (!rentalsEnabled) return null;
+
     const isUnavailable =
       rentalUnavailable;
 
@@ -753,6 +767,24 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
       };
 
     loadBooths();
+
+    const loadRentalFeature =
+      async () => {
+        try {
+          const status =
+            await boothService.getRentalFeatureStatus();
+
+          setRentalsEnabled(status.enabled);
+        } catch {
+          /*
+           * If the flag cannot be fetched, keep the
+           * rental feature visible (safe default).
+           */
+          setRentalsEnabled(true);
+        }
+      };
+
+    loadRentalFeature();
   }, [user.id, user.name]);
 
   /*

@@ -158,6 +158,27 @@ export const initiateDeposit = async (boothId: string): Promise<InitiateDepositR
 };
 
 /**
+ * Response from GET /api/booths/rentals/status.
+ */
+export interface RentalFeatureStatus {
+  enabled: boolean;
+}
+
+/**
+ * Checks whether the rental battery feature is enabled for riders.
+ * @returns A promise that resolves with the current rental feature status.
+ */
+export const getRentalFeatureStatus = async (): Promise<RentalFeatureStatus> => {
+  try {
+    const response = await apiClient.get<RentalFeatureStatus>('/booths/rentals/status');
+    return response.data;
+  } catch (error) {
+    console.error('Failed to fetch rental feature status:', error);
+    throw error;
+  }
+};
+
+/**
  * A single borrowable rental battery option.
  */
 export interface RentalBatteryOption {

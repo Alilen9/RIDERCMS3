@@ -184,6 +184,9 @@ const SystemConfig: React.FC = () => {
 
   const rental = settings?.rental;
 
+  const rentalsEnabled =
+    rental?.enabled ?? true;
+
   const highestSocFirst =
     rental?.allocate_highest_soc_first ?? true;
 
@@ -376,6 +379,54 @@ const SystemConfig: React.FC = () => {
             <p className="text-sm text-gray-500 mt-1">
               Configure how rental batteries are selected,
               issued, charged and returned.
+            </p>
+
+          </div>
+
+          {/* =================================================
+              RENTAL FEATURE SWITCH
+          ================================================== */}
+
+          <div className="mb-8 p-5 rounded-xl border border-gray-600">
+
+            <div className="flex items-start justify-between gap-4">
+
+              <div>
+
+                <h4 className="text-sm font-bold text-white">
+                  Battery Rentals Available to Riders
+                </h4>
+
+                <p className="text-xs text-gray-500 mt-1 max-w-md">
+                  When disabled, the rental feature is hidden
+                  from riders and the user-facing rental
+                  endpoints reject requests. Existing rentals
+                  can still be completed.
+                </p>
+
+              </div>
+
+              <Toggle
+                enabled={rentalsEnabled}
+                color={rentalsEnabled ? 'emerald' : 'blue'}
+                onChange={() =>
+                  handleToggleChange(
+                    'rental',
+                    'enabled',
+                    !rentalsEnabled
+                  )
+                }
+              />
+
+            </div>
+
+            <p className={`text-sm mt-3 font-semibold ${rentalsEnabled
+                ? 'text-emerald-400'
+                : 'text-red-400'
+              }`}>
+              {rentalsEnabled
+                ? 'Rental feature is ENABLED'
+                : 'Rental feature is DISABLED'}
             </p>
 
           </div>
