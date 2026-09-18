@@ -26,7 +26,6 @@ import SlotDetailsPage from './components/admin/SlotDetailsPage';
 import { useAuth, AuthProvider } from './components/auth/AuthContext';
 import PaymentWaitingPage from "./components/admin/payment/PaymentWaitingPage";
 import ManualWithdrawPage from "./components/admin/payment/ManualWithdrawPage";
-import RentalManagement from './components/admin/rental/RentalManagement';
 
 /**
  * Handles redirect logic after login
@@ -157,15 +156,6 @@ const AppContent: React.FC = () => {
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/admin/rentals"
-        element={
-          <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.DEVELOPER]}>
-            <RentalManagement />
-          </ProtectedRoute>
-        }
-      />
-
       {/* 🔥 NEW: Booth Details Page */}
       <Route
         path="/admin/booths/:boothId"

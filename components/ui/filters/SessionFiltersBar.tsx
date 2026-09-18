@@ -60,20 +60,20 @@ const SessionFiltersBar: React.FC<SessionFiltersBarProps> = ({ filters, onFilter
           onChange={(e) => update('slotIdentifier', e.target.value)}
           className="flex-grow bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
         />
-        <div className="flex gap-4">
+        <div className="grid grid-cols-2 gap-4">
           <input
             type="date"
             placeholder="From date"
             value={filters.dateFrom || ''}
             onChange={(e) => update('dateFrom', e.target.value)}
-            className="flex-grow bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+            className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
           />
           <input
             type="date"
             placeholder="To date"
             value={filters.dateTo || ''}
             onChange={(e) => update('dateTo', e.target.value)}
-            className="flex-grow bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+            className="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
           />
         </div>
       </div>

@@ -23,6 +23,7 @@ import PaymentManagement from './admin/PaymentManagement';
 import ManualWithdrawPage from './admin/payment/ManualWithdrawPage';
 import PaymentWaitingPage from './admin/payment/PaymentWaitingPage';
 import RentalManagement from './admin/rental/RentalManagement';
+import AddRentalBatteryPage from './admin/rental/AddRentalBatteryPage';
 import { usePayment } from '@/hooks/usePayment';
 
 
@@ -46,7 +47,7 @@ const MOCK_BATTERIES: Battery[] = [
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
   const navigate = useNavigate();
-  const [activeSection, setActiveSection] = useState<'dashboard' | 'map' | 'intelligence' | 'stations' | 'addBooth' | 'editBooth' | 'users' | 'batteries' | 'sessions' | 'rental' | 'finance' | 'settings' | 'logs' | 'simulation' | 'stats' | 'cleanup' | 'payments' | 'manualWithdraw' | "paymentWaiting">('dashboard');
+  const [activeSection, setActiveSection] = useState<'dashboard' | 'map' | 'intelligence' | 'stations' | 'addBooth' | 'editBooth' | 'users' | 'batteries' | 'sessions' | 'rental' | 'addRentalBattery' | 'finance' | 'settings' | 'logs' | 'simulation' | 'stats' | 'cleanup' | 'payments' | 'manualWithdraw' | "paymentWaiting">('dashboard');
   const [batteries, setBatteries] = useState<Battery[]>(MOCK_BATTERIES);
   const [booths, setBooths] = useState<Booth[]>([]);
   const [boothToEdit, setBoothToEdit] = useState<Booth | null>(null);
@@ -210,7 +211,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           {activeSection === 'users' && <UserManagement />}
           {activeSection === 'sessions' && <SessionManagement onNavigateToBooth={navigateToBooth} onNavigateToUser={navigateToUser} />}
           {activeSection === 'payments' && <PaymentManagement />}
-          {activeSection === 'rental' && <RentalManagement />}
+          {activeSection === 'rental' && <RentalManagement onAddBattery={() => setActiveSection('addRentalBattery')} />}
+          {activeSection === 'addRentalBattery' && (
+            <AddRentalBatteryPage onBack={() => setActiveSection('rental')} />
+          )}
           {activeSection === "manualWithdraw" && (
             <ManualWithdrawPage
               onWaiting={() => setActiveSection("paymentWaiting")}
