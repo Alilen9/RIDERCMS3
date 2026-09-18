@@ -1257,6 +1257,25 @@ export interface CreateRentalBatteryResponse {
   boothUid: string;
   slotIdentifier: string;
   notes?: string | null;
+  /**
+   * Present when the backend reserved the slot and is waiting for the battery to
+   * be physically inserted. Status is 'opening' until hardware confirms it, at
+   * which point the placement completes and it becomes 'placed'. Dev booths
+   * return 'placed' immediately.
+   */
+  placement?: {
+    placementId: string;
+    status: 'opening' | 'placed' | 'reverted' | 'timeout' | 'cancelled';
+    boothUid: string;
+    slotIdentifier: string;
+  };
+}
+
+export type RentalPlacementStatus = 'opening' | 'waiting' | 'placed' | 'reverted' | 'timeout' | 'cancelled';
+
+export interface RentalPlacementResponse {
+  placementId: string;
+  status: RentalPlacementStatus;
 }
 
 /**
@@ -1277,6 +1296,59 @@ export const createRentalBattery =
     } catch (error) {
       console.error(
         'Failed to create rental battery:',
+        error
+      );
+
+      throw error;
+    }
+  };
+
+/**
+ * Polls an admin rental-stock placement until the battery is confirmed inserted
+ * ('placed'), still pending ('waiting'), or timed out / reverted.
+ */
+export const getRentalPlacementStatus =
+  async (
+    placementId: string
+  ): Promise<RentalPlacementResponse> => {
+    try {
+      const response =
+        await apiClient.get<RentalPlacementResponse>(
+          `/admin/rentals/placement/${encodeURIComponent(
+            placementId
+          )}/status`
+        );
+
+      return response.data;
+    } catch (error) {
+      console.error(
+        'Failed to get rental placement status:',
+        error
+      );
+
+      throw error;
+    }
+  };
+
+/**
+ * Cancels an admin rental-stock placement that is still waiting for its battery.
+ */
+export const cancelRentalPlacement =
+  async (
+    placementId: string
+  ): Promise<RentalPlacementResponse> => {
+    try {
+      const response =
+        await apiClient.post<RentalPlacementResponse>(
+          `/admin/rentals/placement/${encodeURIComponent(
+            placementId
+          )}/cancel`
+        );
+
+      return response.data;
+    } catch (error) {
+      console.error(
+        'Failed to cancel rental placement:',
         error
       );
 

@@ -23,6 +23,8 @@ import {
   createRentalBattery,
   withdrawRentalBattery,
   getBoothStatus,
+  getRentalPlacementStatus,
+  cancelRentalPlacement,
 } from '../../../services/adminService';
 
 import type {
@@ -96,6 +98,35 @@ const RentalManagement: React.FC = () => {
 
   const [withdrawingBattery, setWithdrawingBattery] =
     useState(false);
+
+  /*
+   * ============================================================
+   * PLACEMENT CONFIRMATION MODAL
+   * ============================================================
+   */
+
+  type PendingPlacement = {
+    placementId: string;
+    batteryUid: string;
+    chargeLevel: number;
+    boothUid: string;
+    slotIdentifier: string;
+  };
+
+  const [pendingPlacement, setPendingPlacement] =
+    useState<PendingPlacement | null>(null);
+
+  const [placementPhase, setPlacementPhase] = useState<
+    | 'opening'
+    | 'waiting'
+    | 'placed'
+    | 'timeout'
+    | 'cancelled'
+    | 'reverted'
+  >('opening');
+
+  const [placementError, setPlacementError] =
+    useState<string | null>(null);
 
   /*
    * ============================================================
@@ -420,7 +451,10 @@ const RentalManagement: React.FC = () => {
     try {
       /*
        * Register the battery with the backend so it
-       * becomes part of the borrowable rental pool.
+       * becomes part of the borrowable rental pool. For a
+       * real booth the backend reserves the slot ('opening'),
+       * opens the door, and waits for the battery to be
+       * physically inserted.
        */
       const createdBattery = await createRentalBattery({
         batteryUid: addForm.batteryUid.trim(),
@@ -428,6 +462,38 @@ const RentalManagement: React.FC = () => {
         slotIdentifier: addForm.slotIdentifier.trim(),
         notes: addForm.notes.trim() || undefined,
       });
+
+      setAddForm({
+        batteryUid: '',
+        boothUid: '',
+        slotIdentifier: '',
+        notes: '',
+      });
+
+      /*
+       * Placement pending: switch to the confirmation flow
+       * that polls until the battery is detected in the slot.
+       */
+      if (
+        createdBattery.placement &&
+        createdBattery.placement.status === 'opening'
+      ) {
+        setPendingPlacement({
+          placementId: createdBattery.placement.placementId,
+          batteryUid: createdBattery.batteryUid,
+          chargeLevel: createdBattery.chargeLevel,
+          boothUid: createdBattery.boothUid,
+          slotIdentifier: createdBattery.slotIdentifier,
+        });
+
+        setPlacementPhase('opening');
+
+        setPlacementError(null);
+
+        setShowAddModal(false);
+
+        return;
+      }
 
       const newBattery: RentalBattery = {
         id: createdBattery.batteryUid,
@@ -463,13 +529,6 @@ const RentalManagement: React.FC = () => {
         return [newBattery, ...previous];
       });
 
-      setAddForm({
-        batteryUid: '',
-        boothUid: '',
-        slotIdentifier: '',
-        notes: '',
-      });
-
       setShowAddModal(false);
 
       setSuccessMessage(
@@ -491,6 +550,175 @@ const RentalManagement: React.FC = () => {
       setError(message);
     } finally {
       setAddingBattery(false);
+    }
+  };
+
+  /*
+   * ============================================================
+   * PLACEMENT POLLING
+   * ============================================================
+   */
+
+  useEffect(() => {
+    if (!pendingPlacement) return;
+
+    if (
+      placementPhase === 'placed' ||
+      placementPhase === 'timeout' ||
+      placementPhase === 'cancelled' ||
+      placementPhase === 'reverted'
+    ) {
+      return;
+    }
+
+    let disposed = false;
+
+    const poll = async () => {
+      try {
+        const response = await getRentalPlacementStatus(
+          pendingPlacement.placementId
+        );
+
+        if (disposed) return;
+
+        setPlacementError(null);
+
+        setPlacementPhase(response.status);
+      } catch (err) {
+        if (disposed) return;
+
+        const message =
+          (
+            err as {
+              response?: {
+                data?: {
+                  error?: string;
+                };
+              };
+            }
+          )?.response?.data?.error ||
+          'Failed to check placement status.';
+
+        setPlacementError(message);
+      }
+    };
+
+    poll();
+
+    const interval = setInterval(poll, 2000);
+
+    return () => {
+      disposed = true;
+
+      clearInterval(interval);
+    };
+  }, [pendingPlacement, placementPhase]);
+
+  /*
+   * ============================================================
+   * PLACEMENT COMPLETION / FAILURE
+   * ============================================================
+   */
+
+  useEffect(() => {
+    if (
+      !pendingPlacement ||
+      placementPhase === 'opening' ||
+      placementPhase === 'waiting'
+    ) {
+      return;
+    }
+
+    if (placementPhase === 'placed') {
+      const newBattery: RentalBattery = {
+        id: pendingPlacement.batteryUid,
+
+        soc: pendingPlacement.chargeLevel,
+
+        slotId:
+          `${pendingPlacement.boothUid} / ${pendingPlacement.slotIdentifier}`,
+
+        status:
+          pendingPlacement.chargeLevel < 30
+            ? 'charging'
+            : 'available',
+
+        lastUpdated: 'Just now',
+      };
+
+      setBatteries((previous) => {
+        const alreadyExists = previous.some(
+          (battery) =>
+            battery.id.toLowerCase() ===
+            newBattery.id.toLowerCase()
+        );
+
+        if (alreadyExists) {
+          return previous.map((battery) =>
+            battery.id === newBattery.id
+              ? newBattery
+              : battery
+          );
+        }
+
+        return [newBattery, ...previous];
+      });
+
+      setSuccessMessage(
+        `Battery ${newBattery.id} placed in ${newBattery.slotId}.`
+      );
+    } else if (placementPhase === 'timeout') {
+      setError(
+        `Placement timed out. No battery was detected in slot ${pendingPlacement.slotIdentifier} — the slot has been returned to available.`
+      );
+    } else if (placementPhase === 'cancelled') {
+      setSuccessMessage(
+        `Placement cancelled. Slot ${pendingPlacement.slotIdentifier} is available again.`
+      );
+    } else if (placementPhase === 'reverted') {
+      setError(
+        `Placement reverted. Slot ${pendingPlacement.slotIdentifier} is available again.`
+      );
+    }
+
+    setPendingPlacement(null);
+
+    setPlacementPhase('opening');
+
+    setPlacementError(null);
+  }, [pendingPlacement, placementPhase]);
+
+  /*
+   * ============================================================
+   * CANCEL PLACEMENT
+   * ============================================================
+   */
+
+  const handleCancelPlacement = async () => {
+    if (!pendingPlacement) return;
+
+    setPlacementError(null);
+
+    try {
+      const response = await cancelRentalPlacement(
+        pendingPlacement.placementId
+      );
+
+      setPlacementPhase(response.status);
+    } catch (err) {
+      const message =
+        (
+          err as {
+            response?: {
+              data?: {
+                error?: string;
+              };
+            };
+          }
+        )?.response?.data?.error ||
+        'Failed to cancel placement.';
+
+      setPlacementError(message);
     }
   };
 
@@ -1588,6 +1816,185 @@ const RentalManagement: React.FC = () => {
               </div>
 
             </form>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* =======================================================
+          PLACEMENT CONFIRMATION MODAL
+      ======================================================== */}
+
+      {pendingPlacement && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-gray-800 bg-gray-900 shadow-2xl">
+
+            {/* Header */}
+
+            <div className="flex items-center justify-between border-b border-gray-800 p-5">
+
+              <div>
+
+                <h2 className="text-lg font-bold text-white">
+                  Place Rental Battery
+                </h2>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  {pendingPlacement.batteryUid}
+                  {' '}→{' '}
+                  {pendingPlacement.boothUid} / {pendingPlacement.slotIdentifier}
+                </p>
+
+              </div>
+
+            </div>
+
+            <div className="space-y-5 p-5">
+
+              {/* Steps */}
+
+              <ol className="space-y-3 text-sm">
+
+                <li className="flex items-center gap-3">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                  <span className="text-gray-300">
+                    Slot secured — no other rider can claim it
+                  </span>
+                </li>
+
+                <li className="flex items-center gap-3">
+                  {placementPhase === 'opening' ? (
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-indigo-400" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                  )}
+                  <span className="text-gray-300">
+                    Door opening…
+                  </span>
+                </li>
+
+                <li className="flex items-center gap-3">
+                  {placementPhase === 'placed' ? (
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                  ) : (
+                    <Loader2
+                      className={`h-4 w-4 shrink-0 animate-spin ${
+                        placementPhase === 'opening'
+                          ? 'text-gray-600'
+                          : 'text-yellow-400'
+                      }`}
+                    />
+                  )}
+                  <span className="text-gray-300">
+                    Place battery inside the slot
+                    {placementPhase === 'opening' && (
+                      <span className="text-gray-500">
+                        {' '}(waiting for door)
+                      </span>
+                    )}
+                  </span>
+                </li>
+
+                <li className="flex items-center gap-3">
+                  {placementPhase === 'placed' ? (
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                  ) : (
+                    <Loader2
+                      className={`h-4 w-4 shrink-0 animate-spin ${
+                        placementPhase === 'opening'
+                          ? 'text-gray-600'
+                          : 'text-indigo-400'
+                      }`}
+                    />
+                  )}
+                  <span className="text-gray-300">
+                    Confirming battery detected…
+                    {placementPhase === 'placed' && (
+                      <span className="text-emerald-400 font-semibold">
+                        {' '}Done
+                      </span>
+                    )}
+                  </span>
+                </li>
+
+              </ol>
+
+              {/* Status / instruction box */}
+
+              {placementPhase === 'opening' ||
+              placementPhase === 'waiting' ? (
+                <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4 text-sm text-gray-400">
+                  The slot is reserved and the door is open. Physically place
+                  battery{' '}
+                  <span className="font-semibold text-white">
+                    {pendingPlacement.batteryUid}
+                  </span>{' '}
+                  into slot{' '}
+                  <span className="font-semibold text-white">
+                    {pendingPlacement.slotIdentifier}
+                  </span>{' '}
+                  at the booth — the door relocks and charging state is set once
+                  the battery is detected.
+                </div>
+              ) : placementPhase === 'placed' ? (
+                <div className="flex gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" />
+                  <p className="text-sm text-gray-400">
+                    Battery detected in the slot. Placement complete.
+                  </p>
+                </div>
+              ) : placementPhase === 'timeout' ? (
+                <div className="flex gap-3 rounded-xl border border-red-500/20 bg-red-500/5 p-4">
+                  <XCircle className="h-5 w-5 shrink-0 text-red-400" />
+                  <p className="text-sm text-gray-400">
+                    No battery was detected within the time limit — the slot has
+                    been returned to available.
+                  </p>
+                </div>
+              ) : (
+                <div className="flex gap-3 rounded-xl border border-gray-700 bg-gray-800/50 p-4">
+                  <XCircle className="h-5 w-5 shrink-0 text-gray-400" />
+                  <p className="text-sm text-gray-400">
+                    Placement cancelled — the slot is available again.
+                  </p>
+                </div>
+              )}
+
+              {/* Placement error */}
+
+              {placementError && (
+                <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-400">
+                  {placementError}
+                </div>
+              )}
+
+              {/* Buttons */}
+
+              <div className="flex justify-end gap-3 border-t border-gray-800 pt-5">
+
+                {(placementPhase === 'opening' ||
+                  placementPhase === 'waiting') && (
+                  <button
+                    type="button"
+                    onClick={handleCancelPlacement}
+                    disabled={placementPhase === 'opening'}
+                    title={
+                      placementPhase === 'opening'
+                        ? 'Wait for the door to open before cancelling.'
+                        : undefined
+                    }
+                    className="inline-flex items-center gap-2 rounded-xl border border-red-500/30 px-5 py-2.5 text-sm font-semibold text-red-400 transition hover:bg-red-500/10 disabled:opacity-50"
+                  >
+                    <X className="h-4 w-4" />
+                    Cancel Placement
+                  </button>
+                )}
+
+              </div>
+
+            </div>
 
           </div>
 
