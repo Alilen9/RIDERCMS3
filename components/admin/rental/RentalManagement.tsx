@@ -295,6 +295,27 @@ const RentalManagement: React.FC = () => {
     return booth?.slots ?? [];
   }, [boothOptions, addForm.boothUid]);
 
+  // Rental batteries can only be placed into empty slots, so only surface
+  // slots that are not occupied. Statuses other than 'available'/'booting'
+  // (disabled, error, maintenance, offline, ...) mean the slot cannot be used.
+  const availableSlots = useMemo(() => {
+    const unusableStatuses = new Set([
+      'occupied',
+      'disabled',
+      'error',
+      'maintenance',
+      'offline',
+      'fault',
+      'faulty',
+    ]);
+
+    return selectedBoothSlots.filter(
+      (slot) =>
+        slot.battery?.isOccupied !== true &&
+        !unusableStatuses.has(slot.status)
+    );
+  }, [selectedBoothSlots]);
+
   /*
    * ============================================================
    * SUMMARY STATISTICS
@@ -1302,22 +1323,14 @@ const RentalManagement: React.FC = () => {
                         : 'Select a slot...'}
                     </option>
 
-                    {selectedBoothSlots.map((slot) => {
-                      const isOccupied =
-                        slot.battery?.isOccupied === true;
-
-                      return (
-                        <option
-                          key={slot.slotIdentifier}
-                          value={slot.slotIdentifier}
-                          disabled={isOccupied}
-                        >
-                          {slot.slotIdentifier}
-                          {' — '}
-                          {isOccupied ? 'occupied' : slot.status}
-                        </option>
-                      );
-                    })}
+                    {availableSlots.map((slot) => (
+                      <option
+                        key={slot.slotIdentifier}
+                        value={slot.slotIdentifier}
+                      >
+                        {slot.slotIdentifier} — {slot.status}
+                      </option>
+                    ))}
 
                   </select>
 
@@ -1325,6 +1338,14 @@ const RentalManagement: React.FC = () => {
                     selectedBoothSlots.length === 0 && (
                     <p className="mt-1 text-xs text-gray-500">
                       No slots found for this booth.
+                    </p>
+                  )}
+
+                  {addForm.boothUid &&
+                    selectedBoothSlots.length > 0 &&
+                    availableSlots.length === 0 && (
+                    <p className="mt-1 text-xs text-gray-500">
+                      No available slots for this booth.
                     </p>
                   )}
 

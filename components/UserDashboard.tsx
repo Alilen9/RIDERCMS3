@@ -350,7 +350,22 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
       setRentalUnavailable(false);
 
       try {
-        if (!manualBoothId.trim()) {
+        /*
+         * When the user reached this screen via a QR scan (or restored
+         * session) the booth UID may not have been typed manually. Fall
+         * back to the booth where the user's own battery is charging.
+         */
+        const sessionBoothUid =
+          activeBatteries[activeBatteryIndex]
+            ?.boothUid ||
+          activeBatteries[0]?.boothUid ||
+          '';
+
+        const boothUid =
+          manualBoothId.trim() ||
+          sessionBoothUid;
+
+        if (!boothUid) {
           toast.error(
             'Please enter or scan a booth UID first.'
           );
@@ -360,7 +375,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
 
         const available =
           await loadRentalBatteries(
-            manualBoothId
+            boothUid
           );
 
         if (
@@ -427,6 +442,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
       }
     },
     [
+      activeBatteries,
+      activeBatteryIndex,
       checkingRentalAvailability,
       loadRentalBatteries,
       manualBoothId,
@@ -712,6 +729,9 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
 
                   sessionId:
                     s.sessionId,
+
+                  boothUid:
+                    s.boothUid,
                 })
               );
 
@@ -1194,7 +1214,18 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
 
             sessionId:
               response.sessionId,
+
+            boothUid:
+              decodedText,
           };
+
+          /*
+           * Remember the booth so the rental flow does not
+           * require re-entering the UID.
+           */
+          setManualBoothId(
+            decodedText
+          );
 
           setActiveBatteries(
             (prev) => [
@@ -1988,7 +2019,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                   </div>
 
                   <h3 className="text-xl font-bold mb-2">
-                    Insert Battery in Slot{' '}
+                    Insert Battery in {' '}
                     {
                       activeBatteries[
                         activeBatteries.length -

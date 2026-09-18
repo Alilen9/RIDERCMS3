@@ -188,6 +188,7 @@ export interface ActiveBatteryEntry {
   battery: Battery;
   slot: Slot;
   sessionId: number;
+  boothUid?: string;
 }
 
 export interface DashboardSummary {
