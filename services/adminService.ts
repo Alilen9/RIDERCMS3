@@ -59,6 +59,7 @@ export interface AdminBoothStatus {
     userPhone?: string | null;
     batteryOwner: string | null;
     pendingManualUnlock?: boolean;
+    isRentalPool?: boolean;
 
     battery: {
       isOccupied: boolean;

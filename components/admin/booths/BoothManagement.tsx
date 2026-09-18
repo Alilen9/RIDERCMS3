@@ -304,7 +304,13 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
       if (result.reconciled) {
         toast.success(`Deposit restored to '${result.newStatus}'.`, { id: loadingToast });
       } else {
-        toast(`No deposit needed re-syncing (${result.reason}).`, { id: loadingToast });
+        const reasonMessages: Record<string, string> = {
+          no_failed_deposit: 'No failed deposit found to restore on this slot.',
+          slot_empty: 'Slot is not occupied — nothing to re-sync.',
+          slot_not_found: 'Slot not found.',
+          already_resolved: 'Deposit is already resolved.',
+        };
+        toast(reasonMessages[result.reason] || `Deposit already up to date (${result.reason}).`, { id: loadingToast });
       }
       // Refresh both administrative and live data to reflect the corrected state.
       Promise.all([fetchBooths(), fetchBoothStatuses()]);

@@ -68,6 +68,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
         userName: adminSlot.userName || liveSlot?.userName || liveSlot?.batteryOwner,
         userPhone: adminSlot.userPhone || liveSlot?.userPhone || null,
         pendingManualUnlock: liveSlot?.pendingManualUnlock || false,
+        isRentalPool: adminSlot.isRentalPool === true || liveSlot?.isRentalPool === true,
         telemetry: liveSlot?.telemetry,
       };
     });
@@ -159,7 +160,11 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                         </div>
                         <div className="flex justify-between text-sm items-center gap-2">
                           <span className="text-gray-500 flex-shrink-0">Rented By</span>
-                          {slot.userName ? (
+                          {slot.isRentalPool ? (
+                            <span className="bg-purple-900/50 border border-purple-700/50 text-purple-300 text-xs font-bold px-2 py-0.5 rounded">
+                              Rental Pool
+                            </span>
+                          ) : slot.userName ? (
                             <div className="flex items-center gap-2 min-w-0">
                               <span className="text-cyan-400 font-semibold truncate" title={slot.userName}>{slot.userName}</span>
                               {slot.userPhone && (
@@ -277,7 +282,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                                 Manual Withdraw
                               </button>
                             )}
-                            {onReconcileDeposit && (slot.battery || slot.status === 'occupied' || slot.status === 'charging') && (
+                            {onReconcileDeposit && !slot.isRentalPool && (slot.battery || slot.status === 'occupied' || slot.status === 'charging') && (
                               <button
                                 onClick={() => onReconcileDeposit(slot.slotIdentifier)}
                                 title="If the battery is still in the slot but the deposit was wrongly marked failed, restore the deposit so the customer's credit and withdrawal path are recovered."
