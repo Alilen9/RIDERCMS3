@@ -604,10 +604,6 @@ const RentalFlow: React.FC<RentalFlowProps> = ({
         <RentalSessionActive
           ownBatterySoc={active?.ownDeposit.currentSoc ?? 0}
           rentalBatteryId={rentalBatteryId}
-          rentalBatterySoc={
-            active?.issueSoc ?? assigned?.soc ?? 0
-          }
-          rentalStartSoc={active?.issueSoc ?? assigned?.soc ?? 0}
           startTime={
             new Date(
               active?.startedAt ||
@@ -623,6 +619,8 @@ const RentalFlow: React.FC<RentalFlowProps> = ({
       return (
         <ReturnRentalBattery
           batteryId={rentalBatteryId}
+          boothName={boothName}
+          boothUid={boothUid}
           onContinue={() => setStep('waiting_return')}
           onRequestReturn={handleRequestReturn}
           requestLoading={returnBusy}
@@ -634,6 +632,17 @@ const RentalFlow: React.FC<RentalFlowProps> = ({
       return (
         <VerifyRentalReturn
           batteryId={rentalBatteryId}
+          boothName={boothName}
+          boothUid={
+            returnSlot?.boothUid ||
+            active?.returnSlot?.boothUid ||
+            boothUid
+          }
+          slotIdentifier={
+            returnSlot?.slotIdentifier ||
+            active?.returnSlot?.slotIdentifier ||
+            undefined
+          }
           onVerified={() => setStep('waiting_return')}
           onRetry={() => setStep('return')}
         />
@@ -646,9 +655,9 @@ const RentalFlow: React.FC<RentalFlowProps> = ({
           subtitle="Insert the battery, connect the plug and close the cabinet."
           detail={
             returnSlot
-              ? `Slot ${returnSlot.slotIdentifier} · ${returnSlot.boothUid}`
+              ? `Slot ${returnSlot.slotIdentifier} at ${boothName.trim() || returnSlot.boothUid}`
               : active?.returnSlot
-                ? `Slot ${active.returnSlot.slotIdentifier}`
+                ? `Slot ${active.returnSlot.slotIdentifier} at ${boothName.trim() || active.returnSlot.boothUid}`
                 : undefined
           }
         />

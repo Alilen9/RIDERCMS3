@@ -667,6 +667,26 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
     const loadBatteryStatus =
       async () => {
         try {
+          // If the rider has taken a rental battery, always resume the
+          // rental screen — on any device or browser.
+          let activeRental: Awaited<
+            ReturnType<
+              typeof boothService.getActiveRental
+            >
+          > = null;
+
+          try {
+            activeRental =
+              await boothService.getActiveRental();
+          } catch {
+            activeRental = null;
+          }
+
+          if (activeRental) {
+            navigate('/rental');
+            return;
+          }
+
           const pendingWithdrawals =
             await boothService.getPendingWithdrawal();
 
@@ -823,7 +843,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
       };
 
     loadRentalFeature();
-  }, [user.id, user.name]);
+  }, [user.id, user.name, navigate]);
 
   /*
    * ============================================================
@@ -1400,6 +1420,18 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
             409
           ) {
             if (
+              err.response?.data
+                ?.error ===
+              'ACTIVE_RENTAL_EXISTS'
+            ) {
+              toast.error(
+                serverMessage ||
+                'Return your rental battery before depositing another one.'
+              );
+
+              // Resume the active rental instead of starting a new deposit.
+              navigate('/rental');
+            } else if (
               serverMessage?.includes(
                 'occupied'
               )
@@ -1433,7 +1465,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
           setLoading(false);
         }
       },
-      [user.id]
+      [navigate, user.id]
     );
 
   /*

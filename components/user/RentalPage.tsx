@@ -26,6 +26,9 @@ const RentalPage: React.FC = () => {
     useState<boothService.RentalFeatureStatus | null>(null);
   const [activeRental, setActiveRental] =
     useState<boothService.ActiveRentalResponse | null>(null);
+  const [boothName, setBoothName] = useState(
+    routeState.boothName || ''
+  );
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -48,6 +51,30 @@ const RentalPage: React.FC = () => {
         const current = await boothService.getActiveRental();
 
         if (!cancelled) setActiveRental(current);
+
+        // Resolve the booth's display name when it was not passed via route
+        // state (e.g. after a hard refresh mid-rental).
+        if (!routeState.boothName && current) {
+          const uid =
+            routeState.boothUid ||
+            current.sourceSlot.boothUid ||
+            current.ownDeposit.boothUid ||
+            '';
+
+          if (uid) {
+            try {
+              const publicBooths = await boothService.getBooths();
+              const match = publicBooths.find(
+                (b) => b.booth_uid === uid
+              );
+              if (!cancelled && match) {
+                setBoothName(match.name);
+              }
+            } catch {
+              // Name is cosmetic — fall back to the UID.
+            }
+          }
+        }
       } catch {
         if (!cancelled) {
           setError(
@@ -64,7 +91,7 @@ const RentalPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [navigate]);
+  }, [navigate, routeState.boothName, routeState.boothUid]);
 
   if (bootstrapping) {
     return (
@@ -139,7 +166,7 @@ const RentalPage: React.FC = () => {
     <RentalFlow
       config={config}
       boothUid={boothUid}
-      boothName={routeState.boothName || ''}
+      boothName={boothName || routeState.boothName || ''}
       assignedRental={routeState.assignedRental ?? null}
       initialActiveRental={activeRental}
       onClose={() => navigate('/dashboard')}

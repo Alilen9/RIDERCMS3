@@ -5,12 +5,19 @@ import {
   ChevronRight,
   DoorClosed,
   Loader2,
+  MapPin,
   PlugZap,
   ShieldCheck,
 } from 'lucide-react';
 
 interface ReturnRentalBatteryProps {
   batteryId: string;
+  /** Display name of the booth the rental is being returned to. */
+  boothName?: string;
+  /** Fallback booth identifier (UID) when no display name is known. */
+  boothUid?: string;
+  /** The specific slot reserved for the return (set once opened). */
+  slotIdentifier?: string;
   onContinue: () => void;
   /** When provided, requesting the return reserves + opens a slot on the server. */
   onRequestReturn?: () => void | Promise<void>;
@@ -20,11 +27,15 @@ interface ReturnRentalBatteryProps {
 
 const ReturnRentalBattery: React.FC<ReturnRentalBatteryProps> = ({
   batteryId,
+  boothName = '',
+  boothUid = '',
+  slotIdentifier,
   onContinue,
   onRequestReturn,
   requestLoading = false,
   requestError = '',
 }) => {
+  const returnBoothLabel = boothName.trim() || boothUid;
   const handleAction = () => {
     if (requestLoading) return;
     if (onRequestReturn) {
@@ -119,6 +130,57 @@ const ReturnRentalBattery: React.FC<ReturnRentalBatteryProps> = ({
             </div>
           </div>
         </div>
+
+        {/* =========================
+            RETURN DESTINATION
+        ========================== */}
+        {returnBoothLabel && (
+          <div className="mt-6 rounded-2xl bg-gray-900 border border-gray-800 p-4">
+
+            <div className="flex items-center justify-between gap-4">
+
+              <div className="flex items-center gap-3 min-w-0">
+
+                <div className="w-10 h-10 shrink-0 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+                  <MapPin
+                    size={18}
+                    className="text-indigo-400"
+                  />
+                </div>
+
+                <div className="min-w-0">
+
+                  <p className="text-xs uppercase tracking-wider text-gray-500 font-semibold">
+                    Return to
+                  </p>
+
+                  <p className="text-sm font-bold text-white mt-0.5 truncate">
+                    {returnBoothLabel}
+                  </p>
+
+                </div>
+              </div>
+
+              <div className="text-right shrink-0">
+
+                <p className="text-xs uppercase tracking-wider text-gray-500 font-semibold">
+                  Slot
+                </p>
+
+                <p className="text-sm font-bold text-indigo-300 mt-0.5">
+                  {slotIdentifier ?? 'Assigning…'}
+                </p>
+
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-500 mt-3 leading-relaxed">
+              {slotIdentifier
+                ? `Place the rental battery into slot ${slotIdentifier}.`
+                : 'Your slot opens when you tap Open Return Slot.'}
+            </p>
+          </div>
+        )}
 
         {/* =========================
             INSTRUCTIONS

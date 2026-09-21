@@ -5,22 +5,33 @@ import {
   CheckCircle2,
   ChevronRight,
   CircleAlert,
+  MapPin,
   RefreshCcw,
   ShieldCheck,
 } from "lucide-react";
 
 interface VerifyRentalReturnProps {
   batteryId: string;
+  /** Display name of the booth the battery is being placed into. */
+  boothName?: string;
+  /** Fallback booth identifier (UID) when no display name is known. */
+  boothUid?: string;
+  /** The specific return slot reserved for this rental battery. */
+  slotIdentifier?: string;
   onVerified: () => void;
   onRetry: () => void;
 }
 
 const VerifyRentalReturn: React.FC<VerifyRentalReturnProps> = ({
   batteryId,
+  boothName = '',
+  boothUid = '',
+  slotIdentifier,
   onVerified,
   onRetry,
 }) => {
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  const returnBoothLabel = boothName.trim() || boothUid;
 
   const [scanning, setScanning] = useState(false);
   const [verified, setVerified] = useState(false);
@@ -193,6 +204,40 @@ const VerifyRentalReturn: React.FC<VerifyRentalReturnProps> = ({
           </p>
 
         </div>
+
+        {/* Return destination */}
+        {returnBoothLabel && (
+          <div className="mx-auto mb-6 flex w-full max-w-md items-center justify-between gap-4 rounded-2xl border border-indigo-500/20 bg-indigo-500/5 p-4">
+
+            <div className="flex items-center gap-3 min-w-0">
+
+              <div className="w-9 h-9 shrink-0 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+                <MapPin
+                  size={16}
+                  className="text-indigo-400"
+                />
+              </div>
+
+              <div className="min-w-0">
+
+                <p className="text-xs uppercase tracking-wider text-gray-500 font-semibold">
+                  Place battery into
+                </p>
+
+                <p className="text-sm font-bold text-white mt-0.5 truncate">
+                  {returnBoothLabel}
+                </p>
+
+              </div>
+            </div>
+
+            {slotIdentifier && (
+              <span className="shrink-0 rounded-full bg-indigo-500/20 px-3 py-1 text-xs font-bold text-indigo-300">
+                Slot {slotIdentifier}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Main card */}
         <div className="overflow-hidden rounded-3xl border border-gray-800 bg-gray-900">

@@ -3,8 +3,6 @@ import React, { useEffect, useState } from 'react';
 interface RentalSessionActiveProps {
   ownBatterySoc: number;
   rentalBatteryId: string;
-  rentalBatterySoc: number;
-  rentalStartSoc: number;
   startTime: Date;
   onReturn: () => void;
 }
@@ -12,8 +10,6 @@ interface RentalSessionActiveProps {
 const RentalSessionActive: React.FC<RentalSessionActiveProps> = ({
   ownBatterySoc,
   rentalBatteryId,
-  rentalBatterySoc,
-  rentalStartSoc,
   startTime,
   onReturn,
 }) => {
@@ -40,16 +36,6 @@ const RentalSessionActive: React.FC<RentalSessionActiveProps> = ({
 
     return () => clearInterval(interval);
   }, [startTime]);
-
-  const energyUsed = Math.max(
-    0,
-    rentalStartSoc - rentalBatterySoc
-  );
-
-  const rentalBatteryPercentage = Math.min(
-    Math.max(rentalBatterySoc, 0),
-    100
-  );
 
   const ownBatteryPercentage = Math.min(
     Math.max(ownBatterySoc, 0),
@@ -204,67 +190,51 @@ const RentalSessionActive: React.FC<RentalSessionActiveProps> = ({
 
             </div>
 
-            {/* Current SoC */}
+            {/* Charge is unknown until the battery is returned */}
             <div className="rounded-3xl bg-gray-950/60 border border-gray-800 p-6">
 
-              <div className="flex items-end justify-between">
+              <div className="flex items-center gap-4">
+
+                <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center shrink-0">
+
+                  <svg
+                    className="w-5 h-5 text-indigo-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="8"
+                      strokeWidth={1.8}
+                    />
+                    <path
+                      d="M12 11v5"
+                      strokeLinecap="round"
+                      strokeWidth={1.8}
+                    />
+                    <circle
+                      cx="12"
+                      cy="8"
+                      r="1"
+                      fill="currentColor"
+                    />
+                  </svg>
+
+                </div>
 
                 <div>
 
                   <p className="text-xs uppercase tracking-wider text-gray-500">
-                    Current charge
+                    Charge tracking
                   </p>
 
-                  <div className="flex items-baseline gap-1 mt-1">
-
-                    <span className="text-5xl font-bold text-indigo-400">
-                      {rentalBatterySoc}
-                    </span>
-
-                    <span className="text-xl text-indigo-400/60 font-semibold">
-                      %
-                    </span>
-
-                  </div>
-
-                </div>
-
-                <div className="text-right">
-
-                  <p className="text-xs text-gray-500">
-                    Started at
+                  <p className="text-sm text-gray-300 mt-1 leading-relaxed">
+                    The rental battery's charge is measured when you return it,
+                    not while you ride.
                   </p>
 
-                  <p className="text-lg font-semibold text-white mt-1">
-                    {rentalStartSoc}%
-                  </p>
-
-                </div>
-
-              </div>
-
-              {/* Battery bar */}
-              <div className="mt-6">
-
-                <div className="h-3 rounded-full bg-gray-800 overflow-hidden">
-
-                  <div
-                    className="h-full rounded-full bg-indigo-500 transition-all duration-500"
-                    style={{
-                      width: `${rentalBatteryPercentage}%`,
-                    }}
-                  />
-
-                </div>
-
-                <div className="flex justify-between mt-2">
-                  <span className="text-[10px] text-gray-600">
-                    0%
-                  </span>
-
-                  <span className="text-[10px] text-gray-600">
-                    100%
-                  </span>
                 </div>
 
               </div>
@@ -275,7 +245,7 @@ const RentalSessionActive: React.FC<RentalSessionActiveProps> = ({
             <div className="grid grid-cols-2 gap-3 mt-4">
 
               {/* Rental duration */}
-              <div className="rounded-2xl bg-gray-800/40 border border-gray-800 p-4">
+              <div className="col-span-2 rounded-2xl bg-gray-800/40 border border-gray-800 p-4">
 
                 <div className="flex items-center gap-2 mb-3">
 
@@ -315,45 +285,6 @@ const RentalSessionActive: React.FC<RentalSessionActiveProps> = ({
 
                 <p className="text-[11px] text-gray-600 mt-1">
                   Live
-                </p>
-
-              </div>
-
-              {/* Energy used */}
-              <div className="rounded-2xl bg-gray-800/40 border border-gray-800 p-4">
-
-                <div className="flex items-center gap-2 mb-3">
-
-                  <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center">
-
-                    <svg
-                      className="w-4 h-4 text-orange-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"
-                        strokeWidth={1.8}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-
-                  </div>
-
-                  <span className="text-xs text-gray-500">
-                    Energy used
-                  </span>
-
-                </div>
-
-                <p className="text-xl font-bold text-white">
-                  {energyUsed}%
-                </p>
-
-                <p className="text-[11px] text-gray-600 mt-1">
-                  Since rental started
                 </p>
 
               </div>
