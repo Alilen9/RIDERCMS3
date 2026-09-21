@@ -24,6 +24,7 @@ interface BoothDetailViewProps {
   onSendCommand: (slotIdentifier: string, command: SlotCommand) => void;
   onManualWithdraw?: (slotIdentifier: string, boothUid: string) => void;
   onReconcileDeposit?: (slotIdentifier: string) => void;
+  onWithdrawRental?: (slotIdentifier: string, batteryUid: string) => void;
   formatTimeAgo: (timestamp: string | undefined | null) => string;
   getSlotStatusDisplay: (status: string | null | undefined) => { classes: string; text: string };
   onRefreshStatus: () => void;
@@ -42,6 +43,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
   onSendCommand,
   onManualWithdraw,
   onReconcileDeposit,
+  onWithdrawRental,
   formatTimeAgo,
   getSlotStatusDisplay,
   onRefreshStatus,
@@ -75,6 +77,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
         pendingManualUnlock: liveSlot?.pendingManualUnlock || false,
         awaitingWithdrawal: adminSlot.awaitingWithdrawal === true || liveSlot?.awaitingWithdrawal === true,
         isRentalPool: adminSlot.isRentalPool === true || liveSlot?.isRentalPool === true,
+        batteryUid: adminSlot.batteryUid ?? null,
         telemetry: liveSlot?.telemetry,
       };
     });
@@ -136,6 +139,8 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                   const pendingCommand = pendingCommands[slot.slotIdentifier];
                   const isDoorCommandPending = pendingCommand === 'forceLock' || pendingCommand === 'forceUnlock';
                   const isRelayCommandPending = pendingCommand === 'startCharging' || pendingCommand === 'stopCharging';
+                  const isOccupied = slot.status === 'occupied';
+                  const isRentalOccupied = slot.isRentalPool === true;
 
                   return (
                     <>
@@ -215,32 +220,34 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                         <div className="border-t border-gray-700/50 pt-3 mt-3">
                           <p className="text-xs font-bold text-gray-400 mb-2">Commands</p>
                           <div className="grid grid-cols-2 gap-2">
-                            <button onClick={() => onShowConfirmation(
-                              () => {
-                                onSendCommand(slot.slotIdentifier, { forceUnlock: true });
-                                setTimeout(onRefreshStatus, 1500); // Refresh after a delay
-                              },
-                              'Unlock Slot?',
-                              `Are you sure you want to unlock slot ${slot.slotIdentifier}?`,
-                              false
-                            )}
-                              className="bg-gray-700 hover:bg-gray-600 py-2 rounded text-xs font-bold text-gray-300"
-                            >
-                              Unlock
-                            </button>
-                            <button onClick={() => onShowConfirmation(
-                              () => {
-                                onSendCommand(slot.slotIdentifier, { forceLock: true });
-                                setTimeout(onRefreshStatus, 1500); // Refresh after a delay
-                              },
-                              'Lock Slot?',
-                              `Are you sure you want to lock slot ${slot.slotIdentifier}?`,
-                              false
-                            )}
-                              className="bg-gray-700 hover:bg-gray-600 py-2 rounded text-xs font-bold text-gray-300"
-                            >
-                              Lock
-                            </button>
+                            {(() => {
+                                const doorIsLocked = slot.doorStatus === 'locked';
+                                const toggleLabel = doorIsLocked ? 'Unlock' : 'Lock';
+                                const toggleCommand = doorIsLocked
+                                  ? { forceUnlock: true }
+                                  : { forceLock: true };
+                                const toggleConfirmation =
+                                  `Are you sure you want to ${doorIsLocked ? 'unlock' : 'lock'} slot ${slot.slotIdentifier}?`;
+
+                                return (
+                                  <button
+                                    onClick={() => onShowConfirmation(
+                                      () => {
+                                        onSendCommand(slot.slotIdentifier, toggleCommand);
+                                        setTimeout(onRefreshStatus, 1500); // Refresh after a delay
+                                      },
+                                      `${toggleLabel} Slot?`,
+                                      toggleConfirmation,
+                                      false
+                                    )}
+                                    disabled={isRentalOccupied}
+                                    title={isRentalOccupied ? 'Rental batteries are handled with Rental Withdrawal.' : `Currently ${slot.doorStatus}`}
+                                    className="col-span-2 bg-gray-700 hover:bg-gray-600 py-2 rounded text-xs font-bold text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-700"
+                                  >
+                                    {toggleLabel}
+                                  </button>
+                                );
+                              })()}
                             {slot.telemetry?.relayOn === true ? (
                               <button onClick={() => onShowConfirmation(
                                 () => onSendCommand(slot.slotIdentifier, { stopCharging: true }),
@@ -264,6 +271,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                                   Enable Slot
                                 </button>
                               ) :
+                              slot.battery ? (
                                 <button
                                   onClick={() => onShowConfirmation(
                                     () => {
@@ -278,8 +286,9 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                                 >
                                   Start Charging
                                 </button>
+                              ) : null
                             )}
-                            {onManualWithdraw && slot.userName && !slot.pendingManualUnlock && (
+                            {onManualWithdraw && slot.userName && !slot.pendingManualUnlock && !isRentalOccupied && (
                               <button
                                 onClick={() => onShowConfirmation(
                                   () => onManualWithdraw(slot.slotIdentifier, booth.booth_uid),
@@ -292,7 +301,20 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                                 Manual Withdraw
                               </button>
                             )}
-                            {onReconcileDeposit && !slot.isRentalPool && (slot.battery || slot.status === 'occupied' || slot.status === 'charging') && (
+                            {onWithdrawRental && isRentalOccupied && slot.batteryUid && (
+                              <button
+                                onClick={() => onShowConfirmation(
+                                  () => onWithdrawRental(slot.slotIdentifier, slot.batteryUid as string),
+                                  'Rental Withdrawal?',
+                                  `Withdraw the rental battery ${slot.batteryUid} from slot ${slot.slotIdentifier}? It will be marked as withdrawn and this slot cleared.`,
+                                  true
+                                )}
+                                className="col-span-2 bg-purple-800 hover:bg-purple-700 py-2 rounded text-xs font-bold text-white"
+                              >
+                                Rental Withdrawal
+                              </button>
+                            )}
+                            {onReconcileDeposit && !slot.isRentalPool && slot.status !== 'disabled' && slot.battery && (
                               <button
                                 onClick={() => onReconcileDeposit(slot.slotIdentifier)}
                                 title="If the battery is still in the slot but the deposit was wrongly marked failed, restore the deposit so the customer's credit and withdrawal path are recovered."
@@ -320,22 +342,26 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                                   `Are you sure you want to disable slot ${slot.slotIdentifier}? This will prevent it from being used until it's re-enabled.`,
                                   true
                                 )}
-                                className="col-span-2 bg-gray-700 hover:bg-gray-600 text-gray-300 py-2 rounded text-xs font-bold"
+                                disabled={isOccupied}
+                                title={isOccupied ? 'Slot is occupied. Empty it before disabling.' : undefined}
+                                className="col-span-2 bg-gray-700 hover:bg-gray-600 text-gray-300 py-2 rounded text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-700"
                               >
                                 Disable Slot
                               </button>
                             )}
-                            <button
-                              onClick={() => onShowConfirmation(
-                                () => onDeleteSlot(slot.slotIdentifier),
-                                'Delete Slot?',
-                                `Are you sure you want to permanently delete slot ${slot.slotIdentifier}? This action cannot be undone.`,
-                                true
-                              )}
-                              className="col-span-2 mt-2 bg-red-900/50 hover:bg-red-900/80 text-red-300 py-2 rounded text-xs font-bold border border-red-700/50"
-                            >
-                              Delete Slot
-                            </button>
+                            {!isOccupied && (
+                              <button
+                                onClick={() => onShowConfirmation(
+                                  () => onDeleteSlot(slot.slotIdentifier),
+                                  'Delete Slot?',
+                                  `Are you sure you want to permanently delete slot ${slot.slotIdentifier}? This action cannot be undone.`,
+                                  true
+                                )}
+                                className="col-span-2 mt-2 bg-red-900/50 hover:bg-red-900/80 text-red-300 py-2 rounded text-xs font-bold border border-red-700/50"
+                              >
+                                Delete Slot
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { QRCodeCanvas } from 'qrcode.react';
 import { Booth } from '@/types';
-import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, sendSlotCommand, SlotCommand, resetBoothSlots, deleteBoothSlot, updateSlotStatus, reconcileSlotDeposit } from '../../../services/adminService';
+import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, sendSlotCommand, SlotCommand, resetBoothSlots, deleteBoothSlot, updateSlotStatus, reconcileSlotDeposit, withdrawRentalBattery } from '../../../services/adminService';
 import ConfirmationModal from '../ConfirmationModal';
 import BoothListView from './BoothListView';
 import BoothDetailView from './BoothDetailView';
@@ -321,6 +321,23 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
     }
   };
 
+  const handleWithdrawRentalBattery = async (slotIdentifier: string, batteryUid: string) => {
+    const loadingToast = toast.loading(`Withdrawing rental battery ${batteryUid}...`);
+    try {
+      await withdrawRentalBattery(batteryUid, {
+        reason: 'Removed from slot via booth management',
+        notes: `Withdrawn directly from slot ${slotIdentifier}`,
+      });
+      toast.success(`Rental battery ${batteryUid} withdrawn.`, { id: loadingToast });
+      // Refresh both administrative and live data so the slot shows as cleared.
+      Promise.all([fetchBooths(), fetchBoothStatuses()]);
+    } catch (error) {
+      const errorMessage = (error as any)?.response?.data?.error || (error as Error).message;
+      toast.error(`Failed to withdraw rental battery: ${errorMessage}`, { id: loadingToast });
+      console.error('Error withdrawing rental battery:', error);
+    }
+  };
+
   const handleDownloadQrCode = () => {
     if (!boothForQrCode) return;
     const canvas = document.getElementById('booth-qr-code') as HTMLCanvasElement;
@@ -405,6 +422,7 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
           onSendCommand={handleSendCommand}
           onManualWithdraw={onManualWithdraw}
           onReconcileDeposit={handleReconcileDeposit}
+          onWithdrawRental={handleWithdrawRentalBattery}
           formatTimeAgo={formatTimeAgo}
           getSlotStatusDisplay={getSlotStatusDisplay}
           onRefreshStatus={fetchBoothStatuses}
