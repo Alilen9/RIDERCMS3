@@ -11,7 +11,6 @@ import {
 
 import ConfirmationModal from './ConfirmationModal';
 import SessionDetailView from './SessionDetailView';
-import RetryPaymentView from './payment/RetryPaymentView';
 import SessionFiltersBar from '../ui/filters/SessionFiltersBar';
 import RentalSessions from './rental/Sessions';
 
@@ -33,8 +32,11 @@ interface SessionManagementProps {
   initialRetry?: boolean;
   onDetailOpened?: (sessionId: number) => void;
   onDetailClosed?: () => void;
-  onRetryOpened?: (sessionId: number) => void;
-  onRetryClosed?: () => void;
+  /**
+   * Called when the admin wants to retry payment for a failed withdrawal
+   * session. The parent (AdminDashboard) routes into the manual-withdraw flow.
+   */
+  onRetryPayment?: (session: AdminSession) => void;
 }
 
 type SessionView = 'sessions' | 'rental';
@@ -46,8 +48,7 @@ const SessionManagement: React.FC<SessionManagementProps> = ({
   initialRetry = false,
   onDetailOpened,
   onDetailClosed,
-  onRetryOpened,
-  onRetryClosed,
+  onRetryPayment,
 }) => {
   // -----------------------------------------
   // ACTIVE SESSION VIEW
@@ -104,13 +105,6 @@ const SessionManagement: React.FC<SessionManagementProps> = ({
 
   const [sessionForDetails, setSessionForDetails] =
     useState<AdminSession | null>(null);
-
-  // -----------------------------------------
-  // RETRY PAYMENT
-  // -----------------------------------------
-
-  const [showRetryPayment, setShowRetryPayment] =
-    useState(false);
 
   // -----------------------------------------
   // DELETE MODAL
@@ -424,15 +418,14 @@ const SessionManagement: React.FC<SessionManagementProps> = ({
     onDetailOpened?.(target.id);
 
     if (initialRetry) {
-      setShowRetryPayment(true);
-      onRetryOpened?.(target.id);
+      onRetryPayment?.(target);
     }
   }, [
     sessions,
     initialSessionId,
     initialRetry,
     onDetailOpened,
-    onRetryOpened,
+    onRetryPayment,
   ]);
 
   // -----------------------------------------
@@ -492,20 +485,7 @@ const SessionManagement: React.FC<SessionManagementProps> = ({
       {/* SESSION DETAILS                       */}
       {/* ------------------------------------- */}
 
-      {showRetryPayment && sessionForDetails ? (
-        <RetryPaymentView
-          session={sessionForDetails}
-          onBack={() => {
-            setShowRetryPayment(false);
-            onRetryClosed?.();
-          }}
-          onDone={() => {
-            setShowRetryPayment(false);
-            handleRefresh();
-            onRetryClosed?.();
-          }}
-        />
-      ) : showSessionDetail &&
+      {showSessionDetail &&
         sessionForDetails ? (
         <SessionDetailView
           session={sessionForDetails}
@@ -523,10 +503,9 @@ const SessionManagement: React.FC<SessionManagementProps> = ({
             );
           }}
           onRetryPayment={(session) => {
-            setSessionForDetails(session);
+            setSessionForDetails(null);
             setShowSessionDetail(false);
-            setShowRetryPayment(true);
-            onRetryOpened?.(session.id);
+            onRetryPayment?.(session);
           }}
         />
       ) : (
@@ -904,12 +883,9 @@ const SessionManagement: React.FC<SessionManagementProps> = ({
 
                                         <button
                                           type="button"
-                                          onClick={() => {
-                                            setSessionForDetails(session);
-                                            setShowSessionDetail(false);
-                                            setShowRetryPayment(true);
-                                            onRetryOpened?.(session.id);
-                                          }}
+                                          onClick={() =>
+                                            onRetryPayment?.(session)
+                                          }
                                           className="text-emerald-400 hover:text-emerald-300 text-xs font-semibold hover:underline"
                                         >
                                           Retry Payment

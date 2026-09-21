@@ -2,9 +2,11 @@ import React, { useState, useEffect } from "react";
 import { getSlotWithdrawalInfo } from "@/services/adminService";
 import { ManualWithdrawRequest } from "@/services/paymentService";
 import toast from "react-hot-toast";
+import { ArrowLeft } from "lucide-react";
 
 
 interface ManualWithdrawPageProps {
+  onBack?: () => void;
   onWaiting?: () => void;
   boothUid?: string;
   slotIdentifier?: string;
@@ -14,6 +16,7 @@ interface ManualWithdrawPageProps {
 
 
 const ManualWithdrawPage: React.FC<ManualWithdrawPageProps> = ({
+  onBack,
   onWaiting,
   boothUid,
   slotIdentifier,
@@ -105,6 +108,16 @@ const ManualWithdrawPage: React.FC<ManualWithdrawPageProps> = ({
 
       <div className="bg-gray-800/50 rounded-xl border border-gray-700 p-6">
 
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Back to stations"
+          title="Back to stations"
+          className="mb-4 inline-flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back
+        </button>
 
         <h2 className="text-xl font-bold mb-4">
           Manual Withdrawal

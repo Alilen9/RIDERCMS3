@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { SlotStatus, BatteryType, Transaction, SystemLog, Battery, Booth, Station, DashboardSummary } from '../types';
-import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, getDashboardSummary } from '../services/adminService';
+import { BatteryType, SystemLog, Battery, Booth, DashboardSummary } from '../types';
+import {  deleteBooth, getDashboardSummary } from '../services/adminService';
 import { useSummaryStats, useStatusTrend, useBreakdowns } from '../hooks/useStats';
 import { parseAdminWorkspace, buildAdminDashboardPath, AdminWorkspaceParams } from '../utils/adminWorkspace';
 import { saveLastVisitedPath } from '../utils/lastVisitedPath';
@@ -27,6 +27,7 @@ import PaymentWaitingPage from './admin/payment/PaymentWaitingPage';
 import RentalManagement from './admin/rental/RentalManagement';
 import AddRentalBatteryPage from './admin/rental/AddRentalBatteryPage';
 import { usePayment } from '@/hooks/usePayment';
+import { RefreshCw } from 'lucide-react';
 
 
 
@@ -104,7 +105,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
     const section = workspace.section;
     return section && (ADMIN_SECTIONS as string[]).includes(section) ? (section as AdminSection) : 'dashboard';
   });
-  const [batteries, setBatteries] = useState<Battery[]>(MOCK_BATTERIES);
+  
   const [booths, setBooths] = useState<Booth[]>([]);
   const [boothToEdit, setBoothToEdit] = useState<Booth | null>(null);
   const [boothToDelete, setBoothToDelete] = useState<Booth | null>(null);
@@ -262,6 +263,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
             </div>
 
             <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                aria-label="Refresh page"
+                title="Refresh page"
+                className="p-2 rounded-md text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+              >
+                <RefreshCw className="h-5 w-5" />
+              </button>
               <div className="flex items-center gap-2 text-sm bg-gray-900 border border-gray-800 px-3 py-1.5 rounded-full">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span className="text-gray-400">System Online</span>
@@ -305,14 +315,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
                 setCurrentSessionId(null);
                 syncWorkspace({ section: 'sessions' });
               }}
-              onRetryOpened={(sessionId) => {
-                setCurrentSessionId(sessionId);
-                syncWorkspace({ section: 'sessions', sessionId: String(sessionId), retry: '1' });
-              }}
-              onRetryClosed={() => {
-                syncWorkspace({
-                  section: 'sessions',
-                  sessionId: currentSessionId != null ? String(currentSessionId) : undefined,
+              onRetryPayment={(session) => {
+                if (!session.boothUid || !session.slotIdentifier) {
+                  toast.error('This session has no booth/slot reference to retry the payment.');
+                  return;
+                }
+                setManualWithdrawContext({
+                  boothUid: session.boothUid,
+                  slotIdentifier: session.slotIdentifier,
+                });
+                setSectionWithSync('manualWithdraw', {
+                  booth: session.boothUid,
+                  slot: session.slotIdentifier,
                 });
               }}
             />
@@ -324,6 +338,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onLogout }) => {
           )}
           {activeSection === "manualWithdraw" && (
             <ManualWithdrawPage
+              onBack={() => setSectionWithSync("stations")}
               onWaiting={() => setSectionWithSync("paymentWaiting", { booth: manualWithdrawContext?.boothUid, slot: manualWithdrawContext?.slotIdentifier })}
               boothUid={manualWithdrawContext?.boothUid}
               slotIdentifier={manualWithdrawContext?.slotIdentifier}

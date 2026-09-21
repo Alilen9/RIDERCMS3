@@ -105,6 +105,7 @@ export interface BoothSlot {
   userPhone?: string | null;
   batteryOwner: string | null; // Added to match the joined user name from the DB
   isRentalPool?: boolean; // True when the slot holds unowned rental-pool stock
+  awaitingWithdrawal?: boolean; // True while a withdrawal awaits payment or battery removal
 }
 
 

@@ -73,6 +73,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
         userName: adminSlot.userName || liveSlot?.userName || liveSlot?.batteryOwner,
         userPhone: adminSlot.userPhone || liveSlot?.userPhone || null,
         pendingManualUnlock: liveSlot?.pendingManualUnlock || false,
+        awaitingWithdrawal: adminSlot.awaitingWithdrawal === true || liveSlot?.awaitingWithdrawal === true,
         isRentalPool: adminSlot.isRentalPool === true || liveSlot?.isRentalPool === true,
         telemetry: liveSlot?.telemetry,
       };
@@ -165,7 +166,11 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                         </div>
                         <div className="flex justify-between text-sm items-center gap-2">
                           <span className="text-gray-500 flex-shrink-0">Rented By</span>
-                          {slot.isRentalPool ? (
+                          {slot.awaitingWithdrawal ? (
+                            <span className="bg-amber-900/50 border border-amber-700/50 text-amber-300 text-xs font-bold px-2 py-0.5 rounded">
+                              Awaiting Withdrawal
+                            </span>
+                          ) : slot.isRentalPool ? (
                             <span className="bg-purple-900/50 border border-purple-700/50 text-purple-300 text-xs font-bold px-2 py-0.5 rounded">
                               Rental Pool
                             </span>
