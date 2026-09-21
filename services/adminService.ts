@@ -1062,6 +1062,8 @@ export interface RentalFleetIssued {
 
   sourceBoothUid: string;
 
+  sourceBoothName: string | null;
+
   sourceSlotIdentifier: string;
 
   user: {
@@ -1077,6 +1079,8 @@ export interface RentalFleetInSlot {
   state: 'IN_SLOT';
 
   boothUid: string;
+
+  boothName: string | null;
 
   slotIdentifier: string;
 

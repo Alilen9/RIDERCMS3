@@ -167,8 +167,12 @@ const RentalManagement: React.FC<RentalManagementProps> = ({
 
           soc: 0,
 
+          boothName:
+            issued.sourceBoothName ||
+            issued.sourceBoothUid,
+
           slotId:
-            `${issued.sourceBoothUid} / ${issued.sourceSlotIdentifier}`,
+            `${issued.sourceBoothName || issued.sourceBoothUid} / ${issued.sourceSlotIdentifier}`,
 
           status: 'issued',
 
@@ -187,8 +191,12 @@ const RentalManagement: React.FC<RentalManagementProps> = ({
 
           soc: inSlot.chargeLevel ?? 0,
 
+          boothName:
+            inSlot.boothName ||
+            inSlot.boothUid,
+
           slotId:
-            `${inSlot.boothUid} / ${inSlot.slotIdentifier}`,
+            `${inSlot.boothName || inSlot.boothUid} / ${inSlot.slotIdentifier}`,
 
           status:
             inSlot.chargeLevel !== null &&

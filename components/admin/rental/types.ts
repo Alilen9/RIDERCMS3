@@ -34,6 +34,7 @@ export interface RentalBattery {
   id: string;
   soc: number;
   slotId: string;
+  boothName?: string;
   status: RentalBatteryStatus;
   lastUpdated: string;
   currentRental?: CurrentRental;

@@ -1507,8 +1507,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
           (err instanceof Error
             ? err.message
             : 'Payment failed');
-        
-        console.log("payment Error:", err);
+
         toast.error(
           errorMessage
         );
