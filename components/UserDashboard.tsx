@@ -426,9 +426,17 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
          * slot to the rental page. The exact pool slot is known here, so the
          * rider never needs to scan the battery (which is locked in the slot).
          */
+        const boothName =
+          booths.find(
+            (b) =>
+              b.booth_uid ===
+              boothUid
+          )?.name || '';
+
         navigate('/rental', {
           state: {
             boothUid,
+            boothName,
             assignedRental:
               highestSocBattery,
           },
@@ -453,6 +461,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
     [
       activeBatteries,
       activeBatteryIndex,
+      booths,
       checkingRentalAvailability,
       loadRentalBatteries,
       manualBoothId,

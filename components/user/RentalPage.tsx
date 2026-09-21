@@ -12,6 +12,7 @@ import * as boothService from '../../services/boothService';
  */
 interface RentalLocationState {
   boothUid?: string;
+  boothName?: string;
   assignedRental?: AssignedRental;
 }
 
@@ -138,6 +139,7 @@ const RentalPage: React.FC = () => {
     <RentalFlow
       config={config}
       boothUid={boothUid}
+      boothName={routeState.boothName || ''}
       assignedRental={routeState.assignedRental ?? null}
       initialActiveRental={activeRental}
       onClose={() => navigate('/dashboard')}

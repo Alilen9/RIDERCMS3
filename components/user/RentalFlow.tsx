@@ -31,6 +31,7 @@ export interface AssignedRental {
 interface RentalFlowProps {
   config: boothService.RentalFeatureStatus;
   boothUid: string;
+  boothName: string;
   assignedRental: AssignedRental | null;
   initialActiveRental: boothService.ActiveRentalResponse | null;
   onClose: () => void;
@@ -104,11 +105,15 @@ const ProgressScreen: React.FC<{
  */
 const BoothScanScreen: React.FC<{
   expectedBoothUid: string;
+  boothName: string;
   onVerified: (boothUid: string) => void;
   onBack: () => void;
-}> = ({ expectedBoothUid, onVerified, onBack }) => {
+}> = ({ expectedBoothUid, boothName, onVerified, onBack }) => {
   const [error, setError] = useState('');
   const [scanning, setScanning] = useState(false);
+
+  const displayName =
+    boothName.trim() || expectedBoothUid;
 
   const handleScanSuccess = useCallback(
     (decodedText: string) => {
@@ -121,11 +126,11 @@ const BoothScanScreen: React.FC<{
         onVerified(scanned);
       } else {
         setError(
-          `Wrong booth scanned. Expected ${expectedBoothUid}, but scanned ${scanned}.`
+          `Wrong booth scanned. Expected ${displayName}, but scanned ${scanned}.`
         );
       }
     },
-    [expectedBoothUid, onVerified]
+    [expectedBoothUid, displayName, onVerified]
   );
 
   return (
@@ -156,8 +161,8 @@ const BoothScanScreen: React.FC<{
 
           <p className="mx-auto mt-3 max-w-md text-gray-400">
             Scan the QR code on booth{' '}
-            <strong className="text-white">{expectedBoothUid}</strong> to
-            confirm you are at the station.
+            <strong className="text-white">{displayName}</strong>{' '}
+            to confirm you are at the station.
           </p>
         </div>
 
@@ -208,6 +213,7 @@ const BoothScanScreen: React.FC<{
 const RentalFlow: React.FC<RentalFlowProps> = ({
   config,
   boothUid,
+  boothName,
   assignedRental,
   initialActiveRental,
   onClose,
@@ -548,6 +554,7 @@ const RentalFlow: React.FC<RentalFlowProps> = ({
       return (
         <BoothScanScreen
           expectedBoothUid={boothUid}
+          boothName={boothName}
           onVerified={() => setStep('issuing')}
           onBack={onClose}
         />
