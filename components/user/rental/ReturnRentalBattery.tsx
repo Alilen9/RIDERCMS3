@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   ChevronRight,
   DoorClosed,
+  Loader2,
   PlugZap,
   ShieldCheck,
 } from 'lucide-react';
@@ -11,12 +12,27 @@ import {
 interface ReturnRentalBatteryProps {
   batteryId: string;
   onContinue: () => void;
+  /** When provided, requesting the return reserves + opens a slot on the server. */
+  onRequestReturn?: () => void | Promise<void>;
+  requestLoading?: boolean;
+  requestError?: string;
 }
 
 const ReturnRentalBattery: React.FC<ReturnRentalBatteryProps> = ({
   batteryId,
   onContinue,
+  onRequestReturn,
+  requestLoading = false,
+  requestError = '',
 }) => {
+  const handleAction = () => {
+    if (requestLoading) return;
+    if (onRequestReturn) {
+      void onRequestReturn();
+      return;
+    }
+    onContinue();
+  };
   return (
     <div className="min-h-[calc(100vh-120px)] flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-2xl animate-fade-in">
@@ -216,8 +232,9 @@ const ReturnRentalBattery: React.FC<ReturnRentalBatteryProps> = ({
             ACTION
         ========================== */}
         <button
-          onClick={onContinue}
-          className="
+          onClick={handleAction}
+          disabled={requestLoading}
+          className={`
             group
             w-full
             mt-7
@@ -225,9 +242,6 @@ const ReturnRentalBattery: React.FC<ReturnRentalBatteryProps> = ({
             items-center
             justify-center
             gap-3
-            bg-indigo-600
-            hover:bg-indigo-500
-            active:bg-indigo-700
             text-white
             font-bold
             py-4
@@ -237,22 +251,42 @@ const ReturnRentalBattery: React.FC<ReturnRentalBatteryProps> = ({
             duration-200
             shadow-lg
             shadow-indigo-600/20
-            hover:shadow-indigo-600/30
-          "
+            ${requestLoading
+              ? 'bg-indigo-800 cursor-wait'
+              : 'bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 hover:shadow-indigo-600/30'}
+          `}
         >
-          <ShieldCheck size={20} />
+          {requestLoading ? (
+            <Loader2 size={20} className="animate-spin" />
+          ) : (
+            <ShieldCheck size={20} />
+          )}
 
-          <span>Verify Returned Battery</span>
+          <span>
+            {requestLoading
+              ? 'Opening return slot…'
+              : 'Open Return Slot'}
+          </span>
 
-          <ChevronRight
-            size={20}
-            className="transition-transform duration-200 group-hover:translate-x-1"
-          />
+          {!requestLoading && (
+            <ChevronRight
+              size={20}
+              className="transition-transform duration-200 group-hover:translate-x-1"
+            />
+          )}
         </button>
 
+        {requestError && (
+          <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 p-4">
+            <p className="text-sm text-red-400">
+              ⚠️ {requestError}
+            </p>
+          </div>
+        )}
+
         <p className="text-center text-xs text-gray-600 mt-4">
-          Verification will confirm that the correct rental battery
-          has been returned.
+          The station will open an empty slot. Insert the battery and
+          keep the cabinet closed until verification completes.
         </p>
       </div>
     </div>

@@ -159,9 +159,18 @@ export const initiateDeposit = async (boothId: string): Promise<InitiateDepositR
 
 /**
  * Response from GET /api/booths/rentals/status.
+ * Carries the rider-facing rental rules so the client honours the same gates
+ * as the server.
  */
 export interface RentalFeatureStatus {
   enabled: boolean;
+  /** Repurposed setting: require scanning the BOOTH QR before issuing a rental. */
+  requireBoothScanBeforeIssue: boolean;
+  /** Require scanning the rental battery again when returning it. */
+  requireReturnScan: boolean;
+  allowRentalWhileOwnBatteryCharging: boolean;
+  maxRentalBatteriesPerUser: number;
+  minimumSocPercent: number;
 }
 
 /**
@@ -180,11 +189,16 @@ export const getRentalFeatureStatus = async (): Promise<RentalFeatureStatus> => 
 
 /**
  * A single borrowable rental battery option.
+ * `slotIdentifier`/`slotId` identify the exact slot to open during issuance,
+ * so the rider never has to scan the battery (it is locked inside the slot).
  */
 export interface RentalBatteryOption {
   id: string;
   soc: number;
   status?: string;
+  batteryId: number;
+  slotId: number;
+  slotIdentifier: string;
 }
 
 /**
@@ -193,9 +207,9 @@ export interface RentalBatteryOption {
 export interface AvailableRentalBatteriesResponse {
   boothUid: string;
   rentals: {
-    slotId: string;
+    slotId: number;
     slotIdentifier: string;
-    batteryId: string;
+    batteryId: number;
     batteryUid: string;
     chargeLevel: number;
   }[];
@@ -222,8 +236,242 @@ export const getAvailableRentalBatteries = async (
     (rental) => ({
       id: rental.batteryUid,
       soc: rental.chargeLevel,
+      batteryId: rental.batteryId,
+      slotId: rental.slotId,
+      slotIdentifier: rental.slotIdentifier,
     })
   );
+};
+
+/**
+ * Response from POST /api/booths/rentals/issue.
+ * The rental battery is dispensed by opening `ownDeposit`'s slot for the
+ * rider's own battery and the pool slot named in the request.
+ */
+export interface IssueRentalResponse {
+  message: string;
+  sessionId: number;
+  batteryUid: string;
+  chargeLevel: number;
+  status: 'pending' | 'in_progress';
+  ownDeposit: {
+    depositId: number;
+    boothUid: string;
+    slotIdentifier: string;
+    ownSlotId: number;
+  };
+}
+
+/**
+ * Issues (starts) a rental session for the given pool slot. The backend
+ * validates the rider has an unredeemed deposit and then opens the slot — no
+ * battery scan is required or possible.
+ * @param boothUid - Booth hosting the rental-pool slot.
+ * @param slotIdentifier - The exact occupied slot to open (from `/rentals/available`).
+ */
+export const issueRental = async (
+  boothUid: string,
+  slotIdentifier: string
+): Promise<IssueRentalResponse> => {
+  try {
+    const response = await apiClient.post<IssueRentalResponse>('/booths/rentals/issue', {
+      boothUid,
+      slotIdentifier,
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Failed to issue rental:', error);
+    throw error;
+  }
+};
+
+/**
+ * The current rider's active rental, if any.
+ * GET /api/booths/rentals/active (204 → null)
+ */
+export interface ActiveRentalResponse {
+  sessionId: number;
+  status: 'pending' | 'in_progress';
+  issuedAt: string;
+  startedAt: string | null;
+  issueSoc: number | null;
+  amount: number | null;
+  checkoutRequestId: string | null;
+  rentalBattery: { batteryUid: string };
+  sourceSlot: { boothUid: string; slotIdentifier: string };
+  /** True once a return slot has been RESERVED (not necessarily returned). */
+  returned: boolean;
+  /** True once the rented battery is physically back in its return slot. */
+  returnCompleted: boolean;
+  returnSoc: number | null;
+  returnSlot: { boothUid: string; slotIdentifier: string } | null;
+  ownDeposit: {
+    depositId: number;
+    boothUid: string;
+    slotIdentifier: string;
+    initialSoc: number | null;
+    currentSoc: number | null;
+  };
+}
+
+/**
+ * Fetches the rider's active (pending/in_progress) rental.
+ * @returns The active rental, or `null` when there is none (204).
+ */
+export const getActiveRental = async (): Promise<ActiveRentalResponse | null> => {
+  try {
+    const response = await apiClient.get<ActiveRentalResponse>('/booths/rentals/active');
+    return response.data || null;
+  } catch (error) {
+    console.error('Failed to fetch active rental:', error);
+    throw error;
+  }
+};
+
+/**
+ * Response from POST /api/booths/rentals/:sessionId/return.
+ */
+export interface ReturnRentalResponse {
+  message: string;
+  returnSlot: { boothUid: string; slotIdentifier: string };
+  batteryUid: string;
+  sourceBoothUid: string;
+  sourceSlotIdentifier: string;
+  simulated: boolean;
+}
+
+/**
+ * Reserves an empty slot at a booth and opens it for the rental battery to be
+ * placed into.
+ * @param sessionId - The active rental session id.
+ * @param boothUid - The booth the rider is returning the battery to.
+ */
+export const returnRental = async (
+  sessionId: number,
+  boothUid: string
+): Promise<ReturnRentalResponse> => {
+  try {
+    const response = await apiClient.post<ReturnRentalResponse>(
+      `/booths/rentals/${sessionId}/return`,
+      { boothUid }
+    );
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to return rental ${sessionId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * The consolidated rental bill breakdown.
+ * GET /api/booths/rentals/:sessionId/bill
+ */
+export interface RentalBillResponse {
+  sessionId: number;
+  amount: number;
+  consolidation: {
+    ownCharging: number;
+    rentalEnergy: number;
+    rentalTime: number;
+    durationMinutes: number;
+    energyGone: number;
+    ownGained: number;
+  };
+}
+
+/**
+ * Fetches the read-only consolidated bill for a returned rental.
+ * @param sessionId - The rental session id.
+ */
+export const getRentalBill = async (sessionId: number): Promise<RentalBillResponse> => {
+  try {
+    const response = await apiClient.get<RentalBillResponse>(`/booths/rentals/${sessionId}/bill`);
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to fetch rental bill for ${sessionId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Response from POST /api/booths/rentals/:sessionId/pay.
+ */
+export interface PayRentalResponse {
+  message: string;
+  amount: number;
+  consolidation: RentalBillResponse['consolidation'];
+  checkoutRequestId: string;
+  /** Present only in developer auto-approval mode. */
+  paymentStatus?: 'paid';
+}
+
+/**
+ * Initiates the consolidated bill payment (STK push, or auto-approved in dev).
+ * @param sessionId - The rental session id.
+ */
+export const payRental = async (sessionId: number): Promise<PayRentalResponse> => {
+  try {
+    const response = await apiClient.post<PayRentalResponse>(`/booths/rentals/${sessionId}/pay`);
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to trigger rental payment for ${sessionId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Rental payment status.
+ * GET /api/booths/rentals/status/:checkoutRequestId
+ */
+export interface RentalPaymentStatusResponse {
+  paymentStatus: 'paid' | 'pending' | 'failed' | string;
+  reason?: string;
+}
+
+/**
+ * Polls the rental payment status for a checkout request.
+ * @param checkoutRequestId - The id returned by `payRental`.
+ */
+export const getRentalPaymentStatus = async (
+  checkoutRequestId: string
+): Promise<RentalPaymentStatusResponse> => {
+  try {
+    const response = await apiClient.get<RentalPaymentStatusResponse>(
+      `/booths/rentals/status/${checkoutRequestId}`,
+      { params: { _: new Date().getTime() } }
+    );
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to fetch rental payment status for ${checkoutRequestId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Response from POST /api/booths/rentals/:sessionId/unlock-own.
+ */
+export interface UnlockOwnRentalResponse {
+  message: string;
+  ownSlot: { boothUid: string; slotIdentifier: string };
+}
+
+/**
+ * Opens the slot holding the rider's own (now charged) battery after the
+ * consolidated bill is paid.
+ * @param sessionId - The completed rental session id.
+ */
+export const unlockOwnRentalBattery = async (
+  sessionId: number
+): Promise<UnlockOwnRentalResponse> => {
+  try {
+    const response = await apiClient.post<UnlockOwnRentalResponse>(
+      `/booths/rentals/${sessionId}/unlock-own`
+    );
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to unlock own battery for rental ${sessionId}:`, error);
+    throw error;
+  }
 };
 
 /**
@@ -235,6 +483,51 @@ export const getMyBatteryStatuses = async (): Promise<MyBatteryStatusResponse[]>
     const response = await apiClient.get<MyBatteryStatusResponse[]>('/booths/my-battery-status');
     return response.data;
   } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Lifecycle status of a single deposit session.
+ * GET /api/booths/deposit-sessions/:sessionId/status
+ *
+ * Unlike `my-battery-status` (which only surfaces completed deposits), this
+ * exposes terminal states so the app can stop waiting when the booth
+ * auto-cancels a deposit.
+ */
+export interface DepositSessionStatusResponse {
+  sessionId: number;
+  sessionType: string;
+  sessionStatus:
+    | 'pending'
+    | 'opening'
+    | 'in_progress'
+    | 'completed'
+    | 'cancelled'
+    | 'failed'
+    | 'redeemed'
+    | 'manual';
+  slotIdentifier: string | null;
+  boothUid: string | null;
+}
+
+/**
+ * Fetches the lifecycle status of one of the user's own deposit sessions.
+ * Returns `null` when the session is unknown to this user (404).
+ * @param sessionId - The deposit session id returned by `initiateDeposit`.
+ */
+export const getDepositSessionStatus = async (
+  sessionId: number
+): Promise<DepositSessionStatusResponse | null> => {
+  try {
+    const response = await apiClient.get<DepositSessionStatusResponse>(
+      `/booths/deposit-sessions/${sessionId}/status`
+    );
+    return response.data;
+  } catch (error) {
+    if ((error as { response?: { status?: number } })?.response?.status === 404) {
+      return null;
+    }
     throw error;
   }
 };

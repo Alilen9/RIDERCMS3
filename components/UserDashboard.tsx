@@ -50,6 +50,9 @@ interface RentalBatteryOption {
   id: string;
   soc: number;
   status?: string;
+  batteryId: number;
+  slotId: number;
+  slotIdentifier: string;
 }
 
 const UserDashboard: React.FC<UserDashboardProps> = ({
@@ -158,6 +161,12 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
 
   const depositingSlotRef =
     useRef<string | null>(null);
+
+  const depositPollFailuresRef =
+    useRef(0);
+
+  const depositNetworkWarnedRef =
+    useRef(false);
 
   /*
    * ============================================================
@@ -413,14 +422,14 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
         }
 
         /*
-         * Send the automatically assigned
-         * battery to the rental page.
-         *
-         * The user does not select it.
+         * Send the automatically assigned battery AND the booth that hosts its
+         * slot to the rental page. The exact pool slot is known here, so the
+         * rider never needs to scan the battery (which is locked in the slot).
          */
         navigate('/rental', {
           state: {
-            assignedBattery:
+            boothUid,
+            assignedRental:
               highestSocBattery,
           },
         });
@@ -839,6 +848,21 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
           const statuses =
             await boothService.getMyBatteryStatuses();
 
+          // Any successful round-trip means the connection is healthy again.
+          depositPollFailuresRef.current =
+            0;
+
+          if (
+            depositNetworkWarnedRef.current
+          ) {
+            depositNetworkWarnedRef.current =
+              false;
+
+            toast.success(
+              'Connection restored.'
+            );
+          }
+
           if (
             statuses &&
             statuses.length > 0
@@ -930,10 +954,111 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
               setShowAddMorePrompt(
                 true
               );
+
+              return;
+            }
+          }
+
+          /*
+           * No completed battery yet. Detect a booth-side auto-cancellation
+           * (hardware `deposit_timeout`, operator cancel, rejected insert) so
+           * the user is told instead of waiting forever on
+           * "Waiting for Confirmation".
+           */
+          if (targetId != null) {
+            try {
+              const session =
+                await boothService.getDepositSessionStatus(
+                  targetId
+                );
+
+              if (
+                session &&
+                (session.sessionStatus ===
+                  'cancelled' ||
+                  session.sessionStatus ===
+                  'failed')
+              ) {
+                clearInterval(
+                  pollForDeposit
+                );
+
+                depositingSessionIdRef.current =
+                  null;
+
+                depositingSlotRef.current =
+                  null;
+
+                depositPollFailuresRef.current =
+                  0;
+
+                depositNetworkWarnedRef.current =
+                  false;
+
+                const remaining =
+                  activeBatteries.filter(
+                    (entry) =>
+                      !(
+                        (targetId !=
+                          null &&
+                          entry.sessionId ===
+                          targetId) ||
+                        (targetSlot !=
+                          null &&
+                          entry.slot
+                            .identifier ===
+                          targetSlot)
+                      )
+                  );
+
+                setActiveBatteries(
+                  remaining
+                );
+
+                setShowAddMorePrompt(
+                  false
+                );
+
+                toast.error(
+                  'Deposit cancelled by the station. Please try again.',
+                  {
+                    duration: 6000,
+                  }
+                );
+
+                setView(
+                  remaining.length > 0
+                    ? 'multi_status'
+                    : 'home'
+                );
+              }
+            } catch {
+              // Status lookup failed; keep waiting and retry next tick.
             }
           }
         } catch {
-          // Ignore polling errors
+          /*
+           * A dropped connection previously stayed silent, leaving the user on
+           * the spinner indefinitely. Surface it (once) but keep retrying.
+           */
+          depositPollFailuresRef.current +=
+            1;
+
+          if (
+            depositPollFailuresRef.current >=
+            5 &&
+            !depositNetworkWarnedRef.current
+          ) {
+            depositNetworkWarnedRef.current =
+              true;
+
+            toast.error(
+              'Connection lost while confirming your deposit. Still trying…',
+              {
+                duration: 6000,
+              }
+            );
+          }
         }
       }, 600);
 
@@ -1239,6 +1364,12 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
 
           depositingSlotRef.current =
             response.slot.identifier;
+
+          depositPollFailuresRef.current =
+            0;
+
+          depositNetworkWarnedRef.current =
+            false;
 
           setView(
             'deposit_guide'

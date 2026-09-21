@@ -1,6 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Battery, Loader2, MapPin, ShieldCheck } from 'lucide-react';
 
-import IssueRentalBattery from './rental/IssueRentalBattery';
+import * as boothService from '../../services/boothService';
+
+import QrScanner from './QrScanner';
 import RentalSessionActive from './rental/RentalSessionActive';
 import ReturnRentalBattery from './rental/ReturnRentalBattery';
 import VerifyRentalReturn from './rental/VerifyRentalReturn';
@@ -12,761 +15,745 @@ import UnlockOwnBattery from './rental/UnlockOwnBattery';
 import RentalBatteryCollected from './rental/RentalBatteryCollected';
 import RentalSessionClosed from './rental/RentalSessionClosed';
 
-interface RentalFlowProps {
-  ownBatterySoc: number;
-  ownBatteryId: string;
+/**
+ * The rental battery the dashboard assigned to this rider. The battery is
+ * already inside `slotIdentifier`, so issuance just opens that slot — the rider
+ * never scans the battery.
+ */
+export interface AssignedRental {
+  id: string;
+  soc: number;
+  batteryId: number;
+  slotId: number;
   slotIdentifier: string;
+}
+
+interface RentalFlowProps {
+  config: boothService.RentalFeatureStatus;
+  boothUid: string;
+  assignedRental: AssignedRental | null;
+  initialActiveRental: boothService.ActiveRentalResponse | null;
   onClose: () => void;
 }
 
-interface RentalBatteryOption {
-  id: string;
-  soc: number;
-  status: 'available' | 'unavailable';
-}
-
 type RentalStep =
-  | 'assigning'
-  | 'no_battery'
-  | 'issue_battery'
+  | 'booth_scan'
+  | 'issuing'
+  | 'collecting'
   | 'active'
   | 'return'
   | 'verify_return'
+  | 'waiting_return'
   | 'charging_complete'
   | 'bill'
   | 'payment'
   | 'payment_confirmed'
   | 'unlock_own'
   | 'collected'
-  | 'closed';
+  | 'closed'
+  | 'error';
 
-/*
- * TEMPORARY RENTAL BATTERY DATA
- *
- * Later replace this with data from your backend.
+/**
+ * Extracts a human-readable message from an API/axios error.
+ * @param err - The thrown error.
+ * @returns A message suitable for display.
  */
-const RENTAL_BATTERIES: RentalBatteryOption[] = [
-  {
-    id: 'R-1082',
-    soc: 87,
-    status: 'available',
-  },
-  {
-    id: 'R-1091',
-    soc: 94,
-    status: 'available',
-  },
-  {
-    id: 'R-1105',
-    soc: 78,
-    status: 'available',
-  },
-];
+function extractError(err: unknown): string {
+  const e = err as {
+    response?: { data?: { message?: string; error?: string } };
+    message?: string;
+  };
+  return (
+    e?.response?.data?.message ||
+    e?.response?.data?.error ||
+    e?.message ||
+    'Something went wrong. Please try again.'
+  );
+}
 
-const RentalFlow: React.FC<RentalFlowProps> = ({
-  ownBatterySoc,
-  ownBatteryId,
-  slotIdentifier,
-  onClose,
-}) => {
-  /*
-   * ---------------------------------------------------------
-   * AUTOMATIC RENTAL BATTERY ASSIGNMENT
-   * ---------------------------------------------------------
-   *
-   * Select the available rental battery with the
-   * highest state of charge.
-   */
-  const assignedBattery = useMemo(() => {
-    const availableBatteries = RENTAL_BATTERIES.filter(
-      (battery) => battery.status === 'available'
-    );
+/**
+ * A simple full-screen progress/awaiting indicator used while the station and
+ * backend are working (opening slots, confirming collection/return).
+ */
+const ProgressScreen: React.FC<{
+  title: string;
+  subtitle: string;
+  detail?: string;
+}> = ({ title, subtitle, detail }) => (
+  <div className="min-h-full flex items-center justify-center px-4 py-10">
+    <div className="w-full max-w-md rounded-3xl border border-gray-800 bg-gray-900 p-8 text-center">
+      <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full border border-indigo-500/30 bg-indigo-500/10">
+        <Loader2 size={30} className="animate-spin text-indigo-400" />
+      </div>
 
-    if (availableBatteries.length === 0) {
-      return null;
-    }
+      <h2 className="text-2xl font-bold text-white">{title}</h2>
+      <p className="mt-2 text-gray-400">{subtitle}</p>
 
-    return [...availableBatteries].sort(
-      (a, b) => b.soc - a.soc
-    )[0];
-  }, []);
+      {detail && (
+        <div className="mt-5 rounded-2xl border border-gray-800 bg-gray-950/60 p-4">
+          <p className="text-sm font-semibold text-indigo-300">{detail}</p>
+        </div>
+      )}
+    </div>
+  </div>
+);
 
-  /*
-   * ---------------------------------------------------------
-   * CURRENT STEP
-   * ---------------------------------------------------------
-   *
-   * If a battery is available:
-   *     issue_battery
-   *
-   * Otherwise:
-   *     no_battery
-   */
-  const [step, setStep] = useState<RentalStep>(
-    assignedBattery ? 'issue_battery' : 'no_battery'
+/**
+ * Confirms the rider is physically at the expected booth before issuing a
+ * rental. Only shown when the repurposed "booth QR scan" setting is enabled.
+ */
+const BoothScanScreen: React.FC<{
+  expectedBoothUid: string;
+  onVerified: (boothUid: string) => void;
+  onBack: () => void;
+}> = ({ expectedBoothUid, onVerified, onBack }) => {
+  const [error, setError] = useState('');
+  const [scanning, setScanning] = useState(false);
+
+  const handleScanSuccess = useCallback(
+    (decodedText: string) => {
+      const scanned = decodedText.trim();
+
+      if (
+        scanned.toLowerCase() ===
+        expectedBoothUid.trim().toLowerCase()
+      ) {
+        onVerified(scanned);
+      } else {
+        setError(
+          `Wrong booth scanned. Expected ${expectedBoothUid}, but scanned ${scanned}.`
+        );
+      }
+    },
+    [expectedBoothUid, onVerified]
   );
 
-  /*
-   * ---------------------------------------------------------
-   * SELECTED RENTAL BATTERY
-   * ---------------------------------------------------------
-   */
-  const [selectedBattery, setSelectedBattery] =
-    useState<RentalBatteryOption | null>(assignedBattery);
+  return (
+    <div className="min-h-full px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-2xl">
+        <button
+          onClick={onBack}
+          className="mb-8 flex items-center gap-2 text-sm font-medium text-gray-400 transition hover:text-white"
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-700 bg-gray-800">
+            ←
+          </span>
+          Back
+        </button>
 
-  /*
-   * ---------------------------------------------------------
-   * RENTAL BATTERY STATE
-   * ---------------------------------------------------------
-   */
-  const [rentalStartSoc, setRentalStartSoc] =
-    useState<number>(assignedBattery?.soc ?? 0);
+        <div className="mb-8 text-center">
+          <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full border border-indigo-500/30 bg-indigo-500/10">
+            <MapPin size={36} className="text-indigo-400" />
+          </div>
 
-  const [rentalCurrentSoc, setRentalCurrentSoc] =
-    useState<number>(assignedBattery?.soc ?? 0);
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-indigo-400">
+            Confirm Station
+          </p>
 
-  const [rentalStartTime, setRentalStartTime] =
-    useState<Date | null>(null);
+          <h1 className="text-3xl font-bold text-white sm:text-4xl">
+            Scan the booth QR
+          </h1>
 
-  /*
-   * ---------------------------------------------------------
-   * FIRST QR SCAN
-   * ---------------------------------------------------------
-   *
-   * false = rental battery has NOT been scanned
-   * true  = rental battery QR has been verified
-   *
-   * The rental battery cannot be unlocked unless this
-   * becomes true.
-   */
-  const [rentalBatteryScanned, setRentalBatteryScanned] =
-    useState(false);
+          <p className="mx-auto mt-3 max-w-md text-gray-400">
+            Scan the QR code on booth{' '}
+            <strong className="text-white">{expectedBoothUid}</strong> to
+            confirm you are at the station.
+          </p>
+        </div>
 
-  /*
-   * ---------------------------------------------------------
-   * SECOND QR SCAN
-   * ---------------------------------------------------------
-   *
-   * false = returned battery has NOT been scanned
-   * true  = returned battery QR has been verified
-   *
-   * The return cannot be accepted unless this becomes true.
-   */
-  const [returnedBatteryScanned, setReturnedBatteryScanned] =
-    useState(false);
+        <div className="overflow-hidden rounded-3xl border border-gray-800 bg-gray-900 p-6 sm:p-8">
+          {scanning ? (
+            <div className="overflow-hidden rounded-2xl border border-gray-700 bg-black">
+              <div className="aspect-square w-full">
+                <QrScanner
+                  onScanSuccess={handleScanSuccess}
+                  onScanFailure={(message) => setError(message)}
+                />
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setError('');
+                setScanning(true);
+              }}
+              className="w-full rounded-2xl bg-indigo-600 py-4 font-semibold text-white transition hover:bg-indigo-500"
+            >
+              📷 Scan Booth QR
+            </button>
+          )}
 
-  /*
-   * ---------------------------------------------------------
-   * BILLING
-   * ---------------------------------------------------------
-   *
-   * Temporary values.
-   *
-   * Replace these later with values calculated by
-   * your backend.
-   */
-  const ownCharging = 120;
-  const rentalEnergy = 75;
-  const rentalTime = 60;
+          {scanning && (
+            <button
+              type="button"
+              onClick={() => setScanning(false)}
+              className="mt-4 w-full rounded-2xl bg-gray-800 py-3 font-semibold text-gray-300 transition hover:bg-gray-700"
+            >
+              Stop Scanner
+            </button>
+          )}
 
-  const total =
-    ownCharging +
-    rentalEnergy +
-    rentalTime;
+          {error && (
+            <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 p-4">
+              <p className="text-sm text-red-400">⚠️ {error}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
-  /*
-   * ---------------------------------------------------------
-   * RETRY RENTAL BATTERY ASSIGNMENT
-   * ---------------------------------------------------------
-   */
-  const tryAssignRentalBattery = () => {
-    const availableBatteries =
-      RENTAL_BATTERIES.filter(
-        (battery) => battery.status === 'available'
-      );
-
-    if (availableBatteries.length === 0) {
-      setSelectedBattery(null);
-      setStep('no_battery');
-      return;
+const RentalFlow: React.FC<RentalFlowProps> = ({
+  config,
+  boothUid,
+  assignedRental,
+  initialActiveRental,
+  onClose,
+}) => {
+  const [step, setStep] = useState<RentalStep>(() => {
+    if (initialActiveRental) {
+      if (initialActiveRental.status === 'pending') return 'collecting';
+      if (initialActiveRental.returned) return 'waiting_return';
+      return 'active';
     }
-
-    /*
-     * Select battery with highest SoC.
-     */
-    const bestBattery = [...availableBatteries].sort(
-      (a, b) => b.soc - a.soc
-    )[0];
-
-    /*
-     * Reset scan state when assigning a new battery.
-     */
-    setRentalBatteryScanned(false);
-    setReturnedBatteryScanned(false);
-
-    setSelectedBattery(bestBattery);
-    setRentalStartSoc(bestBattery.soc);
-    setRentalCurrentSoc(bestBattery.soc);
-    setRentalStartTime(null);
-
-    setStep('issue_battery');
-  };
-
-  /*
-   * ---------------------------------------------------------
-   * RENTAL BATTERY QR VERIFIED
-   * ---------------------------------------------------------
-   *
-   * This function is called by IssueRentalBattery ONLY
-   * after the QR code has been successfully scanned.
-   */
-  const handleRentalBatteryVerified = () => {
-    if (!selectedBattery) {
-      return;
+    if (assignedRental) {
+      return config.requireBoothScanBeforeIssue ? 'booth_scan' : 'issuing';
     }
+    return 'error';
+  });
 
-    /*
-     * Mark first scan as completed.
-     */
-    setRentalBatteryScanned(true);
-  };
+  const [sessionId, setSessionId] = useState<number | null>(
+    initialActiveRental?.sessionId ?? null
+  );
 
-  /*
-   * ---------------------------------------------------------
-   * UNLOCK RENTAL BATTERY
-   * ---------------------------------------------------------
-   *
-   * IMPORTANT:
-   *
-   * The rental battery cannot be unlocked unless the first
-   * QR scan was successful.
-   */
-  const handleUnlockRentalBattery = () => {
-    if (!selectedBattery) {
-      return;
-    }
-
-    if (!rentalBatteryScanned) {
-      console.error(
-        'Cannot unlock rental battery: QR scan not completed.'
-      );
-
-      return;
-    }
-
-    /*
-     * Start rental timer only after the battery is unlocked.
-     */
-    setRentalStartTime(new Date());
-
-    /*
-     * Start active rental session.
-     */
-    setStep('active');
-  };
-
-  /*
-   * ---------------------------------------------------------
-   * RIDER WANTS TO RETURN RENTAL BATTERY
-   * ---------------------------------------------------------
-   */
-  const handleStartReturn = () => {
-    if (!selectedBattery) {
-      return;
-    }
-
-    /*
-     * Reset the second scan.
-     *
-     * This is important because the rider must scan the
-     * battery again during return.
-     */
-    setReturnedBatteryScanned(false);
-
-    /*
-     * TEMPORARY:
-     *
-     * Simulate 25% battery usage.
-     *
-     * Later replace this with the actual SoC received
-     * from the battery/backend.
-     */
-    const currentSoc = Math.max(
-      0,
-      rentalStartSoc - 25
+  const [active, setActive] =
+    useState<boothService.ActiveRentalResponse | null>(
+      initialActiveRental
     );
 
-    setRentalCurrentSoc(currentSoc);
+  const [assigned, setAssigned] = useState<AssignedRental | null>(
+    assignedRental
+  );
 
-    /*
-     * Move to return screen.
-     */
-    setStep('return');
-  };
+  const [bill, setBill] =
+    useState<boothService.RentalBillResponse | null>(null);
+
+  const [returnSlot, setReturnSlot] = useState<{
+    boothUid: string;
+    slotIdentifier: string;
+  } | null>(null);
+
+  const [error, setError] = useState('');
+  const [returnError, setReturnError] = useState('');
+  const [issueBusy, setIssueBusy] = useState(false);
+  const [returnBusy, setReturnBusy] = useState(false);
+
+  const rentalBatteryId =
+    assigned?.id || active?.rentalBattery.batteryUid || 'Rental battery';
 
   /*
-   * ---------------------------------------------------------
-   * GO TO RETURN QR SCANNER
-   * ---------------------------------------------------------
-   *
-   * The rider reaches this screen after physically
-   * returning the rental battery.
+   * ============================================================
+   * ISSUE RENTAL (opens the assigned pool slot)
+   * ============================================================
    */
-  const handleVerifyReturn = () => {
-    if (!selectedBattery) {
+  useEffect(() => {
+    if (step !== 'issuing' || sessionId != null) {
       return;
     }
 
-    /*
-     * Always require a fresh return scan.
-     */
-    setReturnedBatteryScanned(false);
+    let cancelled = false;
 
-    setStep('verify_return');
-  };
+    const run = async () => {
+      if (!assigned) {
+        setError('No rental battery was assigned. Please try again.');
+        setStep('error');
+        return;
+      }
+
+      setIssueBusy(true);
+      setError('');
+
+      try {
+        const result = await boothService.issueRental(
+          boothUid,
+          assigned.slotIdentifier
+        );
+
+        if (cancelled) return;
+
+        setSessionId(result.sessionId);
+
+        if (result.status === 'in_progress') {
+          const current = await boothService.getActiveRental();
+          if (cancelled) return;
+          setActive(current);
+          setStep('active');
+        } else {
+          setStep('collecting');
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setError(extractError(err));
+        setStep('error');
+      } finally {
+        if (!cancelled) setIssueBusy(false);
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [step, sessionId, assigned, boothUid]);
 
   /*
-   * ---------------------------------------------------------
-   * RETURNED BATTERY QR VERIFIED
-   * ---------------------------------------------------------
-   *
-   * This function is called ONLY after the second QR scan
-   * matches the assigned rental battery.
+   * ============================================================
+   * WAIT FOR PHYSICAL COLLECTION (pending -> in_progress)
+   * ============================================================
    */
-  const handleReturnBatteryVerified = () => {
-    if (!selectedBattery) {
+  useEffect(() => {
+    if (step !== 'collecting') {
       return;
     }
 
-    /*
-     * Mark second scan as completed.
-     */
-    setReturnedBatteryScanned(true);
-  };
+    let cancelled = false;
+
+    const tick = async () => {
+      try {
+        const current = await boothService.getActiveRental();
+        if (cancelled || !current) return;
+
+        setActive(current);
+
+        if (current.status === 'in_progress') {
+          setStep('active');
+        }
+      } catch {
+        // Keep waiting; the next tick retries.
+      }
+    };
+
+    void tick();
+    const intervalId = setInterval(tick, 1500);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [step]);
 
   /*
-   * ---------------------------------------------------------
-   * ACCEPT VERIFIED RETURN
-   * ---------------------------------------------------------
-   *
-   * The flow cannot continue unless the second QR scan
-   * was completed successfully.
+   * ============================================================
+   * ACTIVE SESSION: refresh own-battery SOC periodically
+   * ============================================================
    */
-  const handleReturnVerified = () => {
-    if (!selectedBattery) {
+  useEffect(() => {
+    if (step !== 'active') {
       return;
     }
 
-    if (!returnedBatteryScanned) {
-      console.error(
-        'Cannot accept return: returned battery QR scan not completed.'
-      );
+    let cancelled = false;
 
+    const tick = async () => {
+      try {
+        const current = await boothService.getActiveRental();
+        if (!cancelled && current) {
+          setActive(current);
+        }
+      } catch {
+        // Ignore transient polling errors.
+      }
+    };
+
+    const intervalId = setInterval(tick, 5000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [step]);
+
+  /*
+   * ============================================================
+   * WAIT FOR PHYSICAL RETURN (returnCompleted)
+   * ============================================================
+   */
+  useEffect(() => {
+    if (step !== 'waiting_return') {
       return;
     }
 
-    /*
-     * Return is now officially accepted.
-     */
-    setStep('charging_complete');
-  };
+    let cancelled = false;
+
+    const tick = async () => {
+      try {
+        const current = await boothService.getActiveRental();
+        if (cancelled || !current) return;
+
+        setActive(current);
+
+        if (current.returnCompleted) {
+          setStep('charging_complete');
+        }
+      } catch {
+        // Keep waiting; the next tick retries.
+      }
+    };
+
+    void tick();
+    const intervalId = setInterval(tick, 1500);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [step]);
 
   /*
-   * ---------------------------------------------------------
-   * OWN BATTERY CHARGING COMPLETED
-   * ---------------------------------------------------------
+   * ============================================================
+   * BILL
+   * ============================================================
    */
-  const handleChargingComplete = () => {
-    setStep('bill');
-  };
+  useEffect(() => {
+    if (step !== 'bill' || bill || sessionId == null) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        const result = await boothService.getRentalBill(sessionId);
+        if (!cancelled) setBill(result);
+      } catch (err) {
+        if (!cancelled) {
+          setError(extractError(err));
+          setStep('error');
+        }
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [step, bill, sessionId]);
 
   /*
-   * ---------------------------------------------------------
-   * USER CLICKS PAY
-   * ---------------------------------------------------------
+   * ============================================================
+   * RETURN REQUEST (reserve + open a return slot)
+   * ============================================================
    */
-  const handlePayment = () => {
-    setStep('payment');
-  };
+  const handleRequestReturn = async () => {
+    if (sessionId == null) return;
 
-  /*
-   * ---------------------------------------------------------
-   * PAYMENT SUCCEEDED
-   * ---------------------------------------------------------
-   */
-  const handlePaymentSuccess = () => {
-    setStep('payment_confirmed');
-  };
+    setReturnBusy(true);
+    setReturnError('');
 
-  /*
-   * ---------------------------------------------------------
-   * M-PESA PAYMENT
-   * ---------------------------------------------------------
-   *
-   * TEMPORARY:
-   *
-   * Simulates a 5-second payment request.
-   *
-   * Replace this later with your real M-Pesa API.
-   */
-  const handleMpesaPayment = async (): Promise<boolean> => {
     try {
-      console.log(
-        'Starting M-Pesa payment:',
-        total
+      const result = await boothService.returnRental(
+        sessionId,
+        boothUid
       );
 
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 5000);
-      });
+      setReturnSlot(result.returnSlot);
 
-      console.log(
-        'M-Pesa payment successful'
+      const current = await boothService.getActiveRental();
+      if (current) setActive(current);
+
+      setStep(
+        config.requireReturnScan
+          ? 'verify_return'
+          : 'waiting_return'
       );
+    } catch (err) {
+      setReturnError(extractError(err));
+    } finally {
+      setReturnBusy(false);
+    }
+  };
 
-      return true;
-    } catch (error) {
-      console.error(
-        'M-Pesa payment failed:',
-        error
-      );
+  /*
+   * ============================================================
+   * PAYMENT (STK push + poll)
+   * ============================================================
+   */
+  const handlePay = async (): Promise<boolean> => {
+    if (sessionId == null) return false;
 
+    try {
+      const result = await boothService.payRental(sessionId);
+
+      if (result.paymentStatus === 'paid') {
+        return true;
+      }
+
+      const checkoutId = result.checkoutRequestId;
+      const deadline = Date.now() + 90000;
+
+      while (Date.now() < deadline) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, 2500)
+        );
+
+        try {
+          const status =
+            await boothService.getRentalPaymentStatus(
+              checkoutId
+            );
+
+          if (status.paymentStatus === 'paid') return true;
+          if (status.paymentStatus === 'failed') return false;
+        } catch {
+          // Keep polling until the deadline.
+        }
+      }
+
+      return false;
+    } catch {
       return false;
     }
   };
 
   /*
-   * ---------------------------------------------------------
+   * ============================================================
    * UNLOCK OWN BATTERY
-   * ---------------------------------------------------------
+   * ============================================================
    */
-  const handleUnlockOwnBattery = () => {
-    setStep('unlock_own');
+  const handleUnlockOwn = async () => {
+    if (sessionId == null) return;
+
+    try {
+      const result =
+        await boothService.unlockOwnRentalBattery(sessionId);
+
+      setReturnSlot(result.ownSlot);
+      setStep('collected');
+    } catch (err) {
+      setError(extractError(err));
+    }
   };
 
   /*
-   * ---------------------------------------------------------
-   * OWN BATTERY COLLECTED
-   * ---------------------------------------------------------
-   */
-  const handleBatteryCollected = () => {
-    setStep('collected');
-  };
-
-  /*
-   * ---------------------------------------------------------
-   * SESSION CLOSED
-   * ---------------------------------------------------------
-   */
-  const handleSessionClosed = () => {
-    setStep('closed');
-  };
-
-  /*
-   * ---------------------------------------------------------
-   * RENDER CURRENT STEP
-   * ---------------------------------------------------------
+   * ============================================================
+   * RENDER
+   * ============================================================
    */
   switch (step) {
-
-    /*
-     * =======================================================
-     * NO RENTAL BATTERY AVAILABLE
-     * =======================================================
-     */
-    case 'no_battery':
+    case 'booth_scan':
       return (
-        <div
-          style={{
-            minHeight: '100vh',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '24px',
-            background: '#f8fafc',
-          }}
-        >
-          <div
-            style={{
-              width: '100%',
-              maxWidth: '500px',
-              background: '#ffffff',
-              borderRadius: '16px',
-              padding: '32px',
-              textAlign: 'center',
-              boxShadow:
-                '0 10px 30px rgba(0,0,0,0.08)',
-            }}
-          >
-            <div
-              style={{
-                fontSize: '48px',
-                marginBottom: '16px',
-              }}
-            >
-              🔋
+        <BoothScanScreen
+          expectedBoothUid={boothUid}
+          onVerified={() => setStep('issuing')}
+          onBack={onClose}
+        />
+      );
+
+    case 'issuing':
+      return (
+        <ProgressScreen
+          title="Opening your slot"
+          subtitle="Issuing your rental battery…"
+          detail={
+            assigned
+              ? `Slot ${assigned.slotIdentifier} · ${assigned.id} (${assigned.soc}%)`
+              : undefined
+          }
+        />
+      );
+
+    case 'collecting':
+      return (
+        <ProgressScreen
+          title="Collect your battery"
+          subtitle="The slot is open. Take the battery out and close the door."
+          detail={
+            assigned
+              ? `Slot ${assigned.slotIdentifier} · ${assigned.id} (${assigned.soc}%)`
+              : active?.rentalBattery.batteryUid
+                ? `Battery ${active.rentalBattery.batteryUid}`
+                : undefined
+          }
+        />
+      );
+
+    case 'active':
+      return (
+        <RentalSessionActive
+          ownBatterySoc={active?.ownDeposit.currentSoc ?? 0}
+          rentalBatteryId={rentalBatteryId}
+          rentalBatterySoc={
+            active?.issueSoc ?? assigned?.soc ?? 0
+          }
+          rentalStartSoc={active?.issueSoc ?? assigned?.soc ?? 0}
+          startTime={
+            new Date(
+              active?.startedAt ||
+                active?.issuedAt ||
+                Date.now()
+            )
+          }
+          onReturn={() => setStep('return')}
+        />
+      );
+
+    case 'return':
+      return (
+        <ReturnRentalBattery
+          batteryId={rentalBatteryId}
+          onContinue={() => setStep('waiting_return')}
+          onRequestReturn={handleRequestReturn}
+          requestLoading={returnBusy}
+          requestError={returnError}
+        />
+      );
+
+    case 'verify_return':
+      return (
+        <VerifyRentalReturn
+          batteryId={rentalBatteryId}
+          onVerified={() => setStep('waiting_return')}
+          onRetry={() => setStep('return')}
+        />
+      );
+
+    case 'waiting_return':
+      return (
+        <ProgressScreen
+          title="Returning battery"
+          subtitle="Insert the battery, connect the plug and close the cabinet."
+          detail={
+            returnSlot
+              ? `Slot ${returnSlot.slotIdentifier} · ${returnSlot.boothUid}`
+              : active?.returnSlot
+                ? `Slot ${active.returnSlot.slotIdentifier}`
+                : undefined
+          }
+        />
+      );
+
+    case 'charging_complete':
+      return (
+        <OwnBatteryChargingComplete
+          batterySoc={active?.ownDeposit.currentSoc ?? 100}
+          onContinue={() => setStep('bill')}
+        />
+      );
+
+    case 'bill':
+      if (!bill) {
+        return (
+          <ProgressScreen
+            title="Calculating your bill"
+            subtitle="Adding up charging, energy and time…"
+          />
+        );
+      }
+
+      return (
+        <ConsolidatedRentalBill
+          ownCharging={bill.consolidation.ownCharging}
+          rentalEnergy={bill.consolidation.rentalEnergy}
+          rentalTime={bill.consolidation.rentalTime}
+          onPay={() => setStep('payment')}
+        />
+      );
+
+    case 'payment':
+      return (
+        <RentalPayment
+          amount={bill?.amount ?? 0}
+          onPay={handlePay}
+          onSuccess={() => setStep('payment_confirmed')}
+          onBack={() => setStep('bill')}
+        />
+      );
+
+    case 'payment_confirmed':
+      return (
+        <RentalPaymentConfirmed
+          amount={bill?.amount ?? 0}
+          onContinue={() => setStep('unlock_own')}
+        />
+      );
+
+    case 'unlock_own':
+      return (
+        <UnlockOwnBattery
+          slotIdentifier={
+            active?.ownDeposit.slotIdentifier ||
+            returnSlot?.slotIdentifier ||
+            ''
+          }
+          onUnlock={handleUnlockOwn}
+        />
+      );
+
+    case 'collected':
+      return (
+        <RentalBatteryCollected
+          batteryId={
+            active?.ownDeposit.slotIdentifier ||
+            'Your battery'
+          }
+          onContinue={() => setStep('closed')}
+        />
+      );
+
+    case 'closed':
+      return <RentalSessionClosed onDone={onClose} />;
+
+    case 'error':
+    default:
+      return (
+        <div className="min-h-full flex items-center justify-center px-4 py-10">
+          <div className="w-full max-w-md rounded-3xl border border-red-500/20 bg-gray-900 p-8 text-center">
+            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full border border-red-500/30 bg-red-500/10 text-red-400">
+              <Battery size={30} />
             </div>
 
-            <h2
-              style={{
-                margin: '0 0 12px',
-                fontSize: '24px',
-                fontWeight: 700,
-                color: '#111827',
-              }}
-            >
-              No Rental Batteries Available
+            <h2 className="text-2xl font-bold text-white">
+              Rental could not continue
             </h2>
 
-            <p
-              style={{
-                margin: '0 0 24px',
-                color: '#6b7280',
-                lineHeight: 1.6,
-              }}
-            >
-              There are currently no rental batteries
-              available at this station. Please try
-              again later.
+            <p className="mt-2 text-gray-400">
+              {error || 'Something went wrong. Please try again.'}
             </p>
 
-            <div
-              style={{
-                display: 'flex',
-                gap: '12px',
-                justifyContent: 'center',
-              }}
-            >
-              <button
-                type="button"
-                onClick={tryAssignRentalBattery}
-                style={{
-                  border: 'none',
-                  borderRadius: '10px',
-                  padding: '12px 20px',
-                  background: '#16a34a',
-                  color: '#ffffff',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                Try Again
-              </button>
+            <div className="mt-6 flex flex-col gap-3">
+              {assigned && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError('');
+                    setStep(
+                      config.requireBoothScanBeforeIssue
+                        ? 'booth_scan'
+                        : 'issuing'
+                    );
+                  }}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 py-4 font-semibold text-white transition hover:bg-indigo-500"
+                >
+                  <ShieldCheck size={20} />
+                  Try Again
+                </button>
+              )}
 
               <button
                 type="button"
                 onClick={onClose}
-                style={{
-                  border: '1px solid #d1d5db',
-                  borderRadius: '10px',
-                  padding: '12px 20px',
-                  background: '#ffffff',
-                  color: '#374151',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
+                className="w-full rounded-2xl bg-gray-800 py-3 font-semibold text-gray-300 transition hover:bg-gray-700"
               >
-                Back
+                Back to Dashboard
               </button>
             </div>
           </div>
         </div>
       );
-
-    /*
-     * =======================================================
-     * ISSUE RENTAL BATTERY
-     * =======================================================
-     *
-     * First QR scan happens inside IssueRentalBattery.
-     */
-    case 'issue_battery':
-      if (!selectedBattery) {
-        return null;
-      }
-
-      return (
-        <IssueRentalBattery
-          batteryId={selectedBattery.id}
-          soc={selectedBattery.soc}
-          onUnlock={handleUnlockRentalBattery}
-          onBack={onClose}
-        />
-      );
-
-    /*
-     * =======================================================
-     * ACTIVE RENTAL SESSION
-     * =======================================================
-     */
-    case 'active':
-      if (
-        !selectedBattery ||
-        !rentalStartTime
-      ) {
-        return null;
-      }
-
-      return (
-        <RentalSessionActive
-          ownBatterySoc={ownBatterySoc}
-          rentalBatteryId={selectedBattery.id}
-          rentalBatterySoc={rentalCurrentSoc}
-          rentalStartSoc={rentalStartSoc}
-          startTime={rentalStartTime}
-          onReturn={handleStartReturn}
-        />
-      );
-
-    /*
-     * =======================================================
-     * RETURN RENTAL BATTERY
-     * =======================================================
-     */
-    case 'return':
-      if (!selectedBattery) {
-        return null;
-      }
-
-      return (
-        <ReturnRentalBattery
-          batteryId={selectedBattery.id}
-          onContinue={handleVerifyReturn}
-        />
-      );
-
-    /*
-     * =======================================================
-     * VERIFY RETURN
-     * =======================================================
-     *
-     * Second QR scan happens here.
-     */
-    case 'verify_return':
-      if (!selectedBattery) {
-        return null;
-      }
-
-      return (
-        <VerifyRentalReturn
-          batteryId={selectedBattery.id}
-          onVerified={handleReturnBatteryVerified}
-          onRetry={() => setStep('return')}
-        />
-      );
-
-    /*
-     * =======================================================
-     * CHARGING COMPLETE
-     * =======================================================
-     *
-     * This step can only be reached after the second
-     * battery scan has succeeded.
-     */
-    case 'charging_complete':
-      if (!returnedBatteryScanned) {
-        return null;
-      }
-
-      return (
-        <OwnBatteryChargingComplete
-          batterySoc={100}
-          onContinue={handleChargingComplete}
-        />
-      );
-
-    /*
-     * =======================================================
-     * CONSOLIDATED BILL
-     * =======================================================
-     */
-    case 'bill':
-      return (
-        <ConsolidatedRentalBill
-          ownCharging={ownCharging}
-          rentalEnergy={rentalEnergy}
-          rentalTime={rentalTime}
-          onPay={handlePayment}
-        />
-      );
-
-    /*
-     * =======================================================
-     * PAYMENT
-     * =======================================================
-     */
-    case 'payment':
-      return (
-        <RentalPayment
-          amount={total}
-          onPay={handleMpesaPayment}
-          onSuccess={handlePaymentSuccess}
-          onBack={() => setStep('bill')}
-        />
-      );
-
-    /*
-     * =======================================================
-     * PAYMENT CONFIRMED
-     * =======================================================
-     */
-    case 'payment_confirmed':
-      return (
-        <RentalPaymentConfirmed
-          amount={total}
-          onContinue={handleUnlockOwnBattery}
-        />
-      );
-
-    /*
-     * =======================================================
-     * UNLOCK OWN BATTERY
-     * =======================================================
-     */
-    case 'unlock_own':
-      return (
-        <UnlockOwnBattery
-          slotIdentifier={slotIdentifier}
-          onUnlock={handleBatteryCollected}
-        />
-      );
-
-    /*
-     * =======================================================
-     * OWN BATTERY COLLECTED
-     * =======================================================
-     */
-    case 'collected':
-      return (
-        <RentalBatteryCollected
-          batteryId={ownBatteryId}
-          onContinue={handleSessionClosed}
-        />
-      );
-
-    /*
-     * =======================================================
-     * SESSION CLOSED
-     * =======================================================
-     */
-    case 'closed':
-      return (
-        <RentalSessionClosed
-          onDone={onClose}
-        />
-      );
-
-    /*
-     * =======================================================
-     * ASSIGNING
-     * =======================================================
-     *
-     * This step is currently not displayed because assignment
-     * is automatic.
-     */
-    case 'assigning':
-    default:
-      return null;
   }
 };
 

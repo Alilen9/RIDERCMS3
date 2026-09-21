@@ -711,12 +711,12 @@ const SystemConfig: React.FC = () => {
                 <div>
 
                   <p className="font-bold text-white">
-                    Require Rental Battery QR Scan
+                    Require Booth QR Scan Before Rental
                   </p>
 
                   <p className="text-sm text-gray-500 mt-1">
-                    Rider must scan the assigned rental battery before it
-                    can be unlocked.
+                    Rider must scan the booth QR code before a rental battery
+                    is issued and its slot unlocked.
                   </p>
 
                 </div>
