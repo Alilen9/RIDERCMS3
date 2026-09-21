@@ -106,9 +106,10 @@ const ProgressScreen: React.FC<{
 const BoothScanScreen: React.FC<{
   expectedBoothUid: string;
   boothName: string;
+  slotIdentifier?: string;
   onVerified: (boothUid: string) => void;
   onBack: () => void;
-}> = ({ expectedBoothUid, boothName, onVerified, onBack }) => {
+}> = ({ expectedBoothUid, boothName, slotIdentifier, onVerified, onBack }) => {
   const [error, setError] = useState('');
   const [scanning, setScanning] = useState(false);
 
@@ -164,6 +165,15 @@ const BoothScanScreen: React.FC<{
             <strong className="text-white">{displayName}</strong>{' '}
             to confirm you are at the station.
           </p>
+
+          {slotIdentifier && (
+            <div className="mx-auto mt-5 inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-4 py-2 text-sm">
+              <span className="text-indigo-300">Your slot:</span>
+              <span className="font-semibold text-white">
+                {slotIdentifier}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="overflow-hidden rounded-3xl border border-gray-800 bg-gray-900 p-6 sm:p-8">
@@ -555,6 +565,7 @@ const RentalFlow: React.FC<RentalFlowProps> = ({
         <BoothScanScreen
           expectedBoothUid={boothUid}
           boothName={boothName}
+          slotIdentifier={assigned?.slotIdentifier}
           onVerified={() => setStep('issuing')}
           onBack={onClose}
         />
