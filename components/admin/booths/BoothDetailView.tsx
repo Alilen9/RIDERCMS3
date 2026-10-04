@@ -229,6 +229,12 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                                 const toggleConfirmation =
                                   `Are you sure you want to ${doorIsLocked ? 'unlock' : 'lock'} slot ${slot.slotIdentifier}?`;
 
+                                // Hide generic lock/unlock when there's an active withdrawal in progress
+                                // to prevent accidental force completion of withdrawal sessions
+                                if (slot.awaitingWithdrawal) {
+                                  return null;
+                                }
+
                                 return (
                                   <button
                                     onClick={() => onShowConfirmation(
@@ -288,7 +294,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                                 </button>
                               ) : null
                             )}
-                            {onManualWithdraw && slot.userName && !slot.pendingManualUnlock && !isRentalOccupied && (
+                            {onManualWithdraw && slot.userName && !slot.pendingManualUnlock && !slot.awaitingWithdrawal && !isRentalOccupied && (
                               <button
                                 onClick={() => onShowConfirmation(
                                   () => onManualWithdraw(slot.slotIdentifier, booth.booth_uid),
