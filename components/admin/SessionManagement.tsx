@@ -490,6 +490,7 @@ const SessionManagement: React.FC<SessionManagementProps> = ({
         <SessionDetailView
           session={sessionForDetails}
           onBack={handleCloseDetail}
+          onNavigateToBooth={onNavigateToBooth}
           onDelete={(session) => {
             handleCloseDetail();
             handleDeleteSession(session);

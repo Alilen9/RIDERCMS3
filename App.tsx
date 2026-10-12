@@ -20,9 +20,6 @@ import UserDashboard from './components/UserDashboard';
 import RentalPage from './components/user/RentalPage';
 import NotFound from './components/NotFound';
 
-import BoothDetailsPage from './components/admin/BoothDetailsPage';
-import SlotDetailsPage from './components/admin/SlotDetailsPage';
-
 import { useAuth, AuthProvider } from './components/auth/AuthContext';
 import PaymentWaitingPage from "./components/admin/payment/PaymentWaitingPage";
 import ManualWithdrawPage from "./components/admin/payment/ManualWithdrawPage";
@@ -156,16 +153,6 @@ const AppContent: React.FC = () => {
           </ProtectedRoute>
         }
       />
-      {/* 🔥 NEW: Booth Details Page */}
-      <Route
-        path="/admin/booths/:boothId"
-        element={
-          <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.DEVELOPER]}>
-            <BoothDetailsPage />
-          </ProtectedRoute>
-        }
-      />
-
       <Route
         path="/rental"
         element={
@@ -180,16 +167,6 @@ const AppContent: React.FC = () => {
         }
       />
 
-
-      {/* 🔥 NEW: Slot Details Page */}
-      <Route
-        path="/admin/slots/:slotId"
-        element={
-          <ProtectedRoute allowedRoles={[UserRole.ADMIN, UserRole.DEVELOPER]}>
-            <SlotDetailsPage />
-          </ProtectedRoute>
-        }
-      />
 
       {/* User Dashboard */}
       <Route

@@ -1,5 +1,4 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { AdminSession } from '../../services/adminService';
 import { format, isValid } from 'date-fns';
 import {
@@ -24,6 +23,11 @@ interface SessionDetailViewProps {
   onDelete?: (session: AdminSession) => void;
   onRefund?: (session: AdminSession) => void;
   onRetryPayment?: (session: AdminSession) => void;
+  /**
+   * Opens the booth in the live Stations & Booths workspace. Replaces the
+   * removed standalone booth/slot detail routes.
+   */
+  onNavigateToBooth?: (boothUid: string) => void;
 }
 
 const SessionDetailView: React.FC<SessionDetailViewProps> = ({
@@ -32,9 +36,8 @@ const SessionDetailView: React.FC<SessionDetailViewProps> = ({
   onDelete,
   onRefund,
   onRetryPayment,
+  onNavigateToBooth,
 }) => {
-  const navigate = useNavigate();
-
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'N/A';
 
@@ -74,18 +77,18 @@ const SessionDetailView: React.FC<SessionDetailViewProps> = ({
     }
   };
 
-  // Navigate to Booth Page
+  // Open the booth (and its slots) in the live Stations workspace.
   const handleBoothClick = () => {
     if (!session.boothUid) return;
 
-    navigate(`/admin/booths/${session.boothUid}`);
+    onNavigateToBooth?.(session.boothUid);
   };
 
-  // Navigate to Slot Page
+  // Slot-level detail now lives inside the booth view.
   const handleSlotClick = () => {
-    if (!session.slotIdentifier) return;
+    if (!session.boothUid) return;
 
-    navigate(`/admin/slots/${session.slotIdentifier}`);
+    onNavigateToBooth?.(session.boothUid);
   };
 
   return (
