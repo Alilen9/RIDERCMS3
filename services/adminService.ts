@@ -910,6 +910,18 @@ export interface AdminSession {
   batteryUid: string | null;
 }
 
+export interface UpdateAdminSessionData {
+  status: AdminSession['status'];
+  amount: number | null;
+  createdAt: string;
+  userEmail: string | null;
+  userPhoneNumber: string | null;
+  boothUid: string | null;
+  slotIdentifier: string | null;
+  batteryUid: string | null;
+  reason: string;
+}
+
 export interface ListSessionsResponse {
   sessions: AdminSession[];
   total: number;
@@ -971,6 +983,28 @@ export const deleteSession = async (
   } catch (error) {
     console.error(
       `Failed to delete session ${sessionId}:`,
+      error
+    );
+
+    throw error;
+  }
+};
+
+/**
+ * Updates an admin session and records the required reason for the change.
+ */
+export const updateAdminSession = async (
+  sessionId: number,
+  data: UpdateAdminSessionData
+): Promise<void> => {
+  try {
+    await apiClient.patch(
+      `/admin/sessions/${sessionId}`,
+      data
+    );
+  } catch (error) {
+    console.error(
+      `Failed to update session ${sessionId}:`,
       error
     );
 
