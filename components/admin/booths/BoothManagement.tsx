@@ -6,7 +6,7 @@ import { QRCodeCanvas } from 'qrcode.react';
 
 import { Booth } from '@/types';
 
-import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, sendSlotCommand, SlotCommand, resetBoothSlots, deleteBoothSlot, updateSlotStatus, reconcileSlotDeposit, withdrawRentalBattery } from '../../../services/adminService';
+import { getBooths, deleteBooth, getBoothStatus, AdminBoothStatus, sendSlotCommand, SlotCommand, resetBoothSlots, deleteBoothSlot, updateSlotStatus, reconcileSlotDeposit, withdrawRentalBattery, convertExistingBatteryToRental } from '../../../services/adminService';
 
 import ConfirmationModal from '../ConfirmationModal';
 
@@ -680,6 +680,24 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
 
 
 
+  const handleConvertExistingBattery = async (details: { batteryUid: string; boothUid: string; slotIdentifier: string; notes?: string; }) => {
+
+    try {
+
+      await convertExistingBatteryToRental(details);
+
+    } catch (error) {
+
+      const backendMessage = (error as any)?.response?.data?.error;
+
+      throw new Error(backendMessage || (error as Error).message || 'Failed to convert battery to rental.');
+
+    }
+
+  };
+
+
+
   const handleDownloadQrCode = () => {
 
     if (!boothForQrCode) return;
@@ -827,6 +845,7 @@ const BoothManagement: React.FC<BoothManagementProps> = ({ onNavigate, initialDe
       {rentalConversion ? (
         <AddRentalBatteryPage
           conversion={rentalConversion}
+          onConvertExistingBattery={handleConvertExistingBattery}
           onBack={() => {
             setRentalConversion(null);
             void Promise.all([fetchBooths(), fetchBoothStatuses()]);

@@ -221,6 +221,8 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
 
         userPhone: adminSlot.userPhone || liveSlot?.userPhone || null,
 
+        userEmail: (adminSlot as any).userEmail ?? (liveSlot as any)?.userEmail ?? null,
+
         pendingManualUnlock: liveSlot?.pendingManualUnlock || false,
 
         awaitingWithdrawal: adminSlot.awaitingWithdrawal === true || liveSlot?.awaitingWithdrawal === true,
@@ -754,19 +756,25 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
 
                                 'Reset Slot?',
 
-                                `Are you sure you want to reset slot ${slot.slotIdentifier}? This will set it to available and clear any linked battery data.`,
+                                (() => {
+                                  const name = (slot as any).userName?.trim?.();
+                                  const phone = (slot as any).userPhone?.trim?.();
+                                  const email = (slot as any).userEmail?.trim?.();
+                                  let riderLabel: string | null = null;
+                                  if (name) riderLabel = phone ? `${name} (${phone})` : name;
+                                  else riderLabel = phone || email || null;
+                                  return riderLabel
+                                    ? `Slot ${slot.slotIdentifier} holds a deposit for ${riderLabel}. Resetting will not remove their credit. Continue?`
+                                    : `Are you sure you want to reset slot ${slot.slotIdentifier}? This will set it to available and clear any linked battery data.`;
+                                })(),
 
                                 true
 
                               )}
 
-                              className="w-full min-h-[40px] px-2.5 py-2 rounded-lg border border-slate-600/50 bg-slate-800 hover:bg-slate-700 hover:border-slate-500 text-slate-100 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:opacity-40 disabled:cursor-not-allowed"
-
-                            >
-
-                              Reset Slot
-
-                            </button>
+                                className="w-full min-h-[40px] px-2.5 py-2 rounded-lg border border-slate-600/50 bg-slate-800 hover:bg-slate-700 hover:border-slate-500 text-slate-100 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:opacity-40 disabled:cursor-not-allowed">
+                                Reset Slot
+                              </button>
 
                             {slot.status !== 'disabled' && (
 
