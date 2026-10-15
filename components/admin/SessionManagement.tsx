@@ -7,6 +7,8 @@ import {
   deleteSession,
   getRentalSessions,
   RentalSession,
+  updateAdminSession,
+  UpdateAdminSessionData,
 } from '../../services/adminService';
 
 import ConfirmationModal from './ConfirmationModal';
@@ -397,6 +399,35 @@ const SessionManagement: React.FC<SessionManagementProps> = ({
     onDetailClosed?.();
   };
 
+  const handleUpdateSession = async (
+    data: UpdateAdminSessionData
+  ) => {
+    if (!sessionForDetails) {
+      throw new Error('No session is selected for editing.');
+    }
+
+    await updateAdminSession(sessionForDetails.id, data);
+
+    const updatedSession: AdminSession = {
+      ...sessionForDetails,
+      status: data.status,
+      amount: data.amount,
+      createdAt: data.createdAt,
+      userEmail: data.userEmail,
+      userPhoneNumber: data.userPhoneNumber,
+      boothUid: data.boothUid,
+      slotIdentifier: data.slotIdentifier,
+      batteryUid: data.batteryUid,
+    };
+    setSessionForDetails(updatedSession);
+    setSessions((previous) =>
+      previous.map((session) =>
+        session.id === updatedSession.id ? updatedSession : session
+      )
+    );
+    toast.success('Session updated successfully.');
+  };
+
   // -----------------------------------------
   // RESTORE FROM URL (re-login / reload)
   // -----------------------------------------
@@ -490,6 +521,7 @@ const SessionManagement: React.FC<SessionManagementProps> = ({
         <SessionDetailView
           session={sessionForDetails}
           onBack={handleCloseDetail}
+          onUpdate={handleUpdateSession}
           onNavigateToBooth={onNavigateToBooth}
           onDelete={(session) => {
             handleCloseDetail();

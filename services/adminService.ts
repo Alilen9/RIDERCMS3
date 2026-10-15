@@ -57,6 +57,7 @@ export interface AdminBoothStatus {
 
     userName: string | null;
     userPhone?: string | null;
+    userEmail?: string | null;
     batteryOwner: string | null;
     pendingManualUnlock?: boolean;
     isRentalPool?: boolean;
@@ -910,6 +911,18 @@ export interface AdminSession {
   batteryUid: string | null;
 }
 
+export interface UpdateAdminSessionData {
+  status: AdminSession['status'];
+  amount: number | null;
+  createdAt: string;
+  userEmail: string | null;
+  userPhoneNumber: string | null;
+  boothUid: string | null;
+  slotIdentifier: string | null;
+  batteryUid: string | null;
+  reason: string;
+}
+
 export interface ListSessionsResponse {
   sessions: AdminSession[];
   total: number;
@@ -971,6 +984,28 @@ export const deleteSession = async (
   } catch (error) {
     console.error(
       `Failed to delete session ${sessionId}:`,
+      error
+    );
+
+    throw error;
+  }
+};
+
+/**
+ * Updates an admin session and records the required reason for the change.
+ */
+export const updateAdminSession = async (
+  sessionId: number,
+  data: UpdateAdminSessionData
+): Promise<void> => {
+  try {
+    await apiClient.patch(
+      `/admin/sessions/${sessionId}`,
+      data
+    );
+  } catch (error) {
+    console.error(
+      `Failed to update session ${sessionId}:`,
       error
     );
 
@@ -1255,6 +1290,49 @@ export const createRentalBattery =
     } catch (error) {
       console.error(
         'Failed to create rental battery:',
+        error
+      );
+
+      throw error;
+    }
+  };
+
+export interface ConvertExistingBatteryData {
+  batteryUid: string;
+  boothUid: string;
+  slotIdentifier: string;
+  notes?: string;
+}
+
+export interface ConvertExistingBatteryResponse {
+  batteryUid: string;
+  boothUid: string;
+  slotIdentifier: string;
+  converted: boolean;
+  notes?: string | null;
+}
+
+/**
+ * Designates a battery that is already physically inside a booth slot as
+ * rental-pool stock. Unlike `createRentalBattery`, this does not open the slot
+ * or run the placement flow — it only registers the battery identity and pairs
+ * it to the slot it already occupies.
+ */
+export const convertExistingBatteryToRental =
+  async (
+    data: ConvertExistingBatteryData
+  ): Promise<ConvertExistingBatteryResponse> => {
+    try {
+      const response =
+        await apiClient.post<ConvertExistingBatteryResponse>(
+          '/admin/rentals/convert',
+          data
+        );
+
+      return response.data;
+    } catch (error) {
+      console.error(
+        'Failed to convert existing battery to rental:',
         error
       );
 

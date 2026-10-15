@@ -1,5 +1,8 @@
-import React from 'react';
-import { AdminSession } from '../../services/adminService';
+import React, { useState } from 'react';
+import {
+  AdminSession,
+  UpdateAdminSessionData,
+} from '../../services/adminService';
 import { format, isValid } from 'date-fns';
 import {
   ArrowLeft,
@@ -15,6 +18,8 @@ import {
   Layers,
   ExternalLink,
   RefreshCw,
+  Pencil,
+  X,
 } from 'lucide-react';
 
 interface SessionDetailViewProps {
@@ -23,6 +28,7 @@ interface SessionDetailViewProps {
   onDelete?: (session: AdminSession) => void;
   onRefund?: (session: AdminSession) => void;
   onRetryPayment?: (session: AdminSession) => void;
+  onUpdate?: (data: UpdateAdminSessionData) => Promise<void>;
   /**
    * Opens the booth in the live Stations & Booths workspace. Replaces the
    * removed standalone booth/slot detail routes.
@@ -36,8 +42,103 @@ const SessionDetailView: React.FC<SessionDetailViewProps> = ({
   onDelete,
   onRefund,
   onRetryPayment,
+  onUpdate,
   onNavigateToBooth,
 }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [editReason, setEditReason] = useState('');
+  const [editStatus, setEditStatus] =
+    useState<AdminSession['status']>(session.status);
+  const [editAmount, setEditAmount] = useState(
+    session.amount === null ? '' : String(session.amount)
+  );
+  const [editCreatedAt, setEditCreatedAt] = useState(() => {
+    const date = new Date(session.createdAt);
+    if (!isValid(date)) return '';
+    const localDate = new Date(
+      date.getTime() - date.getTimezoneOffset() * 60000
+    );
+    return localDate.toISOString().slice(0, 16);
+  });
+  const [editUserEmail, setEditUserEmail] = useState(
+    session.userEmail ?? ''
+  );
+  const [editUserPhoneNumber, setEditUserPhoneNumber] = useState(
+    session.userPhoneNumber ?? ''
+  );
+  const [editBoothUid, setEditBoothUid] = useState(
+    session.boothUid ?? ''
+  );
+  const [editSlotIdentifier, setEditSlotIdentifier] = useState(
+    session.slotIdentifier ?? ''
+  );
+  const [editBatteryUid, setEditBatteryUid] = useState(
+    session.batteryUid ?? ''
+  );
+
+  const startEditing = () => {
+    setEditStatus(session.status);
+    setEditAmount(session.amount === null ? '' : String(session.amount));
+    const date = new Date(session.createdAt);
+    const localDate = isValid(date)
+      ? new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+      : null;
+    setEditCreatedAt(localDate?.toISOString().slice(0, 16) ?? '');
+    setEditUserEmail(session.userEmail ?? '');
+    setEditUserPhoneNumber(session.userPhoneNumber ?? '');
+    setEditBoothUid(session.boothUid ?? '');
+    setEditSlotIdentifier(session.slotIdentifier ?? '');
+    setEditBatteryUid(session.batteryUid ?? '');
+    setEditReason('');
+    setSaveError(null);
+    setIsEditing(true);
+  };
+
+  const handleSave = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const reason = editReason.trim();
+    if (!reason) {
+      setSaveError('Please provide a reason for changing this session.');
+      return;
+    }
+
+    const amount = editAmount.trim() === '' ? null : Number(editAmount);
+    if (amount !== null && (!Number.isFinite(amount) || amount < 0)) {
+      setSaveError('Amount must be a valid non-negative number.');
+      return;
+    }
+
+    const createdAt = new Date(editCreatedAt);
+    if (!editCreatedAt || !isValid(createdAt)) {
+      setSaveError('Please provide a valid session date and time.');
+      return;
+    }
+
+    if (!onUpdate) return;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await onUpdate({
+        status: editStatus,
+        amount,
+        createdAt: createdAt.toISOString(),
+        userEmail: editUserEmail.trim() || null,
+        userPhoneNumber: editUserPhoneNumber.trim() || null,
+        boothUid: editBoothUid.trim() || null,
+        slotIdentifier: editSlotIdentifier.trim() || null,
+        batteryUid: editBatteryUid.trim() || null,
+        reason,
+      });
+      setIsEditing(false);
+    } catch {
+      setSaveError('Could not save the session changes. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'N/A';
 
@@ -109,6 +210,17 @@ const SessionDetailView: React.FC<SessionDetailViewProps> = ({
         </button>
 
         <div className="flex gap-3">
+          {session.sessionType === 'withdrawal' && onUpdate && (
+            <button
+              type="button"
+              onClick={startEditing}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600/10 text-blue-400 border border-blue-600/20 hover:bg-blue-600 hover:text-white rounded-xl font-bold text-sm transition-all duration-200"
+            >
+              <Pencil className="w-4 h-4" />
+              Edit Session
+            </button>
+          )}
+
           {session.status === 'failed' &&
             session.sessionType === 'withdrawal' &&
             onRetryPayment && (
@@ -144,6 +256,160 @@ const SessionDetailView: React.FC<SessionDetailViewProps> = ({
           )}
         </div>
       </div>
+
+      {isEditing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <form
+            onSubmit={handleSave}
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-gray-700 bg-gray-900 shadow-2xl"
+          >
+            <div className="sticky top-0 flex items-center justify-between border-b border-gray-800 bg-gray-900 p-5">
+              <div>
+                <h2 className="text-lg font-bold text-white">
+                  Edit Withdrawal Session
+                </h2>
+                <p className="mt-1 text-sm text-gray-400">
+                  Session #{session.id} · {session.sessionType}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditing(false)}
+                disabled={isSaving}
+                aria-label="Close edit form"
+                className="rounded-lg p-2 text-gray-400 hover:bg-gray-800 hover:text-white disabled:opacity-50"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-2">
+              <label className="text-sm text-gray-300">
+                Status
+                <select
+                  value={editStatus}
+                  onChange={(event) =>
+                    setEditStatus(event.target.value as AdminSession['status'])
+                  }
+                  className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-white"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="in_progress">In progress</option>
+                  <option value="completed">Completed</option>
+                  <option value="failed">Failed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </label>
+
+              <label className="text-sm text-gray-300">
+                Amount
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={editAmount}
+                  onChange={(event) => setEditAmount(event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-white"
+                />
+              </label>
+
+              <label className="text-sm text-gray-300">
+                Rider email
+                <input
+                  type="email"
+                  value={editUserEmail}
+                  onChange={(event) => setEditUserEmail(event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-white"
+                />
+              </label>
+
+              <label className="text-sm text-gray-300">
+                Rider phone
+                <input
+                  type="tel"
+                  value={editUserPhoneNumber}
+                  onChange={(event) => setEditUserPhoneNumber(event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-white"
+                />
+              </label>
+
+              <label className="text-sm text-gray-300">
+                Booth UID
+                <input
+                  value={editBoothUid}
+                  onChange={(event) => setEditBoothUid(event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-white"
+                />
+              </label>
+
+              <label className="text-sm text-gray-300">
+                Slot identifier
+                <input
+                  value={editSlotIdentifier}
+                  onChange={(event) => setEditSlotIdentifier(event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-white"
+                />
+              </label>
+
+              <label className="text-sm text-gray-300">
+                Battery UID
+                <input
+                  value={editBatteryUid}
+                  onChange={(event) => setEditBatteryUid(event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-white"
+                />
+              </label>
+
+              <label className="text-sm text-gray-300">
+                Session date and time
+                <input
+                  type="datetime-local"
+                  required
+                  value={editCreatedAt}
+                  onChange={(event) => setEditCreatedAt(event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-white"
+                />
+              </label>
+
+              <label className="text-sm text-gray-300 md:col-span-2">
+                Reason for change <span className="text-red-400">*</span>
+                <textarea
+                  required
+                  rows={3}
+                  value={editReason}
+                  onChange={(event) => setEditReason(event.target.value)}
+                  placeholder="Explain why these session details are being changed"
+                  className="mt-1 w-full resize-y rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-white"
+                />
+              </label>
+
+              {saveError && (
+                <p role="alert" className="text-sm text-red-400 md:col-span-2">
+                  {saveError}
+                </p>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-gray-800 p-5">
+              <button
+                type="button"
+                onClick={() => setIsEditing(false)}
+                disabled={isSaving}
+                className="rounded-lg border border-gray-700 px-4 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+              >
+                {isSaving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Main Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
