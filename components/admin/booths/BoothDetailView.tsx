@@ -187,6 +187,7 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
         userName:
           adminSlot.userName || liveSlot?.userName || liveSlot?.batteryOwner,
         userPhone: adminSlot.userPhone || liveSlot?.userPhone || null,
+
         pendingManualUnlock: liveSlot?.pendingManualUnlock || false,
         awaitingWithdrawal:
           adminSlot.awaitingWithdrawal === true ||
@@ -285,8 +286,8 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
               <div
                 key={slot.slotIdentifier}
                 className={`relative bg-gray-800 border ${slot.status === 'booting'
-                    ? 'border-red-500'
-                    : 'border-gray-700'
+                  ? 'border-red-500'
+                  : 'border-gray-700'
                   } rounded-xl overflow-hidden`}
               >
                 <div className="p-4 border-b border-gray-700 flex justify-between items-center">
@@ -310,8 +311,8 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                     ) : (
                       <span
                         className={`font-semibold capitalize ${slot.doorStatus === 'unlocked'
-                            ? 'text-yellow-400'
-                            : 'text-emerald-400'
+                          ? 'text-yellow-400'
+                          : 'text-emerald-400'
                           }`}
                       >
                         {slot.doorStatus || 'Unknown'}
@@ -328,8 +329,8 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                     ) : (
                       <span
                         className={`font-semibold ${slot.telemetry?.relayOn === true
-                            ? 'text-blue-400'
-                            : 'text-gray-500'
+                          ? 'text-blue-400'
+                          : 'text-gray-500'
                           }`}
                       >
                         {slot.telemetry?.relayOn === true ? 'ON' : 'OFF'}
@@ -445,8 +446,8 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                               : `Currently ${slot.doorStatus || 'unknown'}`
                           }
                           className={`${actionButtonBase} ${doorIsLocked
-                              ? 'border-emerald-500/60 bg-emerald-600/20 text-emerald-200 hover:bg-emerald-600/35 focus-visible:ring-emerald-400'
-                              : 'border-rose-500/60 bg-rose-600/20 text-rose-200 hover:bg-rose-600/35 focus-visible:ring-rose-400'
+                            ? 'border-emerald-500/60 bg-emerald-600/20 text-emerald-200 hover:bg-emerald-600/35 focus-visible:ring-emerald-400'
+                            : 'border-rose-500/60 bg-rose-600/20 text-rose-200 hover:bg-rose-600/35 focus-visible:ring-rose-400'
                             }`}
                         >
                           {toggleLabel}
@@ -613,17 +614,25 @@ const BoothDetailView: React.FC<BoothDetailViewProps> = ({
                         )}
 
                       <button
-                        onClick={() =>
-                          onShowConfirmation(
-                            () => onResetSlot(slot.slotIdentifier),
-                            'Reset Slot?',
-                            `Reset slot ${slot.slotIdentifier}? This will clear its linked battery data.`,
-                            true
-                          )
-                        }
-                        className={`${actionButtonBase} border-slate-600/50 bg-slate-800 hover:bg-slate-700 text-slate-100 focus-visible:ring-sky-500`}
+
+                        onClick={() => onShowConfirmation(
+
+                          () => onResetSlot(slot.slotIdentifier),
+
+                          'Reset Slot?',
+
+                          `Are you sure you want to reset slot ${slot.slotIdentifier}? This will set it to available and clear any linked battery data.`,
+
+                          true
+
+                        )}
+
+                        className="w-full min-h-[40px] px-2.5 py-2 rounded-lg border border-slate-600/50 bg-slate-800 hover:bg-slate-700 hover:border-slate-500 text-slate-100 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 disabled:opacity-40 disabled:cursor-not-allowed"
+
                       >
+
                         Reset Slot
+
                       </button>
 
                       {slot.status !== 'disabled' && (

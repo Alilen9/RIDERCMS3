@@ -90,4 +90,11 @@ Comprehensive endpoint reference for this project.
 | PATCH | `/api/admin/sessions/:sessionId` | `sessionId` | - | `status`, `amount`, `createdAt`, `userEmail`, `userPhoneNumber`, `boothUid`, `slotIdentifier`, `batteryUid`, `reason` (required; audit reason) |
 | DELETE | `/api/admin/sessions/:sessionId` | `sessionId` | - | - |
 | POST | `/api/admin/sessions/cleanup` | - | - | - |
+| GET | `/api/admin/rentals/fleet` | - | - | - |
+| GET | `/api/admin/rentals/sessions` | - | `limit`, `offset` | - |
+| POST | `/api/admin/rentals` | - | - | `batteryUid`, `chargeLevel` (optional; live SOC used when omitted), `boothUid`, `slotIdentifier`, `notes` |
+| POST | `/api/admin/rentals/convert` | - | - | `batteryUid`, `boothUid`, `slotIdentifier`, `notes` (optional). Designates a battery already in an occupied slot as rental stock (no placement flow). |
+| GET | `/api/admin/rentals/placement/:placementId/status` | `placementId` | - | - |
+| POST | `/api/admin/rentals/placement/:placementId/cancel` | `placementId` | - | - |
+| POST | `/api/admin/rentals/:batteryUid/withdraw` | `batteryUid` | - | `reason`, `notes` (optional) |
 | GET | `/api/admin/payments` | - | `limit`, `offset`, `searchTerm`, `startDate`, `endDate`, `status`, `boothUid`, `sortBy`, `sortOrder` | - |
