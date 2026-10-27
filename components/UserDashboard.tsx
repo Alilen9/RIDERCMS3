@@ -138,8 +138,13 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
    * ============================================================
    */
 
-  const [rentalBatteries, setRentalBatteries] =
-    useState<RentalBatteryOption[]>([]);
+  /*
+   * Rider already holds the maximum number of rentals
+   * (`maxRentalBatteriesPerUser`), so the button is disabled
+   * instead of failing with a 409 from /rentals/issue.
+   */
+  const [rentalLimitReached, setRentalLimitReached] =
+    useState(false);
 
   const [checkingRentalAvailability, setCheckingRentalAvailability] =
     useState(false);
@@ -158,6 +163,14 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
 
   const depositingSessionIdRef =
     useRef<number | null>(null);
+
+  const rentalLimitReachedRef =
+    useRef(false);
+
+  useEffect(() => {
+    rentalLimitReachedRef.current =
+      rentalLimitReached;
+  }, [rentalLimitReached]);
 
   const depositingSlotRef =
     useRef<string | null>(null);
@@ -295,9 +308,25 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
           );
 
         const batteries =
-          Array.isArray(response)
-            ? response
+          Array.isArray(response?.rentals)
+            ? response.rentals
             : [];
+
+        const limitReached =
+          response.hasPendingRental ||
+          response.activeRentalCount >=
+            response.rentalLimit;
+
+        rentalLimitReachedRef.current =
+          limitReached;
+
+        setRentalLimitReached(
+          limitReached
+        );
+
+        if (limitReached) {
+          return [];
+        }
 
         const available =
           batteries.filter(
@@ -305,10 +334,6 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
               battery.status === undefined ||
               battery.status === 'available'
           );
-
-        setRentalBatteries(
-          available
-        );
 
         setRentalUnavailable(
           available.length === 0
@@ -321,7 +346,6 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
           err
         );
 
-        setRentalBatteries([]);
         setRentalUnavailable(true);
 
         return [];
@@ -386,6 +410,16 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
           await loadRentalBatteries(
             boothUid
           );
+
+        if (rentalLimitReachedRef.current) {
+          toast.error(
+            'You already have an active rental battery.'
+          );
+
+          navigate('/rental');
+
+          return;
+        }
 
         if (
           !available ||
@@ -484,7 +518,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
     if (!rentalsEnabled) return null;
 
     const isUnavailable =
-      rentalUnavailable;
+      rentalUnavailable ||
+      rentalLimitReached;
 
     const isChecking =
       checkingRentalAvailability;
@@ -505,9 +540,11 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
       >
         {isChecking
           ? 'Checking Rental Batteries...'
-          : isUnavailable
-            ? 'No Rental Batteries Available'
-            : 'Rent a Battery'}
+          : rentalLimitReached
+            ? 'Rental Limit Reached'
+            : isUnavailable
+              ? 'No Rental Batteries Available'
+              : 'Rent a Battery'}
       </button>
     );
   };
@@ -731,14 +768,17 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
               batteryStatuses.map(
                 (s) => ({
                   battery: {
-                    id:
-                      s.slotIdentifier,
+                    // Own batteries have no battery id (rental-only).
+                    id: '',
                     type:
                       BatteryType.E_BIKE,
                     chargeLevel:
                       s.chargeLevel ??
-                      s.telemetry?.soc,
+                      s.telemetry?.soc ??
+                      s.lastChargeLevel,
                     temperature:
+                      s.telemetry
+                        ?.temperature ??
                       s.telemetry
                         ?.temperatureC ??
                       0,
@@ -756,7 +796,10 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                     status:
                       'occupied',
                     doorStatus:
-                      'locked',
+                      s.telemetry &&
+                      !s.telemetry.doorLocked
+                        ? 'open'
+                        : 'locked',
                     userName:
                       user.name,
                     batteryUid:
@@ -959,9 +1002,13 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                             updated.chargeLevel ??
                             updated
                               .telemetry
-                              ?.soc,
+                              ?.soc ??
+                            updated.lastChargeLevel,
 
                           temperature:
+                            updated
+                              .telemetry
+                              ?.temperature ??
                             updated
                               .telemetry
                               ?.temperatureC ??
@@ -1156,9 +1203,13 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                           updated.chargeLevel ??
                           updated
                             .telemetry
-                            ?.soc,
+                            ?.soc ??
+                          updated.lastChargeLevel,
 
                         temperature:
+                          updated
+                            .telemetry
+                            ?.temperature ??
                           updated
                             .telemetry
                             ?.temperatureC ??
@@ -1383,7 +1434,17 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
 
           setActiveBatteries(
             (prev) => [
-              ...prev,
+              ...prev.filter(
+                (entry) =>
+                  entry.sessionId !==
+                    newEntry.sessionId &&
+                  !(
+                    entry.boothUid ===
+                      newEntry.boothUid &&
+                    entry.slot.identifier ===
+                      newEntry.slot.identifier
+                  )
+              ),
               newEntry,
             ]
           );
@@ -1972,6 +2033,21 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                   Scan Station QR Code
                 </span>
               </button>
+
+              {activeBatteries.length > 0 && (
+                <button
+                  onClick={() =>
+                    setView(
+                      activeBatteries.length > 1
+                        ? 'multi_status'
+                        : 'status'
+                    )
+                  }
+                  className="w-full mt-3 bg-emerald-700/40 hover:bg-emerald-700/60 text-emerald-300 font-semibold text-sm px-4 py-3 rounded-lg border border-emerald-600/50"
+                >
+                  My Batteries ({activeBatteries.length})
+                </button>
+              )}
 
             </div>
 

@@ -24,7 +24,9 @@ const ChargingStatusView: React.FC<ChargingStatusViewProps> = ({
         <div className="flex justify-between items-start mb-6">
           <div>
             <h2 className="text-2xl font-bold text-white">{activeBattery.type || 'E-Bike'}</h2>
-            <p className="text-sm text-gray-400">ID: {activeBattery.id}</p>
+            <p className="text-sm text-gray-400">
+              {activeBattery.id ? `ID: ${activeBattery.id}` : 'Own battery'}
+            </p>
           </div>
           <div className="flex flex-col items-end">
             <span className="text-xs text-gray-400 uppercase tracking-wide">Slot</span>

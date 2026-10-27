@@ -223,24 +223,36 @@ export interface AvailableRentalBatteriesResponse {
  * @param boothUid The UID of the booth to check.
  * @returns A promise that resolves with the available rental batteries.
  */
+export interface RentalAvailability {
+  rentals: RentalBatteryOption[];
+  hasPendingRental: boolean;
+  rentalLimit: number;
+  activeRentalCount: number;
+}
+
 export const getAvailableRentalBatteries = async (
   boothUid: string
-): Promise<RentalBatteryOption[]> => {
+): Promise<RentalAvailability> => {
   const response =
     await apiClient.get<AvailableRentalBatteriesResponse>(
       '/booths/rentals/available',
       { params: { boothUid } }
     );
 
-  return (response.data.rentals || []).map(
-    (rental) => ({
-      id: rental.batteryUid,
-      soc: rental.chargeLevel,
-      batteryId: rental.batteryId,
-      slotId: rental.slotId,
-      slotIdentifier: rental.slotIdentifier,
-    })
-  );
+  return {
+    rentals: (response.data.rentals || []).map(
+      (rental) => ({
+        id: rental.batteryUid,
+        soc: rental.chargeLevel,
+        batteryId: rental.batteryId,
+        slotId: rental.slotId,
+        slotIdentifier: rental.slotIdentifier,
+      })
+    ),
+    hasPendingRental: Boolean(response.data.hasPendingRental),
+    rentalLimit: Number(response.data.rentalLimit ?? 1),
+    activeRentalCount: Number(response.data.activeRentalCount ?? 0),
+  };
 };
 
 /**
@@ -401,12 +413,31 @@ export interface PayRentalResponse {
   amount: number;
   consolidation: RentalBillResponse['consolidation'];
   checkoutRequestId: string;
-  /** Present only in developer auto-approval mode. */
-  paymentStatus?: 'paid';
+  /**
+   * `paid` in developer auto-approval mode or when an earlier push turned out
+   * to be paid; `pending` when a push was already out (HTTP 409).
+   */
+  paymentStatus?: 'paid' | 'pending';
 }
 
 /**
+ * The backend answers 409 when an STK push for the same session is already
+ * out (or was just found paid). That is not a failure: the caller should keep
+ * waiting on the returned checkout request instead of sending another prompt.
+ * @param error - The error thrown by the API client.
+ * @returns The 409 response body when it carries a checkout id, otherwise null.
+ */
+const getPaymentInProgress = <T extends { checkoutRequestId?: string }>(error: unknown): T | null => {
+  const response = (error as { response?: { status?: number; data?: T } } | null)?.response;
+  if (response?.status === 409 && response.data?.checkoutRequestId) {
+    return response.data;
+  }
+  return null;
+};
+
+/**
  * Initiates the consolidated bill payment (STK push, or auto-approved in dev).
+ * Resolves with `paymentStatus: 'pending'` when a push is already in flight.
  * @param sessionId - The rental session id.
  */
 export const payRental = async (sessionId: number): Promise<PayRentalResponse> => {
@@ -414,6 +445,8 @@ export const payRental = async (sessionId: number): Promise<PayRentalResponse> =
     const response = await apiClient.post<PayRentalResponse>(`/booths/rentals/${sessionId}/pay`);
     return response.data;
   } catch (error) {
+    const inProgress = getPaymentInProgress<PayRentalResponse>(error);
+    if (inProgress) return inProgress;
     console.error(`Failed to trigger rental payment for ${sessionId}:`, error);
     throw error;
   }
@@ -585,6 +618,9 @@ export const payForWithdrawal = async (sessionId: number): Promise<{ checkoutReq
     const response = await apiClient.post<{ checkoutRequestId: string }>(`/booths/sessions/${sessionId}/pay`);
     return response.data;
   } catch (error) {
+    // A push is already out for this session: keep waiting on it.
+    const inProgress = getPaymentInProgress<{ checkoutRequestId: string }>(error);
+    if (inProgress) return { checkoutRequestId: inProgress.checkoutRequestId };
     console.error(`Failed to trigger payment for session ${sessionId}:`, error);
     throw error;
   }

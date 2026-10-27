@@ -34,7 +34,10 @@ const MultiBatteryStatus: React.FC<MultiBatteryStatusProps> = ({ batteries, onCo
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-xl font-bold text-white">{battery.type || 'E-Bike'}</h3>
-                <p className="text-xs text-gray-400">ID: {battery.id} · Slot {slot.identifier}</p>
+                <p className="text-xs text-gray-400">
+                  {battery.id ? `ID: ${battery.id}` : 'Own battery'}
+                  {entry.boothUid ? ` · ${entry.boothUid}` : ''} · Slot {slot.identifier}
+                </p>
               </div>
               <div className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border ${
                 slot.doorStatus === 'locked'
